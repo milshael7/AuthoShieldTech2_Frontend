@@ -1,13 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-/**
- * Trading.jsx
- * - Uses BACKEND WebSocket feed: /ws/market
- * - Builds live candles (5-second candles for visible movement)
- * - Includes Voice AI toggle (TTS + optional STT)
- * - Falls back to local demo ticks if WS can’t connect
- */
-
 function canSTT() {
   return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
@@ -16,53 +8,63 @@ function speakText(text) {
   try {
     if (!window.speechSynthesis) return;
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 1;
-    u.pitch = 1;
-    u.volume = 1;
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(u);
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
+function apiBase() {
+  return (import.meta.env.VITE_API_BASE || "").trim();
+}
+
 export default function Trading({ user }) {
-  // UI symbol names (Kraken-like)
   const UI_SYMBOLS = ["BTCUSD", "ETHUSD"];
-  // Backend currently streams these symbols from server.js:
   const UI_TO_BACKEND = { BTCUSD: "BTCUSDT", ETHUSD: "ETHUSDT" };
 
   const [symbol, setSymbol] = useState("BTCUSD");
-  const [mode, setMode] = useState("Live");
-
-  const [feedStatus, setFeedStatus] = useState("Connecting…"); // Connected / Disconnected / Connecting…
+  const [mode, setMode] = useState("Paper");
+  const [feedStatus, setFeedStatus] = useState("Connecting…");
   const [last, setLast] = useState(65300);
-  const [ts, setTs] = useState(Date.now());
+
+  // ✅ NEW: hide/show panels (your request)
+  const [showMoney, setShowMoney] = useState(true);
+  const [showTradeLog, setShowTradeLog] = useState(true);
+  const [showAI, setShowAI] = useState(true);
+  const [wideChart, setWideChart] = useState(false);
+
+  // Paper money panel
+  const [paper, setPaper] = useState({
+    running: false,
+    balance: 0,
+    pnl: 0,
+    openPosition: null,
+    trades: []
+  });
+  const [paperStatus, setPaperStatus] = useState("Loading…");
 
   // Voice + chat
   const [voiceOn, setVoiceOn] = useState(false);
   const [listening, setListening] = useState(false);
   const [messages, setMessages] = useState(() => ([
-    { from: "ai", text: "AI Panel ready. Toggle Voice ON to hear me speak back. Ask about risk rules, posture, and Sabbath pause." }
+    { from: "ai", text: "AI Panel ready. You can hide panels using the buttons above the chart." }
   ]));
   const [input, setInput] = useState("");
   const logRef = useRef(null);
   const sttSupported = useMemo(() => canSTT(), []);
 
-  // Candle chart state
+  // Candle chart
   const canvasRef = useRef(null);
   const [candles, setCandles] = useState(() => {
-    // seed candles
     const base = 65300;
     const out = [];
     let p = base;
     let t = Math.floor(Date.now() / 1000);
     for (let i = 80; i > 0; i--) {
-      const time = t - i * 5; // 5s candles for visible movement
+      const time = t - i * 5;
       const o = p;
       const move = (Math.random() - 0.5) * 60;
       const c = o + move;
@@ -78,13 +80,10 @@ export default function Trading({ user }) {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [messages]);
 
-  // Tick -> candle builder
   const applyTick = (price, nowMs) => {
     setLast(Number(price.toFixed(2)));
-    setTs(nowMs);
-
     setCandles((prev) => {
-      const bucketSec = 5; // fast candles so you SEE movement (later can be 60)
+      const bucketSec = 5;
       const nowSec = Math.floor(nowMs / 1000);
       const bucketTime = Math.floor(nowSec / bucketSec) * bucketSec;
 
@@ -112,15 +111,15 @@ export default function Trading({ user }) {
     });
   };
 
-  // Connect to backend WS feed (fallback to demo if fails)
+  // WebSocket feed
   useEffect(() => {
     let ws;
     let fallbackTimer;
 
-    const apiBase = (import.meta.env.VITE_API_BASE || "").trim();
-    const wsBase = apiBase
-      .replace(/^https:\/\//i, "wss://")
-      .replace(/^http:\/\//i, "ws://");
+    const base = apiBase();
+    const wsBase = base
+      ? base.replace(/^https:\/\//i, "wss://").replace(/^http:\/\//i, "ws://")
+      : "";
 
     const wantedBackendSymbol = UI_TO_BACKEND[symbol] || symbol;
 
@@ -142,29 +141,17 @@ export default function Trading({ user }) {
 
       setFeedStatus("Connecting…");
       ws = new WebSocket(`${wsBase}/ws/market`);
-
-      ws.onopen = () => {
-        setFeedStatus("Connected");
-      };
-
-      ws.onclose = () => {
-        startFallback();
-      };
-
-      ws.onerror = () => {
-        startFallback();
-      };
+      ws.onopen = () => setFeedStatus("Connected");
+      ws.onclose = () => startFallback();
+      ws.onerror = () => startFallback();
 
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-          // server sends: { type:'tick', symbol:'BTCUSDT', price, ts }
           if (msg?.type === "tick" && msg.symbol === wantedBackendSymbol) {
             applyTick(Number(msg.price), Number(msg.ts || Date.now()));
           }
-        } catch {
-          // ignore
-        }
+        } catch {}
       };
     } catch {
       startFallback();
@@ -177,7 +164,33 @@ export default function Trading({ user }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
 
-  // Draw candle chart
+  // Pull paper status
+  useEffect(() => {
+    let t;
+    const base = apiBase();
+    if (!base) {
+      setPaperStatus("Missing VITE_API_BASE");
+      return;
+    }
+
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch(`${base}/api/paper/status`, { credentials: "include" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setPaper(data);
+        setPaperStatus("OK");
+      } catch {
+        setPaperStatus("Error loading paper status");
+      }
+    };
+
+    fetchStatus();
+    t = setInterval(fetchStatus, 2000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Draw candles
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -195,7 +208,6 @@ export default function Trading({ user }) {
     ctx.fillStyle = "rgba(0,0,0,0.28)";
     ctx.fillRect(0, 0, cssW, cssH);
 
-    // grid
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
     ctx.lineWidth = 1;
     for (let i = 1; i < 6; i++) {
@@ -223,12 +235,6 @@ export default function Trading({ user }) {
       return clamp(r, 0, 1) * (cssH - 20) + 10;
     };
 
-    // price labels
-    ctx.fillStyle = "rgba(255,255,255,0.75)";
-    ctx.font = "12px system-ui";
-    ctx.fillText(top.toFixed(2), 10, 14);
-    ctx.fillText(bot.toFixed(2), 10, cssH - 8);
-
     const w = cssW;
     const n = view.length;
     const gap = 2;
@@ -244,14 +250,12 @@ export default function Trading({ user }) {
 
       const up = c.close >= c.open;
 
-      // wick
       ctx.strokeStyle = "rgba(255,255,255,0.55)";
       ctx.beginPath();
       ctx.moveTo(x + candleW / 2, highY);
       ctx.lineTo(x + candleW / 2, lowY);
       ctx.stroke();
 
-      // body
       ctx.fillStyle = up ? "rgba(43,213,118,0.85)" : "rgba(255,90,95,0.85)";
       const y = Math.min(openY, closeY);
       const h = Math.max(2, Math.abs(closeY - openY));
@@ -260,7 +264,6 @@ export default function Trading({ user }) {
       x += candleW + gap;
     }
 
-    // last price line
     const lastY = px(last);
     ctx.strokeStyle = "rgba(122,167,255,0.7)";
     ctx.setLineDash([6, 6]);
@@ -269,9 +272,6 @@ export default function Trading({ user }) {
     ctx.lineTo(cssW, lastY);
     ctx.stroke();
     ctx.setLineDash([]);
-
-    ctx.fillStyle = "rgba(122,167,255,0.95)";
-    ctx.fillText(last.toFixed(2), cssW - 80, lastY - 6);
   }, [candles, last]);
 
   const sendToAI = (text) => {
@@ -281,9 +281,9 @@ export default function Trading({ user }) {
     setMessages(prev => [...prev, { from: "you", text: clean }]);
 
     const reply =
-      `AutoProtect AI (demo): ${symbol} / ${mode}. ` +
-      `Paper training runs all day. Live trades default to 2/day (owner can raise). ` +
-      `Sabbath pause: Friday sundown → Saturday sundown (Iowa City).`;
+      `AutoProtect AI: Paper trader is ${paper.running ? "RUNNING" : "STOPPED"}. ` +
+      `Balance $${Number(paper.balance || 0).toLocaleString()} / P&L $${Number(paper.pnl || 0).toLocaleString()}. ` +
+      `Symbol ${symbol}, mode ${mode}.`;
 
     setTimeout(() => {
       setMessages(prev => [...prev, { from: "ai", text: reply }]);
@@ -312,13 +312,16 @@ export default function Trading({ user }) {
     rec.start();
   };
 
+  // Layout: chart area can become wide (hide AI)
+  const showRightPanel = showAI && !wideChart;
+
   return (
     <div className="tradeWrap">
       <div className="card">
         <div className="tradeTop">
           <div>
             <h2 style={{ margin: 0 }}>Trading Terminal</h2>
-            <small className="muted">Manager: terminal + AI guidance. Admin controls risk rules & live-trade limits.</small>
+            <small className="muted">Use toggles to hide panels and keep the chart clean.</small>
           </div>
 
           <div className="actions">
@@ -342,19 +345,59 @@ export default function Trading({ user }) {
               <div style={{ marginTop: 6, fontWeight: 800 }}>{feedStatus}</div>
               <small className="muted">Last: {last.toLocaleString()}</small>
             </div>
+
+            {/* ✅ NEW: panel toggles */}
+            <div className="pill">
+              <small>Panels</small>
+              <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                <button className={showMoney ? "active" : ""} onClick={() => setShowMoney(v => !v)} style={{ width: "auto" }}>
+                  Money
+                </button>
+                <button className={showTradeLog ? "active" : ""} onClick={() => setShowTradeLog(v => !v)} style={{ width: "auto" }}>
+                  Log
+                </button>
+                <button className={showAI ? "active" : ""} onClick={() => setShowAI(v => !v)} style={{ width: "auto" }}>
+                  AI
+                </button>
+                <button className={wideChart ? "active" : ""} onClick={() => setWideChart(v => !v)} style={{ width: "auto" }}>
+                  Wide
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="tradeGrid">
-        {/* Chart */}
+      <div className="tradeGrid" style={{ gridTemplateColumns: showRightPanel ? "1.8fr 1fr" : "1fr" }}>
+        {/* LEFT */}
         <div className="card tradeChart">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <b>{symbol}</b>
-            <span className="badge ok">Candles: Live</span>
+            <span className={`badge ${paper.running ? "ok" : ""}`}>Paper Trader: {paper.running ? "ON" : "OFF"}</span>
           </div>
 
-          <div style={{ marginTop: 12, height: 560 }}>
+          {showMoney && (
+            <div className="kpi">
+              <div>
+                <b>${Number(paper.balance || 0).toLocaleString()}</b>
+                <span>Paper Balance</span>
+              </div>
+              <div>
+                <b>${Number(paper.pnl || 0).toLocaleString()}</b>
+                <span>P / L</span>
+              </div>
+              <div>
+                <b>{paper.trades?.length || 0}</b>
+                <span>Recent Trades</span>
+              </div>
+              <div>
+                <b>{paperStatus}</b>
+                <span>Status</span>
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 12, height: 520 }}>
             <canvas
               ref={canvasRef}
               style={{
@@ -367,76 +410,95 @@ export default function Trading({ user }) {
             />
           </div>
 
-          <div style={{ marginTop: 10 }}>
-            <small className="muted">
-              Next: wire risk rules + AI worker (paper all day, live 2/day) + Sabbath pause at Iowa City sunset.
-            </small>
-          </div>
+          {showTradeLog && (
+            <div style={{ marginTop: 12 }}>
+              <b>Trade Log</b>
+              <div className="tableWrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Type</th>
+                      <th>Price</th>
+                      <th>Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(paper.trades || []).slice().reverse().slice(0, 10).map((t, i) => (
+                      <tr key={i}>
+                        <td>{new Date(t.time).toLocaleTimeString()}</td>
+                        <td>{t.type}</td>
+                        <td>{Number(t.price).toFixed(2)}</td>
+                        <td>{t.profit !== undefined ? Number(t.profit).toFixed(2) : "-"}</td>
+                      </tr>
+                    ))}
+                    {(!paper.trades || paper.trades.length === 0) && (
+                      <tr><td colSpan="4" className="muted">No trades yet (wait 10–30 seconds)</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* AI Panel */}
-        <div className="card tradeAI">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-            <div>
-              <b>AI Panel</b>
-              <div className="muted" style={{ fontSize: 12 }}>
-                Chat + Trading Explain • {sttSupported ? "Voice supported" : "Voice may be limited on this browser"}
+        {/* RIGHT: AI */}
+        {showRightPanel && (
+          <div className="card tradeAI">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div>
+                <b>AI Panel</b>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  Hide this panel anytime • {sttSupported ? "Voice supported" : "Voice may be limited"}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span className={`badge ${voiceOn ? "ok" : ""}`}>Voice: {voiceOn ? "ON" : "OFF"}</span>
+                <button onClick={() => setVoiceOn(v => !v)} style={{ width: "auto" }}>
+                  Toggle Voice
+                </button>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span className={`badge ${voiceOn ? "ok" : ""}`}>Voice: {voiceOn ? "ON" : "OFF"}</span>
-              <button onClick={() => setVoiceOn(v => !v)} style={{ width: "auto" }}>
-                Toggle Voice
+            <div className="chatLog" ref={logRef} style={{ marginTop: 12 }}>
+              {messages.map((m, idx) => (
+                <div key={idx} className={`chatMsg ${m.from === "you" ? "you" : "ai"}`}>
+                  <b style={{ display: "block", marginBottom: 4 }}>{m.from === "you" ? "You" : "AutoProtect AI"}</b>
+                  <div>{m.text}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="chatBox">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask about trades, P/L, risk rules…"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    sendToAI(input);
+                    setInput("");
+                  }
+                }}
+              />
+              <button style={{ width: 130 }} onClick={() => { sendToAI(input); setInput(""); }}>
+                Send
               </button>
             </div>
-          </div>
 
-          <div className="chatLog" ref={logRef} style={{ marginTop: 12 }}>
-            {messages.map((m, idx) => (
-              <div key={idx} className={`chatMsg ${m.from === "you" ? "you" : "ai"}`}>
-                <b style={{ display: "block", marginBottom: 4 }}>{m.from === "you" ? "You" : "AutoProtect AI"}</b>
-                <div>{m.text}</div>
-              </div>
-            ))}
+            <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "center" }}>
+              <button
+                style={{ width: "auto" }}
+                disabled={!sttSupported || listening}
+                onClick={() => { if (sttSupported) startVoice(); }}
+              >
+                {listening ? "Listening…" : "🎙 Tap to speak"}
+              </button>
+              <small className="muted">Turn Voice ON for spoken replies.</small>
+            </div>
           </div>
-
-          <div className="chatBox">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about risk rules, entries/exits, posture, or Sabbath pause…"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  sendToAI(input);
-                  setInput("");
-                }
-              }}
-            />
-            <button
-              style={{ width: 130 }}
-              onClick={() => { sendToAI(input); setInput(""); }}
-            >
-              Send
-            </button>
-          </div>
-
-          <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "center" }}>
-            <button
-              style={{ width: "auto" }}
-              disabled={!sttSupported || listening}
-              onClick={() => {
-                if (!sttSupported) return;
-                startVoice();
-              }}
-            >
-              {listening ? "Listening…" : "🎙 Tap to speak"}
-            </button>
-            <small className="muted">
-              If voice input doesn’t work on iPhone, we’ll still keep voice output + add a “tap to read out loud” button.
-            </small>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
