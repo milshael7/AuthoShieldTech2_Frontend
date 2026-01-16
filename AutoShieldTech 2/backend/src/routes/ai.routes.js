@@ -1,32 +1,29 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { authRequired } = require('../middleware/auth');
 
-// This is a stub. It returns a safe, deterministic response that you can replace
-// with your real AI service later (OpenAI, local model, etc.).
-router.use(authRequired);
+const { callOpenAI } = require("../services/aiChat");
 
-router.post('/chat', async (req, res) => {
-  const { message, context } = req.body || {};
-  const clean = (message || '').toString().slice(0, 2000);
-  res.json({
-    ok: true,
-    reply: `AI (stub): I received: "${clean}". Next step is wiring a real AI engine + risk rules.`,
-    contextEcho: context || null,
-    ts: new Date().toISOString(),
-  });
-});
+// POST /api/ai/chat
+router.post("/chat", async (req, res) => {
+  try {
+    const { messages, context } = req.body || {};
 
-router.get('/training/status', (req, res) => {
-  res.json({ ok: true, status: 'idle', note: 'Worker not connected yet (stub).' });
-});
+    // Basic guardrails
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ ok: false, error: "messages[] required" });
+    }
 
-router.post('/training/start', (req, res) => {
-  res.json({ ok: true, status: 'started', note: 'This is a stub. Connect a worker/queue next.' });
-});
+    const result = await callOpenAI({ messages, context });
 
-router.post('/training/stop', (req, res) => {
-  res.json({ ok: true, status: 'stopped', note: 'This is a stub. Connect a worker/queue next.' });
+    if (!result.ok) {
+      return res.status(400).json(result);
+    }
+
+    return res.json({ ok: true, content: result.content });
+  } catch (err) {
+    console.error("[ai] /chat error:", err);
+    return res.status(500).json({ ok: false, error: "AI chat failed" });
+  }
 });
 
 module.exports = router;
