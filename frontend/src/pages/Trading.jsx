@@ -25,17 +25,21 @@ export default function Trading({ user }) {
   const [showAI, setShowAI] = useState(true);
   const [wideChart, setWideChart] = useState(false);
 
+  // ✅ Updated: allow learnStats + equity if backend provides it
   const [paper, setPaper] = useState({
     running: false,
     balance: 0,
+    equity: 0,
     pnl: 0,
-    openPosition: null,
-    trades: []
+    position: null,
+    trades: [],
+    learnStats: null,
+    notes: []
   });
   const [paperStatus, setPaperStatus] = useState("Loading…");
 
   const [messages, setMessages] = useState(() => ([
-    { from: "ai", text: "AutoProtect AI ready. Ask me about the chart, paper balance, P&L, or risk rules." }
+    { from: "ai", text: "AutoProtect ready. Ask me about the chart, learning signals, paper balance, P&L, or risk rules." }
   ]));
   const [input, setInput] = useState("");
   const logRef = useRef(null);
@@ -159,7 +163,19 @@ export default function Trading({ user }) {
         const res = await fetch(`${base}/api/paper/status`, { credentials: "include" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        setPaper(data);
+
+        // ✅ normalize shape (backend may send position/equity/learnStats/notes)
+        setPaper({
+          running: !!data?.running,
+          balance: Number(data?.balance || 0),
+          equity: Number(data?.equity || data?.balance || 0),
+          pnl: Number(data?.pnl || 0),
+          position: data?.position || data?.openPosition || null,
+          trades: Array.isArray(data?.trades) ? data.trades : [],
+          learnStats: data?.learnStats || null,
+          notes: Array.isArray(data?.notes) ? data.notes : []
+        });
+
         setPaperStatus("OK");
       } catch {
         setPaperStatus("Error loading paper status");
@@ -274,8 +290,10 @@ export default function Trading({ user }) {
         paper: {
           running: paper.running,
           balance: paper.balance,
+          equity: paper.equity,
           pnl: paper.pnl,
-          tradesCount: paper.trades?.length || 0
+          tradesCount: paper.trades?.length || 0,
+          learnStats: paper.learnStats || null
         }
       };
 
@@ -308,6 +326,7 @@ export default function Trading({ user }) {
   }
 
   const showRightPanel = showAI && !wideChart;
+  const ls = paper.learnStats || null;
 
   return (
     <div className="tradeWrap">
@@ -369,24 +388,81 @@ export default function Trading({ user }) {
           </div>
 
           {showMoney && (
-            <div className="kpi">
-              <div>
-                <b>${Number(paper.balance || 0).toLocaleString()}</b>
-                <span>Paper Balance</span>
+            <>
+              <div className="kpi">
+                <div>
+                  <b>${Number(paper.balance || 0).toLocaleString()}</b>
+                  <span>Paper Balance</span>
+                </div>
+                <div>
+                  <b>${Number(paper.pnl || 0).toLocaleString()}</b>
+                  <span>P / L</span>
+                </div>
+                <div>
+                  <b>{paper.trades?.length || 0}</b>
+                  <span>Recent Trades</span>
+                </div>
+                <div>
+                  <b>{paperStatus}</b>
+                  <span>Status</span>
+                </div>
               </div>
-              <div>
-                <b>${Number(paper.pnl || 0).toLocaleString()}</b>
-                <span>P / L</span>
+
+              {/* ✅ NEW: Learning panel */}
+              <div className="kpi" style={{ marginTop: 10 }}>
+                <div>
+                  <b>{ls ? (ls.ticksSeen ?? 0) : "-"}</b>
+                  <span>Ticks Seen</span>
+                </div>
+                <div>
+                  <b>{ls ? (ls.confidence ?? 0) : "-"}%</b>
+                  <span>Confidence</span>
+                </div>
+                <div>
+                  <b>{ls ? (ls.volatilityState || "idle") : "-"}</b>
+                  <span>Volatility</span>
+                </div>
+                <div>
+                  <b style={{ fontSize: 12 }}>{ls ? (ls.lastReason || "—") : "—"}</b>
+                  <span>Decision Reason</span>
+                </div>
               </div>
-              <div>
-                <b>{paper.trades?.length || 0}</b>
-                <span>Recent Trades</span>
-              </div>
-              <div>
-                <b>{paperStatus}</b>
-                <span>Status</span>
-              </div>
-            </div>
+
+              {ls && (
+                <div style={{ marginTop: 10 }} className="muted">
+                  <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                    <span><b>Decision:</b> {ls.lastDecision}</span>
+                    <span><b>Warmup Left:</b> {ls.warmupLeft}</span>
+                    <span><b>Edge:</b> {typeof ls.lastEdge === "number" ? ls.lastEdge : "-"}</span>
+                    <span><b>Vol:</b> {typeof ls.lastVol === "number" ? ls.lastVol : "-"}</span>
+                  </div>
+                </div>
+              )}
+
+              {paper.notes && paper.notes.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <b>AutoProtect Notes</b>
+                  <div className="tableWrap">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Time</th>
+                          <th>Note</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paper.notes.slice().reverse().slice(0, 6).map((n, i) => (
+                          <tr key={i}>
+                            <td>{new Date(n.time).toLocaleTimeString()}</td>
+                            <td>{n.text}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           <div style={{ marginTop: 12, height: 520 }}>
@@ -410,7 +486,7 @@ export default function Trading({ user }) {
                   <thead>
                     <tr>
                       <th>Time</th>
-                      <th>Type</th>
+                      <th>Side</th>
                       <th>Price</th>
                       <th>Profit</th>
                     </tr>
@@ -419,13 +495,13 @@ export default function Trading({ user }) {
                     {(paper.trades || []).slice().reverse().slice(0, 10).map((t, i) => (
                       <tr key={i}>
                         <td>{new Date(t.time).toLocaleTimeString()}</td>
-                        <td>{t.type}</td>
-                        <td>{Number(t.price).toFixed(2)}</td>
+                        <td>{t.side || t.type || "-"}</td>
+                        <td>{Number(t.exit ?? t.price ?? 0).toFixed(2)}</td>
                         <td>{t.profit !== undefined ? Number(t.profit).toFixed(2) : "-"}</td>
                       </tr>
                     ))}
                     {(!paper.trades || paper.trades.length === 0) && (
-                      <tr><td colSpan="4" className="muted">No trades yet (wait 10–30 seconds)</td></tr>
+                      <tr><td colSpan="4" className="muted">No trades yet (watch Learning panel above)</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -448,7 +524,7 @@ export default function Trading({ user }) {
             <div className="chatLog" ref={logRef} style={{ marginTop: 12 }}>
               {messages.map((m, idx) => (
                 <div key={idx} className={`chatMsg ${m.from === "you" ? "you" : "ai"}`}>
-                  <b style={{ display: "block", marginBottom: 4 }}>{m.from === "you" ? "You" : "AutoProtect AI"}</b>
+                  <b style={{ display: "block", marginBottom: 4 }}>{m.from === "you" ? "You" : "AutoProtect"}</b>
                   <div>{m.text}</div>
                 </div>
               ))}
@@ -458,7 +534,7 @@ export default function Trading({ user }) {
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about trades, P/L, risk rules…"
+                placeholder="Ask about learning, confidence, volatility, trades…"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     sendToAI(input);
@@ -482,8 +558,10 @@ export default function Trading({ user }) {
                   paper: {
                     running: paper.running,
                     balance: paper.balance,
+                    equity: paper.equity,
                     pnl: paper.pnl,
-                    tradesCount: paper.trades?.length || 0
+                    tradesCount: paper.trades?.length || 0,
+                    learnStats: paper.learnStats || null
                   }
                 })}
               />
