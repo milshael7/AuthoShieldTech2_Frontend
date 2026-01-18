@@ -1,5 +1,6 @@
 :root{--bg:#0b1220;--panel:rgba(255,255,255,.06);--text:rgba(255,255,255,.92);--muted:rgba(255,255,255,.70);--line:rgba(255,255,255,.12);--ok:#2bd576;--warn:#ffd166;--danger:#ff5a5f;}
-*{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:radial-gradient(1100px 600px at 20% 0%, rgba(80,140,255,.20), transparent 55%),radial-gradient(1000px 700px at 90% 40%, rgba(0,255,170,.10), transparent 55%),var(--bg);color:var(--text);}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:radial-gradient(1100px 600px at 20% 0%, rgba(80,140,255,.20), transparent 55%),radial-gradient(1000px 700px at 90% 40%, rgba(0,255,170,.10), transparent 55%),var(--bg);color:var(--text);}
 .container{max-width:1100px;margin:0 auto;padding:24px;}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;}
 .row{display:flex;gap:16px;flex-wrap:wrap;}
@@ -16,7 +17,6 @@ button{cursor:pointer;background:rgba(255,255,255,.10);} button:hover{background
 .table{width:100%;border-collapse:collapse;} .table th,.table td{border-bottom:1px solid var(--line);padding:10px;text-align:left;font-size:13px;}
 .pill{padding:8px 10px;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,.20);}
 .actions{display:flex;gap:10px;flex-wrap:wrap;} .actions button{flex:1;min-width:150px;}
-
 
 /* --- Trading terminal layout --- */
 .tradeWrap{ width:100%; }
@@ -65,7 +65,7 @@ button{cursor:pointer;background:rgba(255,255,255,.10);} button:hover{background
   .tradeGrid{ grid-template-columns: 1fr; }
 }
 
-
+/* ✅ KPI boxes + number overflow fix */
 .kpi{
   display:grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -73,6 +73,7 @@ button{cursor:pointer;background:rgba(255,255,255,.10);} button:hover{background
   margin-top:10px;
 }
 .kpi > div{
+  min-width: 0; /* IMPORTANT: lets children shrink inside grid */
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 12px;
@@ -80,9 +81,18 @@ button{cursor:pointer;background:rgba(255,255,255,.10);} button:hover{background
   display:flex;
   flex-direction:column;
   gap:4px;
+  overflow: hidden; /* keep content inside the box */
 }
-.kpi b{ font-size: 22px; }
-.kpi span{ font-size: 12px; opacity: .8; }
+.kpi b{
+  font-size: clamp(16px, 2.2vw, 22px); /* scales down on small screens */
+  line-height: 1.1;
+  white-space: nowrap;           /* prevent wrapping into next line */
+  overflow: hidden;              /* prevent spill into other boxes */
+  text-overflow: ellipsis;       /* show ... if it’s too long */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+.kpi span{ font-size: 12px; opacity: .8; white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
 
 .list{
   list-style:none;
