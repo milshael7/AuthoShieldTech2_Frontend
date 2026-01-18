@@ -1,32 +1,107 @@
-:root{--bg:#0b1220;--panel:rgba(255,255,255,.06);--text:rgba(255,255,255,.92);--muted:rgba(255,255,255,.70);--line:rgba(255,255,255,.12);--ok:#2bd576;--warn:#ffd166;--danger:#ff5a5f;}
+:root{
+  --bg:#0b1220;
+  --panel:rgba(255,255,255,.06);
+  --text:rgba(255,255,255,.92);
+  --muted:rgba(255,255,255,.70);
+  --line:rgba(255,255,255,.12);
+  --ok:#2bd576;
+  --warn:#ffd166;
+  --danger:#ff5a5f;
+}
+
 *{box-sizing:border-box}
-body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:radial-gradient(1100px 600px at 20% 0%, rgba(80,140,255,.20), transparent 55%),radial-gradient(1000px 700px at 90% 40%, rgba(0,255,170,.10), transparent 55%),var(--bg);color:var(--text);}
+html, body{height:100%}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+  background:
+    radial-gradient(1100px 600px at 20% 0%, rgba(80,140,255,.20), transparent 55%),
+    radial-gradient(1000px 700px at 90% 40%, rgba(0,255,170,.10), transparent 55%),
+    var(--bg);
+  color:var(--text);
+}
+
+/* Make numbers behave like a trading terminal (gas-pump style) */
+body, button, input, select, textarea{
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
 .container{max-width:1100px;margin:0 auto;padding:24px;}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;}
+.card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:16px;
+}
+
 .row{display:flex;gap:16px;flex-wrap:wrap;}
 .col{flex:1;min-width:280px;}
 small{color:var(--muted)}
-input,select,button,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(0,0,0,.25);color:var(--text);}
-button{cursor:pointer;background:rgba(255,255,255,.10);} button:hover{background:rgba(255,255,255,.14);}
-.badge{display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(0,0,0,.25);font-size:12px;}
-.badge.ok{border-color:rgba(43,213,118,.6);} .badge.warn{border-color:rgba(255,209,102,.6);} .badge.danger{border-color:rgba(255,90,95,.6);}
-.nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;}
-.brand{display:flex;align-items:center;gap:10px;}
-.logo{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg, rgba(80,140,255,.85), rgba(0,255,170,.55));border:1px solid var(--line);}
-.brandTitle{line-height:1.05;} .brandTitle b{display:block;font-size:16px;} .brandTitle span{display:block;font-size:12px;color:var(--muted);letter-spacing:2px;}
-.table{width:100%;border-collapse:collapse;} .table th,.table td{border-bottom:1px solid var(--line);padding:10px;text-align:left;font-size:13px;}
-.pill{padding:8px 10px;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,.20);}
-.actions{display:flex;gap:10px;flex-wrap:wrap;} .actions button{flex:1;min-width:150px;}
+
+input,select,button,textarea{
+  width:100%;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid var(--line);
+  background:rgba(0,0,0,.25);
+  color:var(--text);
+}
+button{cursor:pointer;background:rgba(255,255,255,.10);}
+button:hover{background:rgba(255,255,255,.14);}
+
+.badge{
+  display:inline-block;
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:rgba(0,0,0,.25);
+  font-size:12px;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.badge.ok{border-color:rgba(43,213,118,.6);}
+.badge.warn{border-color:rgba(255,209,102,.6);}
+.badge.danger{border-color:rgba(255,90,95,.6);}
+
+.nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;}
+.logo{
+  width:38px;height:38px;border-radius:12px;
+  background:linear-gradient(135deg, rgba(80,140,255,.85), rgba(0,255,170,.55));
+  border:1px solid var(--line);
+  flex:0 0 auto;
+}
+.brandTitle{line-height:1.05;min-width:0;}
+.brandTitle b{
+  display:block;
+  font-size:16px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.brandTitle span{display:block;font-size:12px;color:var(--muted);letter-spacing:2px;}
+
+.table{width:100%;border-collapse:collapse;}
+.table th,.table td{border-bottom:1px solid var(--line);padding:10px;text-align:left;font-size:13px;}
+.pill{
+  padding:8px 10px;border-radius:12px;border:1px solid var(--line);
+  background:rgba(0,0,0,.20);
+  min-width:0;
+}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;}
+.actions button{flex:1;min-width:140px;}
 
 /* --- Trading terminal layout --- */
 .tradeWrap{ width:100%; }
 .tradeTop{
   display:flex;
   justify-content:space-between;
-  align-items:center;
+  align-items:flex-start;
   gap:12px;
   flex-wrap:wrap;
 }
+.tradeTop h2{font-size:18px;margin:0}
 .tradeGrid{
   display:grid;
   grid-template-columns: 1.8fr 1fr;
@@ -34,7 +109,8 @@ button{cursor:pointer;background:rgba(255,255,255,.10);} button:hover{background
   margin-top:14px;
 }
 .tradeChart{ min-height: 620px; }
-.tradeAI{ min-height: 620px; display:flex; flex-direction:column; }
+.tradeAI{ min-height: 620px; display:flex; flex-direction:column; min-width:0; }
+
 .chatLog{
   flex:1;
   overflow:auto;
@@ -42,30 +118,27 @@ button{cursor:pointer;background:rgba(255,255,255,.10);} button:hover{background
   border-radius:12px;
   padding:10px;
   background: rgba(0,0,0,.25);
+  min-height:220px;
 }
 .chatBox{
   display:flex;
   gap:10px;
   margin-top:10px;
 }
-.chatBox input{
-  flex:1;
-}
+.chatBox input{ flex:1; min-width:0; }
 .chatMsg{
   padding:10px;
   border-radius:10px;
   margin-bottom:8px;
   border:1px solid rgba(255,255,255,.08);
+  overflow-wrap:anywhere;
+  word-break:break-word;
 }
 .chatMsg.you{ background: rgba(45, 90, 255, .12); }
 .chatMsg.ai{ background: rgba(20, 255, 160, .08); }
 .muted{ opacity:.75; }
 
-@media (max-width: 980px){
-  .tradeGrid{ grid-template-columns: 1fr; }
-}
-
-/* ✅ KPI boxes + number overflow fix */
+/* KPI box fixes: prevent overlap, keep numbers in their lane */
 .kpi{
   display:grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -73,45 +146,35 @@ button{cursor:pointer;background:rgba(255,255,255,.10);} button:hover{background
   margin-top:10px;
 }
 .kpi > div{
-  min-width: 0; /* IMPORTANT: lets children shrink inside grid */
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 12px;
   padding: 12px;
   display:flex;
   flex-direction:column;
-  gap:4px;
-  overflow: hidden; /* keep content inside the box */
+  gap:6px;
+  min-width:0;
+  overflow:hidden; /* ✅ stops spill */
 }
 .kpi b{
-  font-size: clamp(16px, 2.2vw, 22px); /* scales down on small screens */
+  font-size: clamp(16px, 2.2vw, 22px); /* ✅ auto size on phone */
   line-height: 1.1;
-  white-space: nowrap;           /* prevent wrapping into next line */
-  overflow: hidden;              /* prevent spill into other boxes */
-  text-overflow: ellipsis;       /* show ... if it’s too long */
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1, "lnum" 1;
+  display:block;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis; /* ✅ keeps it inside */
 }
-.kpi span{ font-size: 12px; opacity: .8; white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
+.kpi span{
+  font-size: 12px;
+  opacity: .8;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
 
-.list{
-  list-style:none;
-  padding:0;
-  margin:0;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-.list li{
-  display:flex;
-  gap:10px;
-  align-items:flex-start;
-}
-.dot{
-  width:10px;height:10px;border-radius:50%;
-  margin-top:6px;
-  background: #7aa7ff;
-}
+.list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}
+.list li{display:flex;gap:10px;align-items:flex-start;min-width:0;}
+.dot{width:10px;height:10px;border-radius:50%;margin-top:6px;background:#7aa7ff;}
 .dot.warn{ background:#f0c36d; }
 .dot.danger{ background:#ff6b6b; }
 .dot.info{ background:#7aa7ff; }
@@ -121,10 +184,45 @@ button{cursor:pointer;background:rgba(255,255,255,.10);} button:hover{background
   width:100%;
   border-collapse: collapse;
   margin-top:10px;
+  min-width:520px; /* lets phone scroll horizontally instead of squish */
 }
 .table th,.table td{
   border-bottom:1px solid rgba(255,255,255,0.08);
   padding:8px 6px;
   text-align:left;
+  white-space:nowrap;
 }
+
 .error{ color:#ff6b6b; }
+
+/* --- Responsive: phone + small screens --- */
+@media (max-width: 980px){
+  .container{padding:16px;}
+  .tradeGrid{ grid-template-columns: 1fr; }
+  .tradeChart, .tradeAI{ min-height: unset; }
+}
+
+@media (max-width: 520px){
+  .container{padding:12px;}
+
+  .card{padding:12px;border-radius:14px;}
+
+  .actions{gap:8px;}
+  .actions button{min-width:120px;}
+
+  .tradeTop{align-items:stretch;}
+  .tradeTop h2{font-size:16px;}
+
+  /* ✅ KPI becomes 2 columns on phone */
+  .kpi{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* ✅ chart height smaller on phone */
+  .tradeChart canvas{ height: 340px !important; }
+
+  /* ✅ chat input stacks better */
+  .chatBox{flex-direction:column;}
+  .chatBox button{width:100% !important;}
+
+  /* ✅ reduce table minimum so it scrolls nicer */
+  .table{min-width:460px;}
+}
