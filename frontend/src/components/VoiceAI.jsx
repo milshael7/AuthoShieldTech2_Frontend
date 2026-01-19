@@ -8,13 +8,7 @@ function getApiBase() {
   );
 }
 
-function safeJsonParse(str) {
-  try { return JSON.parse(str); } catch { return null; }
-}
-
 function pickProfessionalVoices(voices) {
-  // We don't show raw voice names; we map to professional labels.
-  // We'll pick best matches available on the device.
   const list = voices || [];
   const by = (pred) => list.find(pred);
 
@@ -29,18 +23,12 @@ function pickProfessionalVoices(voices) {
       id: "pro_us_male",
       label: "Professional US (Male)",
       match: (v) =>
-        /en-US/i.test(v.lang) && /Guy|Davis|Matthew|Google US English/i.test(v.name) && /Male|Guy|Davis|Matthew/i.test(v.name),
+        /en-US/i.test(v.lang) &&
+        /Guy|Davis|Matthew|Google US English/i.test(v.name) &&
+        /Male|Guy|Davis|Matthew/i.test(v.name),
     },
-    {
-      id: "pro_uk",
-      label: "Professional UK",
-      match: (v) => /en-GB/i.test(v.lang),
-    },
-    {
-      id: "neutral_en",
-      label: "Neutral English",
-      match: (v) => /^en/i.test(v.lang),
-    },
+    { id: "pro_uk", label: "Professional UK", match: (v) => /en-GB/i.test(v.lang) },
+    { id: "neutral_en", label: "Neutral English", match: (v) => /^en/i.test(v.lang) },
     {
       id: "accessibility",
       label: "Accessibility Voice",
@@ -55,7 +43,6 @@ function pickProfessionalVoices(voices) {
     })
     .filter(Boolean);
 
-  // Always include a fallback option
   if (resolved.length === 0 && list.length) {
     resolved.push({
       id: "fallback",
@@ -68,6 +55,30 @@ function pickProfessionalVoices(voices) {
   return resolved;
 }
 
+// ✅ Token helpers (fixes "Invalid token")
+function getToken() {
+  try {
+    return (
+      window.localStorage.getItem("token") ||
+      window.localStorage.getItem("jwt") ||
+      window.localStorage.getItem("access_token") ||
+      window.localStorage.getItem("accessToken") ||
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+function authHeaders(extra = {}) {
+  const t = getToken();
+  return {
+    "Content-Type": "application/json",
+    ...(t ? { Authorization: `Bearer ${t}` } : {}),
+    ...extra,
+  };
+}
+
 export default function VoiceAI({
   endpoint = "/api/ai/chat",
   title = "AutoProtect Voice",
@@ -76,33 +87,29 @@ export default function VoiceAI({
   const API_BASE = useMemo(() => getApiBase(), []);
   const [supported, setSupported] = useState(true);
 
-  // Modes
-  const [conversationMode, setConversationMode] = useState(false); // hands-free
+  const [conversationMode, setConversationMode] = useState(false);
   const [voiceReply, setVoiceReply] = useState(true);
 
-  // Voice selection (professional labels)
   const [voiceOptions, setVoiceOptions] = useState([]);
   const [voiceChoice, setVoiceChoice] = useState(() => {
     return window.localStorage.getItem("autoprotect_voice_choice") || "pro_us_female";
   });
 
-  // SpeechRecognition states
   const [listening, setListening] = useState(false);
   const [status, setStatus] = useState("Idle");
   const [youSaid, setYouSaid] = useState("");
   const [aiSays, setAiSays] = useState("");
 
   const recRef = useRef(null);
-  const bufferFinalRef = useRef("");     // final text buffer
-  const interimRef = useRef("");         // interim text buffer
-  const silenceTimerRef = useRef(null);  // detects "you stopped talking"
-  const lastSendRef = useRef("");        // prevent duplicate sends
-  const busyRef = useRef(false);         // avoid overlapping requests
+  const bufferFinalRef = useRef("");
+  const interimRef = useRef("");
+  const silenceTimerRef = useRef(null);
+  const lastSendRef = useRef("");
+  const busyRef = useRef(false);
 
   const SpeechRecognition =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  // Load speech synthesis voices & map to professional choices
   useEffect(() => {
     if (!("speechSynthesis" in window)) return;
 
@@ -111,14 +118,12 @@ export default function VoiceAI({
       const opts = pickProfessionalVoices(v);
       setVoiceOptions(opts);
 
-      // If saved choice isn't available, pick the first available.
-      if (opts.length && !opts.some(o => o.id === voiceChoice)) {
+      if (opts.length && !opts.some((o) => o.id === voiceChoice)) {
         setVoiceChoice(opts[0].id);
       }
     };
 
     load();
-    // Some browsers fire this when voices become available
     window.speechSynthesis.onvoiceschanged = load;
 
     return () => {
@@ -127,7 +132,6 @@ export default function VoiceAI({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Create recognition instance
   useEffect(() => {
     if (!SpeechRecognition) {
       setSupported(false);
@@ -138,7 +142,7 @@ export default function VoiceAI({
     const rec = new SpeechRecognition();
     rec.lang = "en-US";
     rec.interimResults = true;
-    rec.continuous = true; // required for conversation mode
+    rec.continuous = true;
 
     rec.onstart = () => {
       setListening(true);
@@ -155,7 +159,6 @@ export default function VoiceAI({
       setListening(false);
       clearTimeout(silenceTimerRef.current);
 
-      // In push-to-talk mode, end means send whatever we have.
       if (!conversationMode) {
         const finalText = (bufferFinalRef.current + " " + interimRef.current).trim();
         bufferFinalRef.current = "";
@@ -164,8 +167,6 @@ export default function VoiceAI({
         if (finalText) void sendToAI(finalText);
         setStatus("Idle");
       } else {
-        // In conversation mode, browser might stop unexpectedly (mobile).
-        // We keep it "armed", user can hit Stop/Start again if needed.
         setStatus("Conversation paused (tap Start to resume)");
       }
     };
@@ -187,24 +188,20 @@ export default function VoiceAI({
       const combined = (finalText + interim).trim();
       setYouSaid(combined);
 
-      // Hands-free: send after silence
       if (conversationMode) {
         clearTimeout(silenceTimerRef.current);
         silenceTimerRef.current = setTimeout(() => {
           const msg = (bufferFinalRef.current + " " + interimRef.current).trim();
           if (!msg) return;
-
-          // Avoid double-sending the same line
           if (msg === lastSendRef.current) return;
           lastSendRef.current = msg;
 
-          // Clear buffers so new speech starts fresh
           bufferFinalRef.current = "";
           interimRef.current = "";
           setYouSaid(msg);
 
           void sendToAI(msg);
-        }, 900); // silence window (ms). Can tune later.
+        }, 900);
       }
     };
 
@@ -217,7 +214,6 @@ export default function VoiceAI({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationMode]);
 
-  // Save voice choice
   useEffect(() => {
     try {
       window.localStorage.setItem("autoprotect_voice_choice", voiceChoice);
@@ -233,17 +229,15 @@ export default function VoiceAI({
       const u = new SpeechSynthesisUtterance(text);
 
       const all = window.speechSynthesis.getVoices?.() || [];
-      const opt = voiceOptions.find(o => o.id === voiceChoice);
-      const chosen = opt ? all.find(v => v.name === opt.voiceName) : null;
+      const opt = voiceOptions.find((o) => o.id === voiceChoice);
+      const chosen = opt ? all.find((v) => v.name === opt.voiceName) : null;
       if (chosen) u.voice = chosen;
 
       u.onstart = () => setStatus("Speaking…");
       u.onend = () => setStatus(conversationMode ? "Conversation listening…" : "Reply ready");
 
       window.speechSynthesis.speak(u);
-    } catch {
-      // If speaking fails, we still show text.
-    }
+    } catch {}
   }
 
   async function sendToAI(message) {
@@ -265,7 +259,8 @@ export default function VoiceAI({
     try {
       const res = await fetch(API_BASE + endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // ✅ THIS is the missing piece
+        headers: authHeaders(),
         credentials: "include",
         body: JSON.stringify(payload),
       });
@@ -276,7 +271,6 @@ export default function VoiceAI({
         const msg = data?.error || data?.message || data?.detail || `HTTP ${res.status}`;
         setAiSays(String(msg));
         setStatus("AI error");
-        // Speak errors too (so you hear something)
         speak("AI error. " + String(msg));
         busyRef.current = false;
         return;
@@ -346,7 +340,6 @@ export default function VoiceAI({
       </div>
 
       <div style={controls}>
-        {/* Conversation = hands-free mic */}
         <button
           onClick={() => {
             if (listening) stop();
@@ -361,7 +354,7 @@ export default function VoiceAI({
           <input
             type="checkbox"
             checked={conversationMode}
-            onChange={() => setConversationMode(v => !v)}
+            onChange={() => setConversationMode((v) => !v)}
           />
           Conversation mode (hands-free)
         </label>
@@ -370,7 +363,7 @@ export default function VoiceAI({
           <input
             type="checkbox"
             checked={voiceReply}
-            onChange={() => setVoiceReply(v => !v)}
+            onChange={() => setVoiceReply((v) => !v)}
           />
           Voice reply
         </label>
@@ -383,7 +376,7 @@ export default function VoiceAI({
             style={selectStyle}
           >
             {voiceOptions.length === 0 && <option value="fallback">Standard Voice</option>}
-            {voiceOptions.map(v => (
+            {voiceOptions.map((v) => (
               <option key={v.id} value={v.id}>{v.label}</option>
             ))}
           </select>
@@ -397,6 +390,12 @@ export default function VoiceAI({
           </button>
         </div>
       </div>
+
+      {!getToken() ? (
+        <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>
+          ⚠️ No token found in localStorage. Login first (token must be saved as <b>localStorage.token</b>).
+        </div>
+      ) : null}
 
       <div style={box}>
         <div style={boxLabel}>You said</div>
