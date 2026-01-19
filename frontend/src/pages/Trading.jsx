@@ -9,7 +9,7 @@ function apiBase() {
   return (import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || "").trim();
 }
 
-// ---- auth helpers (optional; prevents "invalid token" issues if some endpoints are protected) ----
+// Optional auth header (won’t break if you don’t use tokens)
 function getToken() {
   try {
     return (
@@ -30,7 +30,6 @@ function authHeaders(extra = {}) {
   };
 }
 
-// ---- formatting ----
 function fmtNum(n, digits = 2) {
   const x = Number(n);
   if (!Number.isFinite(x)) return "—";
@@ -52,18 +51,43 @@ function pct(n, digits = 0) {
   return (x * 100).toFixed(digits) + "%";
 }
 
-export default function Trading({ user }) {
-  const UI_SYMBOLS = ["BTCUSD", "ETHUSD"];
-  const UI_TO_BACKEND = { BTCUSD: "BTCUSDT", ETHUSD: "ETHUSDT" };
+export default function Trading() {
+  // 10 well-known coins (frontend display)
+  const UI_SYMBOLS = ["BTCUSD","ETHUSD","SOLUSD","LTCUSD","BCHUSD","XRPUSD","ADAUSD","DOGEUSD","DOTUSD","LINKUSD"];
+
+  // Map UI symbol -> backend tick symbol (what your Render WS broadcasts)
+  const UI_TO_BACKEND = {
+    BTCUSD: "BTCUSDT",
+    ETHUSD: "ETHUSDT",
+    SOLUSD: "SOLUSDT",
+    LTCUSD: "LTCUSDT",
+    BCHUSD: "BCHUSDT",
+    XRPUSD: "XRPUSDT",
+    ADAUSD: "ADAUSDT",
+    DOGEUSD: "DOGEUSDT",
+    DOTUSD: "DOTUSDT",
+    LINKUSD: "LINKUSDT",
+  };
 
   const [symbol, setSymbol] = useState("BTCUSD");
   const [mode, setMode] = useState("Paper");
-
-  // Market watch (last prices)
-  const [lastBySym, setLastBySym] = useState({ BTCUSDT: null, ETHUSDT: null });
   const [feedStatus, setFeedStatus] = useState("Connecting…");
 
-  // Chart price
+  // Market watch last prices
+  const [lastBySym, setLastBySym] = useState(() => ({
+    BTCUSDT: null,
+    ETHUSDT: null,
+    SOLUSDT: null,
+    LTCUSDT: null,
+    BCHUSDT: null,
+    XRPUSDT: null,
+    ADAUSDT: null,
+    DOGEUSDT: null,
+    DOTUSDT: null,
+    LINKUSDT: null,
+  }));
+
+  // Current chart price
   const [last, setLast] = useState(65300);
 
   // Panels
@@ -85,20 +109,13 @@ export default function Trading({ user }) {
   });
   const [paperStatus, setPaperStatus] = useState("Loading…");
 
-  // Live (optional: if backend has /api/live/status)
-  const [live, setLive] = useState({
-    ok: false,
-    exchange: "kraken",
-    keys: "unknown",
-    liveTradingEnabled: false,
-    dryRun: true,
-    note: "",
-  });
+  // Live readiness (optional)
+  const [live, setLive] = useState(null);
   const [liveStatus, setLiveStatus] = useState("Loading…");
 
   // AI Chat
   const [messages, setMessages] = useState(() => [
-    { from: "ai", text: "AutoProtect ready. Ask about the market, learning stats, paper trades, or risk rules." }
+    { from: "ai", text: "AutoProtect ready. Ask about market moves, learning stats, paper trades, or risk rules." }
   ]);
   const [input, setInput] = useState("");
   const logRef = useRef(null);
@@ -132,7 +149,7 @@ export default function Trading({ user }) {
   const applyTick = (backendSymbol, price, nowMs) => {
     setLastBySym((prev) => ({ ...prev, [backendSymbol]: Number(price) }));
 
-    // Only drive chart candles for current symbol
+    // Only update chart for current selected symbol
     if (backendSymbol !== wantedBackendSymbol) return;
 
     const p = Number(price);
@@ -168,7 +185,7 @@ export default function Trading({ user }) {
     });
   };
 
-  // ---- WebSocket feed ----
+  // WS feed
   useEffect(() => {
     let ws;
     let fallbackTimer;
@@ -180,14 +197,34 @@ export default function Trading({ user }) {
 
     const startFallback = () => {
       setFeedStatus("Disconnected (demo fallback)");
-      let btc = lastBySym.BTCUSDT ?? 65300;
-      let eth = lastBySym.ETHUSDT ?? 3500;
+      // fallback for all 10 so the UI doesn't look dead if WS fails
+      const startMap = { ...lastBySym };
+      const defaults = {
+        BTCUSDT: 65300,
+        ETHUSDT: 3500,
+        SOLUSDT: 150,
+        LTCUSDT: 90,
+        BCHUSDT: 400,
+        XRPUSDT: 0.7,
+        ADAUSDT: 0.4,
+        DOGEUSDT: 0.08,
+        DOTUSDT: 7,
+        LINKUSDT: 15,
+      };
+      Object.keys(defaults).forEach(k => {
+        if (!Number.isFinite(Number(startMap[k]))) startMap[k] = defaults[k];
+      });
 
       fallbackTimer = setInterval(() => {
-        btc = Math.max(1, btc + (Math.random() - 0.5) * 40);
-        eth = Math.max(1, eth + (Math.random() - 0.5) * 6);
-        applyTick("BTCUSDT", btc, Date.now());
-        applyTick("ETHUSDT", eth, Date.now());
+        const jitter = (x) => Math.max(0.000001, x + (Math.random() - 0.5) * x * 0.002);
+        const next = { ...startMap };
+        Object.keys(next).forEach(k => (next[k] = jitter(next[k])));
+        startMap.BTCUSDT = next.BTCUSDT; startMap.ETHUSDT = next.ETHUSDT; startMap.SOLUSDT = next.SOLUSDT;
+        startMap.LTCUSDT = next.LTCUSDT; startMap.BCHUSDT = next.BCHUSDT; startMap.XRPUSDT = next.XRPUSDT;
+        startMap.ADAUSDT = next.ADAUSDT; startMap.DOGEUSDT = next.DOGEUSDT; startMap.DOTUSDT = next.DOTUSDT;
+        startMap.LINKUSDT = next.LINKUSDT;
+
+        Object.entries(next).forEach(([sym, price]) => applyTick(sym, price, Date.now()));
       }, 900);
     };
 
@@ -207,11 +244,14 @@ export default function Trading({ user }) {
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
+
           if (msg?.type === "hello" && msg?.last) {
             const l = msg.last || {};
-            if (l.BTCUSDT) applyTick("BTCUSDT", Number(l.BTCUSDT), Date.now());
-            if (l.ETHUSDT) applyTick("ETHUSDT", Number(l.ETHUSDT), Date.now());
+            Object.entries(l).forEach(([sym, price]) => {
+              if (price != null) applyTick(String(sym), Number(price), Date.now());
+            });
           }
+
           if (msg?.type === "tick" && msg.symbol && msg.price) {
             applyTick(String(msg.symbol), Number(msg.price), Number(msg.ts || Date.now()));
           }
@@ -228,7 +268,7 @@ export default function Trading({ user }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wantedBackendSymbol]);
 
-  // ---- Paper status polling ----
+  // Paper polling
   useEffect(() => {
     let t;
     const base = apiBase();
@@ -257,7 +297,7 @@ export default function Trading({ user }) {
     return () => clearInterval(t);
   }, []);
 
-  // ---- Live status polling (optional) ----
+  // Live status polling (optional)
   useEffect(() => {
     let t;
     const base = apiBase();
@@ -272,16 +312,10 @@ export default function Trading({ user }) {
           headers: { ...authHeaders() },
           credentials: "include",
         });
-
-        // If route doesn't exist yet, don't break the whole page
-        if (res.status === 404) {
-          setLiveStatus("Not installed");
-          return;
-        }
-
+        if (res.status === 404) { setLiveStatus("Not installed"); return; }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        setLive(data || {});
+        setLive(data || null);
         setLiveStatus("OK");
       } catch {
         setLiveStatus("Error");
@@ -293,7 +327,7 @@ export default function Trading({ user }) {
     return () => clearInterval(t);
   }, []);
 
-  // ---- Draw candles ----
+  // Draw candles
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -377,7 +411,6 @@ export default function Trading({ user }) {
     ctx.setLineDash([]);
   }, [candles, last]);
 
-  // ---- AI chat ----
   async function sendToAI(text) {
     const clean = (text || "").trim();
     if (!clean) return;
@@ -395,6 +428,7 @@ export default function Trading({ user }) {
         symbol,
         mode,
         last,
+        market: lastBySym,
         paper: {
           running: paper.running,
           balance: paper.balance,
@@ -405,15 +439,12 @@ export default function Trading({ user }) {
           decision: paper.learnStats?.decision ?? "WAIT",
           decisionReason: paper.learnStats?.lastReason ?? "—",
         },
-        live: live || null,
+        live,
       };
 
       const res = await fetch(`${base}/api/ai/chat`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders(),
-        },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         credentials: "include",
         body: JSON.stringify({ message: clean, context }),
       });
@@ -425,35 +456,39 @@ export default function Trading({ user }) {
         return;
       }
 
-      const reply = data?.reply ?? "(No reply from AutoProtect)";
-      setMessages((prev) => [...prev, { from: "ai", text: reply }]);
+      setMessages((prev) => [...prev, { from: "ai", text: data?.reply ?? "(No reply from AutoProtect)" }]);
     } catch {
       setMessages((prev) => [...prev, { from: "ai", text: "Network error talking to AI backend." }]);
     }
   }
 
-  // ---- derived stats ----
   const ticksSeen = paper.learnStats?.ticksSeen ?? 0;
   const conf = paper.learnStats?.confidence ?? 0;
   const decision = paper.learnStats?.decision ?? "WAIT";
   const reason = paper.learnStats?.lastReason ?? "—";
-
   const showRightPanel = showAI && !wideChart;
 
-  // ---- UI helpers ----
-  const currentBackend = wantedBackendSymbol;
-  const btc = lastBySym.BTCUSDT;
-  const eth = lastBySym.ETHUSDT;
+  const marketRows = [
+    ["BTC", "BTCUSDT"],
+    ["ETH", "ETHUSDT"],
+    ["SOL", "SOLUSDT"],
+    ["LTC", "LTCUSDT"],
+    ["BCH", "BCHUSDT"],
+    ["XRP", "XRPUSDT"],
+    ["ADA", "ADAUSDT"],
+    ["DOGE", "DOGEUSDT"],
+    ["DOT", "DOTUSDT"],
+    ["LINK", "LINKUSDT"],
+  ];
 
   return (
     <div className="tradeWrap">
-      {/* Top control bar */}
       <div className="card">
         <div className="tradeTop" style={{ alignItems: "flex-start" }}>
           <div style={{ minWidth: 240 }}>
             <h2 style={{ margin: 0 }}>Trading Room</h2>
             <small className="muted">
-              Live market + learning stats + paper trading. Built to feel like a real terminal.
+              Market Watch (10) • Live chart • Paper learning • AI voice console
             </small>
           </div>
 
@@ -470,7 +505,7 @@ export default function Trading({ user }) {
             </div>
 
             <div className="pill" style={{ minWidth: 210 }}>
-              <small>Symbol</small>
+              <small>Chart Symbol</small>
               <select value={symbol} onChange={(e) => setSymbol(e.target.value)} style={{ marginTop: 6 }}>
                 {UI_SYMBOLS.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -500,7 +535,6 @@ export default function Trading({ user }) {
         </div>
       </div>
 
-      {/* Main grid */}
       <div
         className="tradeGrid"
         style={{
@@ -508,53 +542,38 @@ export default function Trading({ user }) {
           alignItems: "start"
         }}
       >
-        {/* LEFT: Market Watch + Chart + Stats */}
+        {/* LEFT */}
         <div className="card tradeChart">
           {/* Market Watch */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: 10,
-            marginBottom: 12
-          }}>
-            <div className="kpiBox">
-              <div className="kpiLbl">Market Watch</div>
-              <div className="kpiVal" style={{ fontSize: 14, marginTop: 6 }}>
-                <span style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  BTC: ${fmtCompact(btc ?? 0, 2)}
-                </span>
-                <span style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  ETH: ${fmtCompact(eth ?? 0, 2)}
-                </span>
-              </div>
-            </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <b>Market Watch</b>
+            <span className={`badge ${paper.running ? "ok" : ""}`}>Paper Trader: {paper.running ? "ON" : "OFF"}</span>
+          </div>
 
-            <div className="kpiBox">
-              <div className="kpiLbl">Focus</div>
-              <div className="kpiVal" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {currentBackend}
-              </div>
-              <div className="kpiLbl" style={{ marginTop: 6 }}>
-                Paper Trader: <b>{paper.running ? "ON" : "OFF"}</b>
-              </div>
-            </div>
-
-            <div className="kpiBox">
-              <div className="kpiLbl">Live Readiness</div>
-              <div className="kpiVal" style={{ fontSize: 14 }}>
-                <span style={{ display: "block" }}>
-                  Status: <b>{liveStatus}</b>
-                </span>
-                <span style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  Keys: <b>{String(live?.keys || live?.keysPresent || "unknown")}</b>
-                </span>
-              </div>
-            </div>
+          <div className="tableWrap" style={{ marginTop: 10 }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Coin</th>
+                  <th>Price (USD)</th>
+                  <th>Backend Symbol</th>
+                </tr>
+              </thead>
+              <tbody>
+                {marketRows.map(([label, sym]) => (
+                  <tr key={sym}>
+                    <td style={{ whiteSpace: "nowrap" }}><b>{label}</b></td>
+                    <td style={{ whiteSpace: "nowrap" }}>${fmtCompact(lastBySym[sym] ?? 0, 4)}</td>
+                    <td style={{ whiteSpace: "nowrap", opacity: 0.8 }}>{sym}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           {/* Learning strip */}
           <div style={{
-            marginTop: 2,
+            marginTop: 12,
             display: "grid",
             gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
             gap: 10
@@ -664,16 +683,24 @@ export default function Trading({ user }) {
           )}
         </div>
 
-        {/* RIGHT: AI + Voice (and later we can add order ticket UI here) */}
+        {/* RIGHT */}
         {showRightPanel && (
           <div className="card tradeAI">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <div>
                 <b>AutoProtect Console</b>
                 <div className="muted" style={{ fontSize: 12 }}>
-                  Chat + Voice + guidance while it learns
+                  Chat + Voice while it learns
                 </div>
               </div>
+            </div>
+
+            <div className="pill" style={{ marginTop: 12 }}>
+              <small className="muted">
+                Live readiness: <b>{liveStatus}</b>{" "}
+                {live?.keys ? `• Keys: ${live.keys}` : ""}
+              </small>
+              {live?.note ? <div className="muted" style={{ marginTop: 8 }}>{live.note}</div> : null}
             </div>
 
             <div className="chatLog" ref={logRef} style={{ marginTop: 12 }}>
@@ -712,6 +739,7 @@ export default function Trading({ user }) {
                   symbol,
                   mode,
                   last,
+                  market: lastBySym,
                   paper: {
                     running: paper.running,
                     balance: paper.balance,
@@ -726,19 +754,11 @@ export default function Trading({ user }) {
                 })}
               />
             </div>
-
-            {/* Small live note */}
-            <div className="pill" style={{ marginTop: 12 }}>
-              <small className="muted">
-                Live trading setup: keys stay on Kraken. Your platform can only read status + (later) place orders when you unlock it.
-              </small>
-              {live?.note ? <div className="muted" style={{ marginTop: 8 }}>{live.note}</div> : null}
-            </div>
           </div>
         )}
       </div>
 
-      {/* Local styles (keeps it looking good even on phone) */}
+      {/* Local styles for tight numbers + phone fit */}
       <style>{`
         .kpiBox{
           background: rgba(255,255,255,0.04);
@@ -761,11 +781,6 @@ export default function Trading({ user }) {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-        }
-
-        @media (max-width: 980px){
-          .tradeTop { align-items: stretch !important; }
-          .actions { width: 100%; }
         }
         @media (max-width: 520px){
           .kpi{
