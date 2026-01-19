@@ -6,9 +6,7 @@ function clamp(n, a, b) {
 }
 
 function apiBase() {
-  return (
-    (import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || "").trim()
-  );
+  return ((import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || "").trim());
 }
 
 function fmtNum(n, digits = 2) {
@@ -62,8 +60,17 @@ export default function Trading({ user }) {
   });
   const [paperStatus, setPaperStatus] = useState("Loading…");
 
+  // ✅ NEW: live trading gate status
+  const [liveGate, setLiveGate] = useState({
+    enabled: false,
+    armed: false,
+    secondsRemaining: 0,
+    note: "Loading…"
+  });
+  const [liveGateStatus, setLiveGateStatus] = useState("Loading…");
+
   const [messages, setMessages] = useState(() => ([
-    { from: "ai", text: "AutoProtect ready. Ask me about the chart, learning stats, paper balance, P&L, or risk rules." }
+    { from: "ai", text: "AutoProtect ready. Ask me about learning stats, paper balance, P&L, or risk rules." }
   ]));
   const [input, setInput] = useState("");
   const logRef = useRef(null);
@@ -122,6 +129,7 @@ export default function Trading({ user }) {
     });
   };
 
+  // --- WebSocket feed ---
   useEffect(() => {
     let ws;
     let fallbackTimer;
@@ -174,6 +182,7 @@ export default function Trading({ user }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
 
+  // --- Pull paper status ---
   useEffect(() => {
     let t;
     const base = apiBase();
@@ -199,6 +208,56 @@ export default function Trading({ user }) {
     return () => clearInterval(t);
   }, []);
 
+  // ✅ NEW: Pull live gate status (public endpoint)
+  useEffect(() => {
+    let t;
+    const base = apiBase();
+    if (!base) {
+      setLiveGateStatus("Missing VITE_API_BASE");
+      setLiveGate((g) => ({ ...g, note: "Missing backend URL" }));
+      return;
+    }
+
+    const fetchGate = async () => {
+      try {
+        const res = await fetch(`${base}/api/trading/status`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        const enabled = !!data?.live?.enabled;
+        const armed = !!data?.live?.armed;
+        const secondsRemaining = Number(data?.live?.secondsRemaining || 0);
+        const note = data?.note || "OK";
+
+        setLiveGate({ enabled, armed, secondsRemaining, note });
+        setLiveGateStatus("OK");
+      } catch {
+        setLiveGateStatus("Error");
+        setLiveGate((g) => ({ ...g, note: "Could not reach /api/trading/status" }));
+      }
+    };
+
+    fetchGate();
+    t = setInterval(fetchGate, 2000);
+    return () => clearInterval(t);
+  }, []);
+
+  // If user switches to Live but gate is locked, force back to Paper + message
+  useEffect(() => {
+    if (mode !== "Live") return;
+
+    const allowed = liveGate.enabled && liveGate.armed;
+    if (!allowed) {
+      setMode("Paper");
+      const why = !liveGate.enabled
+        ? "Live is DISABLED on backend (LIVE_TRADING_ENABLED is not true)."
+        : "Live is LOCKED (not armed yet).";
+      setMessages((prev) => [...prev, { from: "ai", text: `AutoProtect: ${why} Staying in Paper mode.` }]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, liveGate.enabled, liveGate.armed]);
+
+  // --- Draw candles ---
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -295,6 +354,11 @@ export default function Trading({ user }) {
     }
 
     try {
+      const ticksSeen = paper.ticksSeen ?? paper.learnStats?.ticksSeen ?? 0;
+      const conf = paper.confidence ?? paper.learnStats?.confidence ?? 0;
+      const decision = paper.decision ?? paper.learnStats?.decision ?? "WAIT";
+      const reason = paper.decisionReason ?? paper.learnStats?.decisionReason ?? "—";
+
       const context = {
         symbol,
         mode,
@@ -304,10 +368,15 @@ export default function Trading({ user }) {
           balance: paper.balance,
           pnl: paper.pnl,
           tradesCount: paper.trades?.length || 0,
-          ticksSeen: paper.ticksSeen ?? paper.learnStats?.ticksSeen,
-          confidence: paper.confidence ?? paper.learnStats?.confidence,
-          decision: paper.decision ?? paper.learnStats?.decision,
-          decisionReason: paper.decisionReason ?? paper.learnStats?.decisionReason,
+          ticksSeen,
+          confidence: conf,
+          decision,
+          decisionReason: reason,
+        },
+        liveGate: {
+          enabled: liveGate.enabled,
+          armed: liveGate.armed,
+          secondsRemaining: liveGate.secondsRemaining,
         }
       };
 
@@ -346,21 +415,45 @@ export default function Trading({ user }) {
   const decision = paper.decision ?? paper.learnStats?.decision ?? "WAIT";
   const reason = paper.decisionReason ?? paper.learnStats?.decisionReason ?? "—";
 
+  const liveAllowed = liveGate.enabled && liveGate.armed;
+
+  const liveBadgeText = !liveGate.enabled
+    ? "LIVE: DISABLED"
+    : liveGate.armed
+      ? `LIVE: ARMED (${liveGate.secondsRemaining}s)`
+      : "LIVE: LOCKED";
+
+  const liveBadgeClass = !liveGate.enabled ? "danger" : (liveGate.armed ? "ok" : "warn");
+
   return (
     <div className="tradeWrap">
       <div className="card">
         <div className="tradeTop">
           <div>
             <h2 style={{ margin: 0 }}>Trading Terminal</h2>
-            <small className="muted">Learning stats + paper trading • keep numbers tight + readable.</small>
+            <small className="muted">Paper is always safe • Live is locked behind backend gate.</small>
           </div>
 
           <div className="actions">
             <div className="pill">
               <small>Mode</small>
               <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                <button className={mode === "Live" ? "active" : ""} onClick={() => setMode("Live")}>Live</button>
-                <button className={mode === "Paper" ? "active" : ""} onClick={() => setMode("Paper")}>Paper</button>
+                <button
+                  className={mode === "Live" ? "active" : ""}
+                  onClick={() => setMode("Live")}
+                  title={liveAllowed ? "Live allowed (still no real orders yet)" : liveGate.note}
+                >
+                  Live
+                </button>
+                <button className={mode === "Paper" ? "active" : ""} onClick={() => setMode("Paper")}>
+                  Paper
+                </button>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <span className={`badge ${liveBadgeClass}`}>{liveBadgeText}</span>
+                <small className="muted" style={{ display: "block", marginTop: 6 }}>
+                  Live Gate: {liveGateStatus}
+                </small>
               </div>
             </div>
 
@@ -407,7 +500,6 @@ export default function Trading({ user }) {
             <span className={`badge ${paper.running ? "ok" : ""}`}>Paper Trader: {paper.running ? "ON" : "OFF"}</span>
           </div>
 
-          {/* ✅ Learning strip (tight text, no overflow) */}
           <div style={{
             marginTop: 10,
             display: "grid",
@@ -508,7 +600,7 @@ export default function Trading({ user }) {
               <div>
                 <b>AI Panel</b>
                 <div className="muted" style={{ fontSize: 12 }}>
-                  Real AI replies • Voice panel below • Hide anytime
+                  Text + Voice • Live is gated • Paper is always safe
                 </div>
               </div>
             </div>
@@ -556,6 +648,11 @@ export default function Trading({ user }) {
                     confidence: conf,
                     decision,
                     decisionReason: reason,
+                  },
+                  liveGate: {
+                    enabled: liveGate.enabled,
+                    armed: liveGate.armed,
+                    secondsRemaining: liveGate.secondsRemaining,
                   }
                 })}
               />
