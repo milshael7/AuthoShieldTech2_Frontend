@@ -7,39 +7,60 @@
           <tr>
             <th>Time</th>
             <th>Type</th>
+            <th>Symbol</th>
             <th>Price</th>
             <th>USD</th>
             <th>Entry Cost</th>
             <th>Net P/L</th>
           </tr>
         </thead>
+
         <tbody>
           {(paper.trades || [])
             .slice()
             .reverse()
             .slice(0, 12)
-            .map((t, i) => (
-              <tr key={i}>
-                <td>{new Date(t.time).toLocaleTimeString()}</td>
-                <td>{t.type}</td>
+            .map((t, i) => {
+              const time = t?.time ? new Date(t.time).toLocaleTimeString() : "—";
+              const type = t?.type || "—";
+              const sym = t?.symbol || "—";
 
-                {/* Price is a price, but still show $ because it’s USD pairs */}
-                <td>{fmtMoney(t.price, 2)}</td>
+              const price =
+                t?.price !== undefined && t?.price !== null
+                  ? fmtMoney(Number(t.price), 2)
+                  : "—";
 
-                {/* USD notional used for the order (you added this in backend: t.usd) */}
-                <td>{t.usd !== undefined ? fmtMoneyCompact(t.usd, 2) : "—"}</td>
+              const usd =
+                t?.usd !== undefined && t?.usd !== null
+                  ? fmtMoneyCompact(Number(t.usd), 2)
+                  : "—";
 
-                {/* Entry cost only exists on BUY rows (you added this: t.cost) */}
-                <td>{t.cost !== undefined ? fmtMoneyCompact(t.cost, 2) : "—"}</td>
+              const cost =
+                t?.cost !== undefined && t?.cost !== null
+                  ? fmtMoneyCompact(Number(t.cost), 2)
+                  : "—";
 
-                {/* Profit only exists on SELL rows (you added this: t.profit) */}
-                <td>{t.profit !== undefined ? fmtMoneyCompact(t.profit, 2) : "—"}</td>
-              </tr>
-            ))}
+              const profit =
+                t?.profit !== undefined && t?.profit !== null
+                  ? fmtMoneyCompact(Number(t.profit), 2)
+                  : "—";
+
+              return (
+                <tr key={i}>
+                  <td>{time}</td>
+                  <td>{type}</td>
+                  <td>{sym}</td>
+                  <td>{price}</td>
+                  <td>{usd}</td>
+                  <td>{cost}</td>
+                  <td>{profit}</td>
+                </tr>
+              );
+            })}
 
           {(!paper.trades || paper.trades.length === 0) && (
             <tr>
-              <td colSpan="6" className="muted">
+              <td colSpan="7" className="muted">
                 No trades yet (it’s learning)
               </td>
             </tr>
