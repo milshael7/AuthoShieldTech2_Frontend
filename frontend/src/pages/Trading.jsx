@@ -34,34 +34,9 @@ function pct(n, digits = 0) {
   return (x * 100).toFixed(digits) + "%";
 }
 
-export default function Trading({ user }) {
-  // ✅ show 10 coins in UI
-  const UI_SYMBOLS = [
-    "BTCUSD",
-    "ETHUSD",
-    "SOLUSD",
-    "XRPUSD",
-    "ADAUSD",
-    "DOTUSD",
-    "LINKUSD",
-    "LTCUSD",
-    "BCHUSD",
-    "XLMUSD",
-  ];
-
-  // ✅ UI -> backend mapping
-  const UI_TO_BACKEND = {
-    BTCUSD: "BTCUSDT",
-    ETHUSD: "ETHUSDT",
-    SOLUSD: "SOLUSDT",
-    XRPUSD: "XRPUSDT",
-    ADAUSD: "ADAUSDT",
-    DOTUSD: "DOTUSDT",
-    LINKUSD: "LINKUSDT",
-    LTCUSD: "LTCUSDT",
-    BCHUSD: "BCHUSDT",
-    XLMUSD: "XLMUSDT",
-  };
+export default function Trading() {
+  const UI_SYMBOLS = ["BTCUSD", "ETHUSD"];
+  const UI_TO_BACKEND = { BTCUSD: "BTCUSDT", ETHUSD: "ETHUSDT" };
 
   const [symbol, setSymbol] = useState("BTCUSD");
   const [mode, setMode] = useState("Paper");
@@ -79,13 +54,15 @@ export default function Trading({ user }) {
     pnl: 0,
     trades: [],
     position: null,
-    learnStats: null,
     lastPriceBySymbol: {},
+    learnStats: null,
+    limits: null,
+    config: null
   });
   const [paperStatus, setPaperStatus] = useState("Loading…");
 
   const [messages, setMessages] = useState(() => ([
-    { from: "ai", text: "AutoProtect ready. Ask me about the chart, learning stats, paper balance, P&L, or risk rules." }
+    { from: "ai", text: "AutoProtect ready. Ask about learning stats, paper trades, P/L, and risk rules." }
   ]));
   const [input, setInput] = useState("");
   const logRef = useRef(null);
@@ -144,7 +121,7 @@ export default function Trading({ user }) {
     });
   };
 
-  // ✅ WebSocket feed (filters for selected symbol)
+  // Market feed (WS)
   useEffect(() => {
     let ws;
     let fallbackTimer;
@@ -158,10 +135,10 @@ export default function Trading({ user }) {
 
     const startFallback = () => {
       setFeedStatus("Disconnected (demo fallback)");
-      let price = last || 100;
+      let price = last || (symbol === "ETHUSD" ? 3500 : 65300);
       fallbackTimer = setInterval(() => {
-        const delta = (Math.random() - 0.5) * Math.max(1, price * 0.002);
-        price = Math.max(0.0001, price + delta);
+        const delta = (Math.random() - 0.5) * (symbol === "ETHUSD" ? 6 : 40);
+        price = Math.max(1, price + delta);
         applyTick(price, Date.now());
       }, 900);
     };
@@ -181,13 +158,6 @@ export default function Trading({ user }) {
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-
-          // hello snapshot -> set starting last for chosen symbol
-          if (msg?.type === "hello" && msg?.last && msg?.last[wantedBackendSymbol]) {
-            applyTick(Number(msg.last[wantedBackendSymbol]), Date.now());
-            return;
-          }
-
           if (msg?.type === "tick" && msg.symbol === wantedBackendSymbol) {
             applyTick(Number(msg.price), Number(msg.ts || Date.now()));
           }
@@ -204,7 +174,7 @@ export default function Trading({ user }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
 
-  // ✅ paper status polling
+  // Paper status polling
   useEffect(() => {
     let t;
     const base = apiBase();
@@ -230,7 +200,7 @@ export default function Trading({ user }) {
     return () => clearInterval(t);
   }, []);
 
-  // ✅ draw candles
+  // Draw canvas candles
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -327,11 +297,8 @@ export default function Trading({ user }) {
     }
 
     try {
-      const backendSymbol = UI_TO_BACKEND[symbol] || symbol;
-
       const context = {
-        symbol: backendSymbol,
-        uiSymbol: symbol,
+        symbol,
         mode,
         last,
         paper: {
@@ -360,7 +327,14 @@ export default function Trading({ user }) {
         return;
       }
 
-      const reply = data?.reply ?? "(No reply from AI)";
+      const reply =
+        data?.reply ??
+        data?.text ??
+        data?.message ??
+        data?.output ??
+        data?.result ??
+        "(No reply from AI)";
+
       setMessages(prev => [...prev, { from: "ai", text: reply }]);
     } catch {
       setMessages(prev => [...prev, { from: "ai", text: "Network error talking to AI backend." }]);
@@ -379,8 +353,8 @@ export default function Trading({ user }) {
       <div className="card">
         <div className="tradeTop">
           <div>
-            <h2 style={{ margin: 0 }}>Trading Terminal</h2>
-            <small className="muted">10-coin live feed + paper learning. AutoProtect can reference the selected symbol.</small>
+            <h2 style={{ margin: 0 }}>Trading Room</h2>
+            <small className="muted">Live feed + paper learning + voice.</small>
           </div>
 
           <div className="actions">
@@ -435,6 +409,7 @@ export default function Trading({ user }) {
             <span className={`badge ${paper.running ? "ok" : ""}`}>Paper Trader: {paper.running ? "ON" : "OFF"}</span>
           </div>
 
+          {/* Learning strip */}
           <div style={{
             marginTop: 10,
             display: "grid",
@@ -486,6 +461,7 @@ export default function Trading({ user }) {
 
           <div style={{ marginTop: 12, height: 520 }}>
             <canvas
+              ref={canvasRef}
               style={{
                 width: "100%",
                 height: "100%",
@@ -493,7 +469,6 @@ export default function Trading({ user }) {
                 border: "1px solid rgba(255,255,255,0.10)",
                 background: "rgba(0,0,0,0.20)"
               }}
-              ref={canvasRef}
             />
           </div>
 
@@ -505,7 +480,6 @@ export default function Trading({ user }) {
                   <thead>
                     <tr>
                       <th>Time</th>
-                      <th>Symbol</th>
                       <th>Type</th>
                       <th>Price</th>
                       <th>Profit</th>
@@ -515,14 +489,13 @@ export default function Trading({ user }) {
                     {(paper.trades || []).slice().reverse().slice(0, 10).map((t, i) => (
                       <tr key={i}>
                         <td>{new Date(t.time).toLocaleTimeString()}</td>
-                        <td>{t.symbol}</td>
                         <td>{t.type}</td>
-                        <td>{fmtNum(t.price, 4)}</td>
+                        <td>{fmtNum(t.price, 2)}</td>
                         <td>{t.profit !== undefined ? fmtNum(t.profit, 2) : "-"}</td>
                       </tr>
                     ))}
                     {(!paper.trades || paper.trades.length === 0) && (
-                      <tr><td colSpan="5" className="muted">No trades yet (it’s learning)</td></tr>
+                      <tr><td colSpan="4" className="muted">No trades yet (it’s learning)</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -535,9 +508,9 @@ export default function Trading({ user }) {
           <div className="card tradeAI">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <div>
-                <b>AI Panel</b>
+                <b>AutoProtect</b>
                 <div className="muted" style={{ fontSize: 12 }}>
-                  Ask about the selected symbol • Paper trades • Risk rules
+                  Chat + Voice (hands-free available)
                 </div>
               </div>
             </div>
@@ -545,7 +518,9 @@ export default function Trading({ user }) {
             <div className="chatLog" ref={logRef} style={{ marginTop: 12 }}>
               {messages.map((m, idx) => (
                 <div key={idx} className={`chatMsg ${m.from === "you" ? "you" : "ai"}`}>
-                  <b style={{ display: "block", marginBottom: 4 }}>{m.from === "you" ? "You" : "AutoProtect"}</b>
+                  <b style={{ display: "block", marginBottom: 4 }}>
+                    {m.from === "you" ? "You" : "AutoProtect"}
+                  </b>
                   <div>{m.text}</div>
                 </div>
               ))}
@@ -555,7 +530,7 @@ export default function Trading({ user }) {
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about SOL, BTC, ETH… risk rules…"
+                placeholder="Ask about trades, learning, risk rules…"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     sendToAI(input);
@@ -567,3 +542,31 @@ export default function Trading({ user }) {
                 Send
               </button>
             </div>
+
+            <div style={{ marginTop: 12 }}>
+              <VoiceAI
+                title="AutoProtect Voice"
+                endpoint="/api/ai/chat"
+                getContext={() => ({
+                  symbol,
+                  mode,
+                  last,
+                  paper: {
+                    running: paper.running,
+                    balance: paper.balance,
+                    pnl: paper.pnl,
+                    tradesCount: paper.trades?.length || 0,
+                    ticksSeen,
+                    confidence: conf,
+                    decision,
+                    decisionReason: reason,
+                  }
+                })}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
