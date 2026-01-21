@@ -1,97 +1,63 @@
-// frontend/src/components/VoiceAI.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-
-/**
- * VoiceAI
- * - Push-to-talk OR Conversation mode (hands-free)
- * - Speaks replies using SpeechSynthesis
- * - Sends message + context to backend endpoint (default: /api/ai/chat)
- *
- * IMPORTANT:
- * - Mic must be started by user gesture (mobile/browser rule)
- */
 
 function getApiBase() {
   return (
-    (import.meta.env.VITE_API_BASE ||
-      import.meta.env.VITE_BACKEND_URL ||
-      "https://authoshieldtech2.onrender.com") + ""
-  ).trim();
+    import.meta.env.VITE_API_BASE ||
+    import.meta.env.VITE_BACKEND_URL ||
+    "https://authoshieldtech2.onrender.com"
+  );
 }
 
-// Professional voice chooser (no “extra/joke” labels)
-// Picks the best match available on the device.
-function buildProfessionalVoiceChoices(voices) {
-  const list = Array.isArray(voices) ? voices : [];
-  const find = (pred) => list.find(pred);
+function safeJsonParse(str) {
+  try { return JSON.parse(str); } catch { return null; }
+}
 
-  const candidates = [
-    // iOS / macOS often
-    {
-      id: "us_female_premium",
-      label: "US English (Female) — Clear",
-      match: (v) =>
-        /en-US/i.test(v.lang) &&
-        /(Siri|Samantha|Ava|Allison|Jenny|Aria|Google US English)/i.test(v.name),
-    },
-    {
-      id: "us_male_premium",
-      label: "US English (Male) — Clear",
-      match: (v) =>
-        /en-US/i.test(v.lang) &&
-        /(Siri|Alex|Daniel|Tom|Guy|Davis|Matthew|Google US English)/i.test(v.name),
-    },
+/**
+ * Professional voice presets (business tone).
+ * We still map to whatever voices the device actually has.
+ */
+function buildVoicePresets(allVoices) {
+  const list = allVoices || [];
+  const by = (reLang, reName) =>
+    list.find(v => reLang.test(v.lang) && reName.test(v.name));
+
+  const presets = [
+    { id: "system_default", label: "System Default (Recommended)", pick: () => list[0] },
+
+    // US
+    { id: "pro_us_female_1", label: "Professional US (Female) 1", pick: () => by(/en-US/i, /Samantha|Jenny|Aria|Google US English/i) },
+    { id: "pro_us_male_1",   label: "Professional US (Male) 1",   pick: () => by(/en-US/i, /Alex|Daniel|Matthew|Guy|Davis|Google US English/i) },
 
     // UK
-    {
-      id: "uk_professional",
-      label: "UK English — Professional",
-      match: (v) => /en-GB/i.test(v.lang),
-    },
+    { id: "pro_uk_1", label: "Professional UK 1", pick: () => by(/en-GB/i, /Serena|Kate|Oliver|George|Google UK English/i) },
+    { id: "pro_uk_2", label: "Professional UK 2", pick: () => list.find(v => /en-GB/i.test(v.lang)) },
 
-    // Neutral English fallback
-    {
-      id: "english_neutral",
-      label: "English — Neutral",
-      match: (v) => /^en/i.test(v.lang),
-    },
+    // Canada / AU
+    { id: "pro_ca_1", label: "Professional Canada", pick: () => list.find(v => /en-CA/i.test(v.lang)) },
+    { id: "pro_au_1", label: "Professional Australia", pick: () => list.find(v => /en-AU/i.test(v.lang)) },
 
-    // Accessibility / enhanced (varies)
-    {
-      id: "accessibility",
-      label: "English — Accessibility / Enhanced",
-      match: (v) =>
-        /^en/i.test(v.lang) && /(compact|enhanced|premium|neural)/i.test(v.name),
-    },
+    // Neutral backups
+    { id: "neutral_en_1", label: "Neutral English 1", pick: () => list.find(v => /^en/i.test(v.lang)) },
+    { id: "neutral_en_2", label: "Neutral English 2", pick: () => list.find(v => /^en/i.test(v.lang) && /Google|Microsoft|Apple/i.test(v.name)) },
 
-    // System default fallback (whatever the device prefers)
-    {
-      id: "system_default",
-      label: "System Default",
-      match: (v) => true,
-    },
+    // Accessibility-style (often clearer)
+    { id: "clear_voice", label: "Clear / Accessibility Voice", pick: () => list.find(v => /en/i.test(v.lang) && /enhanced|premium|compact/i.test(v.name)) },
   ];
 
-  const resolved = [];
-  for (const c of candidates) {
-    const v = find(c.match);
-    if (v && !resolved.some((x) => x.voiceName === v.name && x.lang === v.lang)) {
-      resolved.push({ id: c.id, label: c.label, voiceName: v.name, lang: v.lang });
-    }
+  // Resolve to only presets that actually find a voice
+  const resolved = presets
+    .map(p => {
+      const v = p.pick();
+      return v ? { id: p.id, label: p.label, voiceName: v.name, lang: v.lang } : null;
+    })
+    .filter(Boolean);
+
+  // Always keep at least one option
+  if (!resolved.length && list.length) {
+    resolved.push({ id: "fallback", label: "Standard Voice", voiceName: list[0].name, lang: list[0].lang });
   }
 
-  // If somehow nothing resolved, use first available
-  if (resolved.length === 0 && list.length) {
-    resolved.push({
-      id: "fallback",
-      label: "System Default",
-      voiceName: list[0].name,
-      lang: list[0].lang,
-    });
-  }
-
-  // Keep it tight + professional (max 6)
-  return resolved.slice(0, 6);
+  return resolved;
 }
 
 export default function VoiceAI({
@@ -102,28 +68,28 @@ export default function VoiceAI({
   const API_BASE = useMemo(() => getApiBase(), []);
   const [supported, setSupported] = useState(true);
 
-  // Modes (exactly what you described)
-  const [conversationMode, setConversationMode] = useState(false); // hands-free
+  // Modes
+  const [conversationMode, setConversationMode] = useState(false);
   const [voiceReply, setVoiceReply] = useState(true);
 
-  // UI / status
+  // NEW: lock voice so it never flips back to default mid-session
+  const [lockVoice, setLockVoice] = useState(true);
+
+  // Voice list + selection
+  const [voiceOptions, setVoiceOptions] = useState([]);
+  const [voiceChoice, setVoiceChoice] = useState(() => {
+    return window.localStorage.getItem("autoprotect_voice_choice") || "system_default";
+  });
+
+  // Once we resolve a real device voice name, we store it here (prevents switching)
+  const resolvedVoiceNameRef = useRef("");
+
+  // SpeechRecognition states
   const [listening, setListening] = useState(false);
   const [status, setStatus] = useState("Idle");
   const [youSaid, setYouSaid] = useState("");
   const [aiSays, setAiSays] = useState("");
-  const [lastErr, setLastErr] = useState("");
 
-  // voices
-  const [voiceOptions, setVoiceOptions] = useState([]);
-  const [voiceChoice, setVoiceChoice] = useState(() => {
-    try {
-      return window.localStorage.getItem("autoprotect_voice_choice") || "us_female_premium";
-    } catch {
-      return "us_female_premium";
-    }
-  });
-
-  // SpeechRecognition
   const recRef = useRef(null);
   const bufferFinalRef = useRef("");
   const interimRef = useRef("");
@@ -131,19 +97,37 @@ export default function VoiceAI({
   const lastSendRef = useRef("");
   const busyRef = useRef(false);
 
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  // If voices aren't ready yet, queue one reply until they are
+  const pendingSpeakRef = useRef("");
 
-  // Load voices
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  // Load speech synthesis voices and keep them updated
   useEffect(() => {
     if (!("speechSynthesis" in window)) return;
 
     const load = () => {
-      const v = window.speechSynthesis.getVoices?.() || [];
-      const opts = buildProfessionalVoiceChoices(v);
+      const voices = window.speechSynthesis.getVoices?.() || [];
+      const opts = buildVoicePresets(voices);
       setVoiceOptions(opts);
 
-      if (opts.length && !opts.some((o) => o.id === voiceChoice)) {
+      // If current choice isn't available, pick first
+      if (opts.length && !opts.some(o => o.id === voiceChoice)) {
         setVoiceChoice(opts[0].id);
+      }
+
+      // Refresh resolved voice name (lock)
+      const chosenOpt = opts.find(o => o.id === voiceChoice) || opts[0];
+      if (chosenOpt?.voiceName) {
+        resolvedVoiceNameRef.current = chosenOpt.voiceName;
+      }
+
+      // If we were waiting to speak, speak now (once voices exist)
+      if (pendingSpeakRef.current && voices.length) {
+        const msg = pendingSpeakRef.current;
+        pendingSpeakRef.current = "";
+        speak(msg);
       }
     };
 
@@ -154,16 +138,9 @@ export default function VoiceAI({
       try { window.speechSynthesis.onvoiceschanged = null; } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Save voice choice
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("autoprotect_voice_choice", voiceChoice);
-    } catch {}
   }, [voiceChoice]);
 
-  // Setup SpeechRecognition
+  // Create recognition instance
   useEffect(() => {
     if (!SpeechRecognition) {
       setSupported(false);
@@ -178,16 +155,13 @@ export default function VoiceAI({
 
     rec.onstart = () => {
       setListening(true);
-      setLastErr("");
       setStatus(conversationMode ? "Conversation listening…" : "Listening…");
     };
 
     rec.onerror = (e) => {
       setListening(false);
+      setStatus("Mic error: " + (e?.error || "unknown"));
       clearTimeout(silenceTimerRef.current);
-      const msg = "Mic error: " + (e?.error || "unknown");
-      setLastErr(msg);
-      setStatus(msg);
     };
 
     rec.onend = () => {
@@ -228,14 +202,12 @@ export default function VoiceAI({
         silenceTimerRef.current = setTimeout(() => {
           const msg = (bufferFinalRef.current + " " + interimRef.current).trim();
           if (!msg) return;
-
           if (msg === lastSendRef.current) return;
-          lastSendRef.current = msg;
 
+          lastSendRef.current = msg;
           bufferFinalRef.current = "";
           interimRef.current = "";
           setYouSaid(msg);
-
           void sendToAI(msg);
         }, 900);
       }
@@ -247,30 +219,57 @@ export default function VoiceAI({
       try { rec.stop(); } catch {}
       clearTimeout(silenceTimerRef.current);
     };
-  }, [conversationMode, SpeechRecognition]);
+  }, [conversationMode]);
 
-  function pickVoice() {
+  // Save voice choice
+  useEffect(() => {
     try {
-      const all = window.speechSynthesis.getVoices?.() || [];
-      const opt = voiceOptions.find((o) => o.id === voiceChoice);
-      if (!opt) return null;
-      return all.find((v) => v.name === opt.voiceName) || null;
-    } catch {
-      return null;
+      window.localStorage.setItem("autoprotect_voice_choice", voiceChoice);
+    } catch {}
+  }, [voiceChoice]);
+
+  function getBestVoice() {
+    const voices = window.speechSynthesis.getVoices?.() || [];
+    const opts = voiceOptions || [];
+
+    // If lockVoice is on, always use the resolved name
+    if (lockVoice && resolvedVoiceNameRef.current) {
+      return voices.find(v => v.name === resolvedVoiceNameRef.current) || null;
     }
+
+    // Otherwise choose by selection
+    const opt = opts.find(o => o.id === voiceChoice);
+    if (!opt) return voices[0] || null;
+    return voices.find(v => v.name === opt.voiceName) || voices[0] || null;
   }
 
   function speak(text) {
     if (!voiceReply) return;
     if (!("speechSynthesis" in window)) return;
 
+    const voices = window.speechSynthesis.getVoices?.() || [];
+    if (!voices.length) {
+      // Voices not ready yet (common on iOS). Queue once.
+      pendingSpeakRef.current = text;
+      setStatus("Loading voices…");
+      return;
+    }
+
     try {
       window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(String(text || ""));
 
-      const chosen = pickVoice();
-      if (chosen) u.voice = chosen;
+      const u = new SpeechSynthesisUtterance(text);
 
+      const v = getBestVoice();
+      if (v) {
+        u.voice = v;
+        u.lang = v.lang || "en-US";
+
+        // When locked, remember the actual voice used so it never flips
+        if (lockVoice && v.name) resolvedVoiceNameRef.current = v.name;
+      }
+
+      // Clear, business-like delivery
       u.rate = 1.0;
       u.pitch = 1.0;
 
@@ -278,7 +277,9 @@ export default function VoiceAI({
       u.onend = () => setStatus(conversationMode ? "Conversation listening…" : "Reply ready");
 
       window.speechSynthesis.speak(u);
-    } catch {}
+    } catch {
+      // If speaking fails, we still show text.
+    }
   }
 
   async function sendToAI(message) {
@@ -287,7 +288,6 @@ export default function VoiceAI({
     if (busyRef.current) return;
 
     busyRef.current = true;
-    setLastErr("");
     setStatus("Thinking…");
     setAiSays("");
 
@@ -311,7 +311,6 @@ export default function VoiceAI({
       if (!res.ok) {
         const msg = data?.error || data?.message || data?.detail || `HTTP ${res.status}`;
         setAiSays(String(msg));
-        setLastErr(String(msg));
         setStatus("AI error");
         speak("AI error. " + String(msg));
         busyRef.current = false;
@@ -339,7 +338,6 @@ export default function VoiceAI({
       speak(text);
     } catch {
       setAiSays("Network error calling AI");
-      setLastErr("Network error calling AI");
       setStatus("Network error");
       speak("Network error calling the AI.");
     } finally {
@@ -355,7 +353,6 @@ export default function VoiceAI({
       lastSendRef.current = "";
       setYouSaid("");
       setAiSays("");
-      setLastErr("");
       recRef.current.start();
     } catch {}
   }
@@ -371,90 +368,78 @@ export default function VoiceAI({
         <div style={rowTop}>
           <div style={titleStyle}>{title}</div>
         </div>
-        <div style={{ opacity: 0.85, marginTop: 8 }}>{status}</div>
+        <div style={{ opacity: 0.85 }}>{status}</div>
       </div>
     );
   }
 
-  const actionLabel = listening
-    ? "Stop"
-    : (conversationMode ? "Start Conversation" : "Push to Talk");
-
-  const selectedVoice = voiceOptions.find(v => v.id === voiceChoice);
-
   return (
     <div style={card}>
       <div style={rowTop}>
-        <div>
-          <div style={titleStyle}>{title}</div>
-          <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>
-            {conversationMode
-              ? "Conversation mode: talk naturally, it replies when you stop."
-              : "Quick mode: press button, speak, it replies."}
-          </div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={statusPill}>{status}</div>
-          {lastErr ? <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6 }}>⚠️ {lastErr}</div> : null}
-        </div>
+        <div style={titleStyle}>{title}</div>
+        <div style={{ fontSize: 12, opacity: 0.85 }}>{status}</div>
       </div>
 
       <div style={controls}>
         <button
-          onClick={() => (listening ? stop() : start())}
+          onClick={() => { if (listening) stop(); else start(); }}
           style={btnPrimary}
-          type="button"
         >
-          {actionLabel}
+          {listening ? "Stop" : (conversationMode ? "Start Conversation" : "Push to Talk")}
         </button>
 
         <label style={toggle}>
           <input
             type="checkbox"
             checked={conversationMode}
-            onChange={() => setConversationMode((v) => !v)}
+            onChange={() => setConversationMode(v => !v)}
           />
-          Conversation mode
+          Conversation mode (hands-free)
         </label>
 
         <label style={toggle}>
           <input
             type="checkbox"
             checked={voiceReply}
-            onChange={() => setVoiceReply((v) => !v)}
+            onChange={() => setVoiceReply(v => !v)}
           />
           Voice reply
         </label>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, opacity: 0.85 }}>Voice</span>
+        <label style={toggle}>
+          <input
+            type="checkbox"
+            checked={lockVoice}
+            onChange={() => setLockVoice(v => !v)}
+          />
+          Lock voice (prevents switching)
+        </label>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12, opacity: 0.8 }}>Voice</span>
           <select
             value={voiceChoice}
-            onChange={(e) => setVoiceChoice(e.target.value)}
+            onChange={(e) => {
+              setVoiceChoice(e.target.value);
+              // Reset resolved voice so it re-locks to the new one
+              resolvedVoiceNameRef.current = "";
+            }}
             style={selectStyle}
           >
-            {voiceOptions.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.label}
-              </option>
+            {voiceOptions.length === 0 && <option value="system_default">System Default</option>}
+            {voiceOptions.map(v => (
+              <option key={v.id} value={v.id}>{v.label}</option>
             ))}
           </select>
 
           <button
             style={btnSmall}
-            onClick={() => speak("Voice preview. AutoProtect is online and ready.")}
+            onClick={() => speak("Voice preview. AutoProtect is ready.")}
             type="button"
           >
             Preview
           </button>
         </div>
-
-        {/* show the actual device voice name (quietly) for clarity/debug */}
-        {selectedVoice?.voiceName ? (
-          <div style={{ fontSize: 12, opacity: 0.7 }}>
-            Using: <b>{selectedVoice.voiceName}</b>
-          </div>
-        ) : null}
       </div>
 
       <div style={box}>
@@ -463,72 +448,60 @@ export default function VoiceAI({
       </div>
 
       <div style={box}>
-        <div style={boxLabel}>AutoProtect says</div>
+        <div style={boxLabel}>AI says</div>
         <div style={boxText}>{aiSays || "…"}</div>
+      </div>
+
+      <div style={{ fontSize: 12, opacity: 0.75, marginTop: 8 }}>
+        Tip: Keep <b>Lock voice</b> ON. If iPhone loads voices late, the first reply may wait a second — but it won’t flip back to default.
       </div>
     </div>
   );
 }
 
-// ---- styles ----
 const card = {
   borderRadius: 14,
   padding: 14,
-  background: "rgba(0,0,0,0.38)",
-  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(0,0,0,0.35)",
+  border: "1px solid rgba(255,255,255,0.10)",
   backdropFilter: "blur(8px)",
 };
 
 const rowTop = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 14,
+  alignItems: "center",
+  gap: 10,
 };
 
-const titleStyle = { fontWeight: 900, letterSpacing: 0.2 };
-
-const statusPill = {
-  display: "inline-block",
-  fontSize: 12,
-  padding: "6px 10px",
-  borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  opacity: 0.95,
-  maxWidth: 260,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
+const titleStyle = { fontWeight: 800, letterSpacing: 0.2 };
 
 const controls = {
   display: "flex",
   flexWrap: "wrap",
   gap: 10,
-  marginTop: 12,
+  marginTop: 10,
   alignItems: "center",
 };
 
 const btnPrimary = {
   padding: "10px 12px",
-  borderRadius: 12,
+  borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.08)",
   color: "white",
   cursor: "pointer",
-  fontWeight: 900,
-  minWidth: 170,
+  fontWeight: 800,
 };
 
 const btnSmall = {
   padding: "8px 10px",
-  borderRadius: 12,
+  borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.18)",
   background: "rgba(255,255,255,0.06)",
   color: "white",
   cursor: "pointer",
-  fontWeight: 800,
+  fontWeight: 700,
 };
 
 const toggle = {
@@ -536,30 +509,25 @@ const toggle = {
   alignItems: "center",
   gap: 6,
   fontSize: 13,
-  opacity: 0.92,
-  padding: "6px 10px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(0,0,0,0.18)",
+  opacity: 0.9,
 };
 
 const selectStyle = {
-  borderRadius: 12,
+  borderRadius: 10,
   padding: "8px 10px",
   border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(0,0,0,0.28)",
+  background: "rgba(0,0,0,0.25)",
   color: "white",
   outline: "none",
-  maxWidth: 260,
 };
 
 const box = {
-  marginTop: 12,
-  padding: 12,
+  marginTop: 10,
+  padding: 10,
   borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(0,0,0,0.22)",
+  background: "rgba(0,0,0,0.25)",
 };
 
-const boxLabel = { fontSize: 12, opacity: 0.78, marginBottom: 6, fontWeight: 800 };
-const boxText = { whiteSpace: "pre-wrap", lineHeight: 1.35, fontSize: 14 };
+const boxLabel = { fontSize: 12, opacity: 0.75, marginBottom: 6 };
+const boxText = { whiteSpace: "pre-wrap", lineHeight: 1.35 };
