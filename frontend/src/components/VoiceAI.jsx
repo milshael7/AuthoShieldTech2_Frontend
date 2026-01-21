@@ -8,53 +8,100 @@ function getApiBase() {
   );
 }
 
-function safeJsonParse(str) {
-  try { return JSON.parse(str); } catch { return null; }
-}
-
 /**
- * Professional voice presets (business tone).
- * We still map to whatever voices the device actually has.
+ * We DO NOT show raw voice names to the user.
+ * We map the best available voices on the device into “professional” choices.
+ * Reality check: browsers/devices control what voices exist. We can only select from what’s available.
  */
-function buildVoicePresets(allVoices) {
-  const list = allVoices || [];
-  const by = (reLang, reName) =>
-    list.find(v => reLang.test(v.lang) && reName.test(v.name));
+function pickProfessionalVoices(voices) {
+  const list = voices || [];
+  const by = (pred) => list.find(pred);
 
-  const presets = [
-    { id: "system_default", label: "System Default (Recommended)", pick: () => list[0] },
+  // Helper matchers
+  const isEN = (v) => /^en/i.test(v.lang || "");
+  const isUS = (v) => /en-US/i.test(v.lang || "");
+  const isUK = (v) => /en-GB/i.test(v.lang || "");
+  const isAU = (v) => /en-AU/i.test(v.lang || "");
+  const isIN = (v) => /en-IN/i.test(v.lang || "");
 
-    // US
-    { id: "pro_us_female_1", label: "Professional US (Female) 1", pick: () => by(/en-US/i, /Samantha|Jenny|Aria|Google US English/i) },
-    { id: "pro_us_male_1",   label: "Professional US (Male) 1",   pick: () => by(/en-US/i, /Alex|Daniel|Matthew|Guy|Davis|Google US English/i) },
+  const nameHas = (re) => (v) => re.test(v.name || "");
 
-    // UK
-    { id: "pro_uk_1", label: "Professional UK 1", pick: () => by(/en-GB/i, /Serena|Kate|Oliver|George|Google UK English/i) },
-    { id: "pro_uk_2", label: "Professional UK 2", pick: () => list.find(v => /en-GB/i.test(v.lang)) },
+  // “Premium-ish” voices often contain these words (varies per OS)
+  const premiumHint = /enhanced|premium|natural|neural|compact/i;
 
-    // Canada / AU
-    { id: "pro_ca_1", label: "Professional Canada", pick: () => list.find(v => /en-CA/i.test(v.lang)) },
-    { id: "pro_au_1", label: "Professional Australia", pick: () => list.find(v => /en-AU/i.test(v.lang)) },
-
-    // Neutral backups
-    { id: "neutral_en_1", label: "Neutral English 1", pick: () => list.find(v => /^en/i.test(v.lang)) },
-    { id: "neutral_en_2", label: "Neutral English 2", pick: () => list.find(v => /^en/i.test(v.lang) && /Google|Microsoft|Apple/i.test(v.name)) },
-
-    // Accessibility-style (often clearer)
-    { id: "clear_voice", label: "Clear / Accessibility Voice", pick: () => list.find(v => /en/i.test(v.lang) && /enhanced|premium|compact/i.test(v.name)) },
+  // 10 business-grade labels (we’ll fill what we can from device voices)
+  const candidates = [
+    {
+      id: "biz_us_female_1",
+      label: "Business US (Female) 1",
+      match: (v) => isUS(v) && nameHas(/Samantha|Ava|Allison|Jenny|Aria|Emma|Olivia|Google US English/i)(v),
+    },
+    {
+      id: "biz_us_male_1",
+      label: "Business US (Male) 1",
+      match: (v) => isUS(v) && nameHas(/Alex|Daniel|Guy|Davis|Matthew|Google US English/i)(v),
+    },
+    {
+      id: "biz_us_female_2",
+      label: "Business US (Female) 2",
+      match: (v) => isUS(v) && premiumHint.test(v.name || ""),
+    },
+    {
+      id: "biz_us_male_2",
+      label: "Business US (Male) 2",
+      match: (v) => isUS(v) && premiumHint.test(v.name || "") && nameHas(/Male|Alex|Daniel|Guy|Davis|Matthew/i)(v),
+    },
+    {
+      id: "biz_uk_female",
+      label: "Business UK (Female)",
+      match: (v) => isUK(v) && !nameHas(/Male/i)(v),
+    },
+    {
+      id: "biz_uk_male",
+      label: "Business UK (Male)",
+      match: (v) => isUK(v) && nameHas(/Male/i)(v),
+    },
+    {
+      id: "biz_au",
+      label: "Business Australian",
+      match: (v) => isAU(v),
+    },
+    {
+      id: "biz_india",
+      label: "Business India",
+      match: (v) => isIN(v),
+    },
+    {
+      id: "biz_neutral",
+      label: "Business Neutral (English)",
+      match: (v) => isEN(v),
+    },
+    {
+      id: "accessibility",
+      label: "Accessibility Voice (Clear)",
+      match: (v) => isEN(v) && premiumHint.test(v.name || ""),
+    },
   ];
 
-  // Resolve to only presets that actually find a voice
-  const resolved = presets
-    .map(p => {
-      const v = p.pick();
-      return v ? { id: p.id, label: p.label, voiceName: v.name, lang: v.lang } : null;
-    })
-    .filter(Boolean);
+  const resolved = [];
+  const used = new Set();
 
-  // Always keep at least one option
-  if (!resolved.length && list.length) {
-    resolved.push({ id: "fallback", label: "Standard Voice", voiceName: list[0].name, lang: list[0].lang });
+  for (const c of candidates) {
+    const found = by((v) => !used.has(v.name) && c.match(v));
+    if (found) {
+      used.add(found.name);
+      resolved.push({ ...c, voiceName: found.name, lang: found.lang });
+    }
+  }
+
+  // Fallback: still provide at least one option if any voices exist
+  if (resolved.length === 0 && list.length) {
+    resolved.push({
+      id: "fallback",
+      label: "Business Standard",
+      voiceName: list[0].name,
+      lang: list[0].lang,
+    });
   }
 
   return resolved;
@@ -69,20 +116,14 @@ export default function VoiceAI({
   const [supported, setSupported] = useState(true);
 
   // Modes
-  const [conversationMode, setConversationMode] = useState(false);
+  const [conversationMode, setConversationMode] = useState(false); // hands-free
   const [voiceReply, setVoiceReply] = useState(true);
 
-  // NEW: lock voice so it never flips back to default mid-session
-  const [lockVoice, setLockVoice] = useState(true);
-
-  // Voice list + selection
+  // Voice selection (professional labels)
   const [voiceOptions, setVoiceOptions] = useState([]);
   const [voiceChoice, setVoiceChoice] = useState(() => {
-    return window.localStorage.getItem("autoprotect_voice_choice") || "system_default";
+    return window.localStorage.getItem("autoprotect_voice_choice") || "biz_us_female_1";
   });
-
-  // Once we resolve a real device voice name, we store it here (prevents switching)
-  const resolvedVoiceNameRef = useRef("");
 
   // SpeechRecognition states
   const [listening, setListening] = useState(false);
@@ -97,48 +138,55 @@ export default function VoiceAI({
   const lastSendRef = useRef("");
   const busyRef = useRef(false);
 
-  // If voices aren't ready yet, queue one reply until they are
-  const pendingSpeakRef = useRef("");
-
   const SpeechRecognition =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  // Load speech synthesis voices and keep them updated
-  useEffect(() => {
-    if (!("speechSynthesis" in window)) return;
+  // ---- Load voices reliably ----
+  const waitForVoices = () =>
+    new Promise((resolve) => {
+      if (!("speechSynthesis" in window)) return resolve([]);
+      const tryGet = () => window.speechSynthesis.getVoices?.() || [];
 
-    const load = () => {
-      const voices = window.speechSynthesis.getVoices?.() || [];
-      const opts = buildVoicePresets(voices);
+      const initial = tryGet();
+      if (initial.length) return resolve(initial);
+
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        try { window.speechSynthesis.onvoiceschanged = null; } catch {}
+        resolve(tryGet());
+      };
+
+      // Some browsers populate voices later
+      try {
+        window.speechSynthesis.onvoiceschanged = finish;
+      } catch {}
+
+      // Hard timeout so we never hang
+      setTimeout(finish, 1200);
+    });
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      if (!("speechSynthesis" in window)) return;
+      const voices = await waitForVoices();
+      if (!alive) return;
+
+      const opts = pickProfessionalVoices(voices);
       setVoiceOptions(opts);
 
-      // If current choice isn't available, pick first
-      if (opts.length && !opts.some(o => o.id === voiceChoice)) {
+      // If saved choice isn't available, pick first available
+      if (opts.length && !opts.some((o) => o.id === voiceChoice)) {
         setVoiceChoice(opts[0].id);
       }
+    })();
 
-      // Refresh resolved voice name (lock)
-      const chosenOpt = opts.find(o => o.id === voiceChoice) || opts[0];
-      if (chosenOpt?.voiceName) {
-        resolvedVoiceNameRef.current = chosenOpt.voiceName;
-      }
-
-      // If we were waiting to speak, speak now (once voices exist)
-      if (pendingSpeakRef.current && voices.length) {
-        const msg = pendingSpeakRef.current;
-        pendingSpeakRef.current = "";
-        speak(msg);
-      }
-    };
-
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
-
-    return () => {
-      try { window.speechSynthesis.onvoiceschanged = null; } catch {}
-    };
+    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voiceChoice]);
+  }, []);
 
   // Create recognition instance
   useEffect(() => {
@@ -203,11 +251,12 @@ export default function VoiceAI({
           const msg = (bufferFinalRef.current + " " + interimRef.current).trim();
           if (!msg) return;
           if (msg === lastSendRef.current) return;
-
           lastSendRef.current = msg;
+
           bufferFinalRef.current = "";
           interimRef.current = "";
           setYouSaid(msg);
+
           void sendToAI(msg);
         }, 900);
       }
@@ -219,64 +268,43 @@ export default function VoiceAI({
       try { rec.stop(); } catch {}
       clearTimeout(silenceTimerRef.current);
     };
-  }, [conversationMode]);
+  }, [conversationMode, SpeechRecognition]);
 
-  // Save voice choice
   useEffect(() => {
     try {
       window.localStorage.setItem("autoprotect_voice_choice", voiceChoice);
     } catch {}
   }, [voiceChoice]);
 
-  function getBestVoice() {
-    const voices = window.speechSynthesis.getVoices?.() || [];
-    const opts = voiceOptions || [];
-
-    // If lockVoice is on, always use the resolved name
-    if (lockVoice && resolvedVoiceNameRef.current) {
-      return voices.find(v => v.name === resolvedVoiceNameRef.current) || null;
-    }
-
-    // Otherwise choose by selection
-    const opt = opts.find(o => o.id === voiceChoice);
-    if (!opt) return voices[0] || null;
-    return voices.find(v => v.name === opt.voiceName) || voices[0] || null;
-  }
-
-  function speak(text) {
+  async function speak(text) {
     if (!voiceReply) return;
     if (!("speechSynthesis" in window)) return;
 
-    const voices = window.speechSynthesis.getVoices?.() || [];
-    if (!voices.length) {
-      // Voices not ready yet (common on iOS). Queue once.
-      pendingSpeakRef.current = text;
-      setStatus("Loading voices…");
-      return;
-    }
-
     try {
+      const voices = await waitForVoices();
+      const opt = voiceOptions.find((o) => o.id === voiceChoice);
+
+      const chosen = opt
+        ? voices.find((v) => v.name === opt.voiceName)
+        : null;
+
+      // Some mobile browsers ignore voice selection unless you cancel + slight delay
       window.speechSynthesis.cancel();
 
       const u = new SpeechSynthesisUtterance(text);
-
-      const v = getBestVoice();
-      if (v) {
-        u.voice = v;
-        u.lang = v.lang || "en-US";
-
-        // When locked, remember the actual voice used so it never flips
-        if (lockVoice && v.name) resolvedVoiceNameRef.current = v.name;
+      if (chosen) {
+        u.voice = chosen;
+        u.lang = chosen.lang || "en-US";
+      } else {
+        u.lang = "en-US";
       }
-
-      // Clear, business-like delivery
-      u.rate = 1.0;
-      u.pitch = 1.0;
 
       u.onstart = () => setStatus("Speaking…");
       u.onend = () => setStatus(conversationMode ? "Conversation listening…" : "Reply ready");
 
-      window.speechSynthesis.speak(u);
+      setTimeout(() => {
+        try { window.speechSynthesis.speak(u); } catch {}
+      }, 80);
     } catch {
       // If speaking fails, we still show text.
     }
@@ -382,8 +410,12 @@ export default function VoiceAI({
 
       <div style={controls}>
         <button
-          onClick={() => { if (listening) stop(); else start(); }}
+          onClick={() => {
+            if (listening) stop();
+            else start();
+          }}
           style={btnPrimary}
+          type="button"
         >
           {listening ? "Stop" : (conversationMode ? "Start Conversation" : "Push to Talk")}
         </button>
@@ -392,7 +424,7 @@ export default function VoiceAI({
           <input
             type="checkbox"
             checked={conversationMode}
-            onChange={() => setConversationMode(v => !v)}
+            onChange={() => setConversationMode((v) => !v)}
           />
           Conversation mode (hands-free)
         </label>
@@ -401,34 +433,23 @@ export default function VoiceAI({
           <input
             type="checkbox"
             checked={voiceReply}
-            onChange={() => setVoiceReply(v => !v)}
+            onChange={() => setVoiceReply((v) => !v)}
           />
           Voice reply
-        </label>
-
-        <label style={toggle}>
-          <input
-            type="checkbox"
-            checked={lockVoice}
-            onChange={() => setLockVoice(v => !v)}
-          />
-          Lock voice (prevents switching)
         </label>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 12, opacity: 0.8 }}>Voice</span>
           <select
             value={voiceChoice}
-            onChange={(e) => {
-              setVoiceChoice(e.target.value);
-              // Reset resolved voice so it re-locks to the new one
-              resolvedVoiceNameRef.current = "";
-            }}
+            onChange={(e) => setVoiceChoice(e.target.value)}
             style={selectStyle}
           >
-            {voiceOptions.length === 0 && <option value="system_default">System Default</option>}
-            {voiceOptions.map(v => (
-              <option key={v.id} value={v.id}>{v.label}</option>
+            {voiceOptions.length === 0 && <option value="fallback">Business Standard</option>}
+            {voiceOptions.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label}
+              </option>
             ))}
           </select>
 
@@ -453,7 +474,7 @@ export default function VoiceAI({
       </div>
 
       <div style={{ fontSize: 12, opacity: 0.75, marginTop: 8 }}>
-        Tip: Keep <b>Lock voice</b> ON. If iPhone loads voices late, the first reply may wait a second — but it won’t flip back to default.
+        Tip: Turn on Conversation mode and just talk. When you stop speaking, AutoProtect replies automatically.
       </div>
     </div>
   );
