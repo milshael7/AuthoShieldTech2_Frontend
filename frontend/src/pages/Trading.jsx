@@ -12,7 +12,7 @@ function apiBase() {
   );
 }
 
-// ---- number formatting ----
+// ---- formatting ----
 function fmtNum(n, digits = 2) {
   const x = Number(n);
   if (!Number.isFinite(x)) return "—";
@@ -54,9 +54,19 @@ function pct(n, digits = 0) {
   return (x * 100).toFixed(digits) + "%";
 }
 
+function fmtDuration(ms) {
+  const x = Number(ms);
+  if (!Number.isFinite(x)) return "—";
+  const s = Math.max(0, Math.floor(x / 1000));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  if (m <= 0) return `${r}s`;
+  return `${m}m ${String(r).padStart(2, "0")}s`;
+}
+
 export default function Trading({ user }) {
-  const UI_SYMBOLS = ["BTCUSD", "ETHUSD", "SOLUSD"];
-  const UI_TO_BACKEND = { BTCUSD: "BTCUSDT", ETHUSD: "ETHUSDT", SOLUSD: "SOLUSDT" };
+  const UI_SYMBOLS = ["BTCUSD", "ETHUSD"];
+  const UI_TO_BACKEND = { BTCUSD: "BTCUSDT", ETHUSD: "ETHUSDT" };
 
   const [symbol, setSymbol] = useState("BTCUSD");
   const [mode, setMode] = useState("Paper");
@@ -70,7 +80,6 @@ export default function Trading({ user }) {
 
   const [paper, setPaper] = useState({
     running: false,
-    balance: 0,
     cashBalance: 0,
     equity: 0,
     pnl: 0,
@@ -86,7 +95,7 @@ export default function Trading({ user }) {
   const [paperStatus, setPaperStatus] = useState("Loading…");
 
   const [messages, setMessages] = useState(() => ([
-    { from: "ai", text: "AutoProtect ready. Ask me about wins/losses, P&L, risk rules, and why it entered." }
+    { from: "ai", text: "AutoProtect ready. Ask me about: why it entered, SCALP vs LONG, expiry timers, wins/losses, and net P&L." }
   ]));
   const [input, setInput] = useState("");
   const logRef = useRef(null);
@@ -212,17 +221,7 @@ export default function Trading({ user }) {
         const res = await fetch(`${base}/api/paper/status`, { credentials: "include" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-
-        // support both older and newer shapes
-        const cashBalance = data.cashBalance ?? data.balance ?? 0;
-        const equity = data.equity ?? cashBalance;
-
-        setPaper({
-          ...data,
-          cashBalance,
-          equity
-        });
-
+        setPaper(data);
         setPaperStatus("OK");
       } catch {
         setPaperStatus("Error loading paper status");
@@ -326,7 +325,7 @@ export default function Trading({ user }) {
 
     const base = apiBase();
     if (!base) {
-      setMessages(prev => [...prev, { from: "ai", text: "Backend URL missing. Set VITE_API_BASE." }]);
+      setMessages(prev => [...prev, { from: "ai", text: "Backend URL missing. Set VITE_API_BASE on Vercel." }]);
       return;
     }
 
@@ -395,13 +394,25 @@ export default function Trading({ user }) {
   const slip = paper.costs?.slippageCost ?? 0;
   const spr = paper.costs?.spreadCost ?? 0;
 
+  // ---- Open position digest + green timer bar for SCALP ----
+  const pos = paper.position;
+  const posStrategy = pos?.strategy || "—";
+  const posAge = pos?.ageMs ?? null;
+  const posRemain = pos?.remainingMs ?? null;
+  const holdMs = pos?.holdMs ?? null;
+
+  const isScalp = posStrategy === "SCALP";
+  const progressPct = (isScalp && holdMs && posAge != null)
+    ? clamp(1 - (posAge / holdMs), 0, 1)
+    : null;
+
   return (
     <div className="tradeWrap">
       <div className="card">
         <div className="tradeTop">
           <div>
             <h2 style={{ margin: 0 }}>Trading Room</h2>
-            <small className="muted">Live feed + learning + live win/loss scoreboard.</small>
+            <small className="muted">Live feed + learning + scoreboard + position digest.</small>
           </div>
 
           <div className="actions">
@@ -425,7 +436,7 @@ export default function Trading({ user }) {
               <div style={{ marginTop: 6, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {feedStatus}
               </div>
-              <small className="muted">Last: {fmtMoneyCompact(last, 2)}</small>
+              <small className="muted">Last: {fmtMoney(last, 2)}</small>
             </div>
 
             <div className="pill">
@@ -456,8 +467,13 @@ export default function Trading({ user }) {
             <span className={`badge ${paper.running ? "ok" : ""}`}>Paper Trader: {paper.running ? "ON" : "OFF"}</span>
           </div>
 
-          {/* Learning */}
-          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+          {/* Learning + Decision */}
+          <div style={{
+            marginTop: 10,
+            display: "grid",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: 10
+          }}>
             <div className="kpiBox">
               <div className="kpiVal">{fmtCompact(ticksSeen, 0)}</div>
               <div className="kpiLbl">Ticks Seen</div>
@@ -481,7 +497,12 @@ export default function Trading({ user }) {
           </div>
 
           {/* Scoreboard */}
-          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 10 }}>
+          <div style={{
+            marginTop: 10,
+            display: "grid",
+            gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+            gap: 10
+          }}>
             <div className="kpiBox">
               <div className="kpiVal">{fmtCompact(wins, 0)}</div>
               <div className="kpiLbl">Wins</div>
@@ -500,68 +521,122 @@ export default function Trading({ user }) {
             </div>
             <div className="kpiBox">
               <div className="kpiVal">{fmtMoneyCompact(net, 2)}</div>
-              <div className="kpiLbl">Net P&amp;L</div>
+              <div className="kpiLbl">Net P&L</div>
             </div>
           </div>
 
           {/* Costs */}
-          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+          <div style={{
+            marginTop: 10,
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: 10
+          }}>
             <div className="kpiBox">
               <div className="kpiVal">{fmtMoneyCompact(feePaid, 2)}</div>
               <div className="kpiLbl">Fees Paid</div>
             </div>
             <div className="kpiBox">
               <div className="kpiVal">{fmtMoneyCompact(slip, 2)}</div>
-              <div className="kpiLbl">Slippage</div>
+              <div className="kpiLbl">Slippage Cost</div>
             </div>
             <div className="kpiBox">
               <div className="kpiVal">{fmtMoneyCompact(spr, 2)}</div>
-              <div className="kpiLbl">Spread</div>
+              <div className="kpiLbl">Spread Cost</div>
             </div>
           </div>
 
-          {/* Wallets + Open Position */}
+          {/* ✅ Position Digest (the “writing” you wanted back) */}
+          <div style={{ marginTop: 12 }} className="card" >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <b>Open Position</b>
+              <span className={`badge ${pos ? "ok" : ""}`}>{pos ? (posStrategy + " • ACTIVE") : "NONE"}</span>
+            </div>
+
+            {!pos && (
+              <div className="muted" style={{ marginTop: 8 }}>
+                No open position. Waiting for a clean setup.
+              </div>
+            )}
+
+            {pos && (
+              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+                <div className="kpiBox">
+                  <div className="kpiVal">{pos.symbol}</div>
+                  <div className="kpiLbl">Symbol</div>
+                </div>
+                <div className="kpiBox">
+                  <div className="kpiVal">{fmtMoney(pos.entry, 2)}</div>
+                  <div className="kpiLbl">Entry</div>
+                </div>
+                <div className="kpiBox">
+                  <div className="kpiVal">{fmtMoneyCompact(pos.entryNotionalUsd, 2)}</div>
+                  <div className="kpiLbl">USD Used</div>
+                </div>
+                <div className="kpiBox">
+                  <div className="kpiVal">{fmtNum(pos.qty, 6)}</div>
+                  <div className="kpiLbl">Quantity</div>
+                </div>
+
+                <div className="kpiBox">
+                  <div className="kpiVal">{fmtMoneyCompact(paper.unrealizedPnL || 0, 2)}</div>
+                  <div className="kpiLbl">Unrealized P/L</div>
+                </div>
+                <div className="kpiBox">
+                  <div className="kpiVal">{posAge != null ? fmtDuration(posAge) : "—"}</div>
+                  <div className="kpiLbl">Time In Market</div>
+                </div>
+                <div className="kpiBox">
+                  <div className="kpiVal">{posRemain != null ? fmtDuration(posRemain) : "—"}</div>
+                  <div className="kpiLbl">Time Left</div>
+                </div>
+                <div className="kpiBox">
+                  <div className="kpiVal">{pct(pos.tpPct ?? 0, 2)} / {pct(pos.slPct ?? 0, 2)}</div>
+                  <div className="kpiLbl">TP / SL</div>
+                </div>
+
+                {/* ✅ Green bar for SCALP countdown */}
+                {isScalp && progressPct != null && (
+                  <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
+                    <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+                      SCALP timer (auto-exit when it runs out)
+                    </div>
+                    <div style={{
+                      height: 10,
+                      borderRadius: 999,
+                      background: "rgba(255,255,255,0.10)",
+                      overflow: "hidden",
+                      border: "1px solid rgba(255,255,255,0.10)"
+                    }}>
+                      <div style={{
+                        height: "100%",
+                        width: `${Math.round(progressPct * 100)}%`,
+                        background: "rgba(43,213,118,0.95)"
+                      }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {showMoney && (
-            <div className="kpi" style={{ marginTop: 10 }}>
+            <div className="kpi" style={{ marginTop: 12 }}>
               <div>
                 <b>{fmtMoneyCompact(paper.cashBalance || 0, 2)}</b>
                 <span>Cash Balance</span>
               </div>
               <div>
                 <b>{fmtMoneyCompact(paper.equity || 0, 2)}</b>
-                <span>Equity (live)</span>
+                <span>Equity</span>
               </div>
               <div>
-                <b>{paper.position ? "OPEN" : "—"}</b>
-                <span>Position</span>
+                <b>{fmtMoneyCompact(paper.pnl || 0, 2)}</b>
+                <span>Realized P/L</span>
               </div>
               <div>
                 <b style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{paperStatus}</b>
                 <span>Status</span>
-              </div>
-            </div>
-          )}
-
-          {paper.position && (
-            <div className="card" style={{ marginTop: 10 }}>
-              <b>Open Position</b>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 10, marginTop: 10 }}>
-                <div className="kpiBox">
-                  <div className="kpiVal">{paper.position.symbol}</div>
-                  <div className="kpiLbl">Symbol</div>
-                </div>
-                <div className="kpiBox">
-                  <div className="kpiVal">{fmtMoneyCompact(paper.position.entry, 2)}</div>
-                  <div className="kpiLbl">Entry</div>
-                </div>
-                <div className="kpiBox">
-                  <div className="kpiVal">{fmtCompact(paper.position.qty, 6)}</div>
-                  <div className="kpiLbl">Qty</div>
-                </div>
-                <div className="kpiBox">
-                  <div className="kpiVal">{fmtMoneyCompact(paper.unrealizedPnL || 0, 2)}</div>
-                  <div className="kpiLbl">Unrealized P&amp;L</div>
-                </div>
               </div>
             </div>
           )}
@@ -588,9 +663,11 @@ export default function Trading({ user }) {
                     <tr>
                       <th>Time</th>
                       <th>Type</th>
+                      <th>Strategy</th>
                       <th>Price</th>
                       <th>USD</th>
                       <th>Entry Cost</th>
+                      <th>Hold</th>
                       <th>Net P/L</th>
                     </tr>
                   </thead>
@@ -603,16 +680,18 @@ export default function Trading({ user }) {
                         <tr key={i}>
                           <td>{new Date(t.time).toLocaleTimeString()}</td>
                           <td>{t.type}</td>
+                          <td>{t.strategy || "—"}</td>
                           <td>{fmtMoney(t.price, 2)}</td>
                           <td>{t.usd !== undefined ? fmtMoneyCompact(t.usd, 2) : "—"}</td>
                           <td>{t.cost !== undefined ? fmtMoneyCompact(t.cost, 2) : "—"}</td>
+                          <td>{t.holdMs !== undefined ? fmtDuration(t.holdMs) : "—"}</td>
                           <td>{t.profit !== undefined ? fmtMoneyCompact(t.profit, 2) : "—"}</td>
                         </tr>
                       ))}
 
                     {(!paper.trades || paper.trades.length === 0) && (
                       <tr>
-                        <td colSpan="6" className="muted">
+                        <td colSpan="8" className="muted">
                           No trades yet (it’s learning)
                         </td>
                       </tr>
@@ -648,7 +727,7 @@ export default function Trading({ user }) {
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask: why did you enter? how many wins? what’s net P&L?"
+                placeholder="Ask: why SCALP? when does it expire? what’s net P&L?"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     sendToAI(input);
