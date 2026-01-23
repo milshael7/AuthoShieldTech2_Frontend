@@ -2,44 +2,79 @@
 import React, { useEffect, useRef, useState } from "react";
 import VoiceAI from "../components/VoiceAI";
 
-function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
-
-function apiBase() {
-  return ((import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || "")).trim();
+function clamp(n, a, b) {
+  return Math.max(a, Math.min(b, n));
 }
 
+function apiBase() {
+  return (
+    (import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || "").trim()
+  );
+}
+
+// ---- number formatting ----
 function fmtNum(n, digits = 2) {
   const x = Number(n);
   if (!Number.isFinite(x)) return "—";
   return x.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
+
 function fmtMoney(n, digits = 2) {
   const x = Number(n);
   if (!Number.isFinite(x)) return "—";
   return "$" + x.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
+
+function fmtCompact(n, digits = 2) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return "—";
+  const ax = Math.abs(x);
+  if (ax >= 1e12) return (x / 1e12).toFixed(digits) + "t";
+  if (ax >= 1e9) return (x / 1e9).toFixed(digits) + "b";
+  if (ax >= 1e6) return (x / 1e6).toFixed(digits) + "m";
+  if (ax >= 1e3) return (x / 1e3).toFixed(digits) + "k";
+  return fmtNum(x, digits);
+}
+
 function fmtMoneyCompact(n, digits = 2) {
   const x = Number(n);
   if (!Number.isFinite(x)) return "—";
   const ax = Math.abs(x);
   const sign = x < 0 ? "-" : "";
+  if (ax >= 1e12) return `${sign}$${(ax / 1e12).toFixed(digits)}t`;
+  if (ax >= 1e9) return `${sign}$${(ax / 1e9).toFixed(digits)}b`;
   if (ax >= 1e6) return `${sign}$${(ax / 1e6).toFixed(digits)}m`;
   if (ax >= 1e3) return `${sign}$${(ax / 1e3).toFixed(digits)}k`;
   return fmtMoney(x, digits);
 }
-function pct(n, digits = 1) {
+
+function pct(n, digits = 0) {
   const x = Number(n);
   if (!Number.isFinite(x)) return "—";
   return (x * 100).toFixed(digits) + "%";
 }
+
 function fmtDur(ms) {
   const x = Number(ms);
   if (!Number.isFinite(x) || x < 0) return "—";
+  if (x < 1000) return `${Math.round(x)}ms`;
   const s = Math.floor(x / 1000);
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
   const rs = s % 60;
-  return `${m}m ${String(rs).padStart(2, "0")}s`;
+  if (m < 60) return `${m}m ${rs}s`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return `${h}h ${rm}m`;
+}
+
+function niceReason(r) {
+  const x = String(r || "").toLowerCase();
+  if (!x) return "—";
+  if (x.includes("take_profit") || x === "tp_hit") return "Take Profit";
+  if (x.includes("stop_loss") || x === "sl_hit") return "Stop Loss";
+  if (x.includes("expiry") || x.includes("expired") || x.includes("time")) return "Time Expired";
+  return r;
 }
 
 export default function Trading({ user }) {
@@ -53,9 +88,16 @@ export default function Trading({ user }) {
 
   const [showMoney, setShowMoney] = useState(true);
   const [showTradeLog, setShowTradeLog] = useState(true);
-  const [showHistory, setShowHistory] = useState(true);
   const [showAI, setShowAI] = useState(true);
   const [wideChart, setWideChart] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
+
+  // ✅ Paper UI controls (owner config)
+  const [baselinePct, setBaselinePct] = useState(3);  // shown as percent
+  const [maxPct, setMaxPct] = useState(25);           // shown as percent
+  const [maxTradesPerDay, setMaxTradesPerDay] = useState(40);
+  const [savingCfg, setSavingCfg] = useState(false);
+  const [cfgMsg, setCfgMsg] = useState("");
 
   const [paper, setPaper] = useState({
     running: false,
@@ -65,32 +107,22 @@ export default function Trading({ user }) {
     unrealizedPnL: 0,
     trades: [],
     position: null,
+    learnStats: null,
     realized: null,
     costs: null,
     limits: null,
     owner: null,
-    sizing: null
+    sizing: null,
+    config: null
   });
   const [paperStatus, setPaperStatus] = useState("Loading…");
 
-  // owner controls (UI)
-  const [cfgBaseline, setCfgBaseline] = useState(0.03);
-  const [cfgMaxPct, setCfgMaxPct] = useState(0.5);
-  const [cfgMaxTrades, setCfgMaxTrades] = useState(40);
-  const [cfgMsg, setCfgMsg] = useState("");
-
   const [messages, setMessages] = useState(() => ([
-    { from: "ai", text: "AutoProtect ready. Ask me about: why it entered, sizing %, and trade history." }
+    { from: "ai", text: "AutoProtect ready. Ask me about wins/losses, P&L, open position, and why I entered." }
   ]));
   const [input, setInput] = useState("");
   const logRef = useRef(null);
 
-  // auto-scroll chat
-  useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [messages]);
-
-  // market demo candles (same as before)
   const canvasRef = useRef(null);
   const [candles, setCandles] = useState(() => {
     const base = 65300;
@@ -109,6 +141,10 @@ export default function Trading({ user }) {
     }
     return out;
   });
+
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [messages]);
 
   const applyTick = (price, nowMs) => {
     setLast(Number(price.toFixed(2)));
@@ -141,7 +177,7 @@ export default function Trading({ user }) {
     });
   };
 
-  // websocket feed
+  // ---- WebSocket feed ----
   useEffect(() => {
     let ws;
     let fallbackTimer;
@@ -192,9 +228,9 @@ export default function Trading({ user }) {
       clearInterval(fallbackTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol]);
+  }, [symbol]); // eslint-disable-line
 
-  // paper polling
+  // ---- paper status polling ----
   useEffect(() => {
     let t;
     const base = apiBase();
@@ -210,13 +246,6 @@ export default function Trading({ user }) {
         const data = await res.json();
         setPaper(data);
         setPaperStatus("OK");
-
-        // sync owner controls UI to backend once (when available)
-        if (data?.owner) {
-          setCfgBaseline(Number(data.owner.baselinePct ?? 0.03));
-          setCfgMaxPct(Number(data.owner.maxPct ?? 0.5));
-          setCfgMaxTrades(Number(data.owner.maxTradesPerDay ?? 40));
-        }
       } catch {
         setPaperStatus("Error loading paper status");
       }
@@ -227,7 +256,20 @@ export default function Trading({ user }) {
     return () => clearInterval(t);
   }, []);
 
-  // draw candles
+  // ✅ hydrate UI controls from backend once owner config arrives
+  useEffect(() => {
+    if (!paper?.owner) return;
+
+    const b = Number(paper.owner.baselinePct) * 100;
+    const m = Number(paper.owner.maxPct) * 100;
+    const t = Number(paper.owner.maxTradesPerDay);
+
+    if (Number.isFinite(b)) setBaselinePct(Math.round(b));
+    if (Number.isFinite(m)) setMaxPct(Math.round(m));
+    if (Number.isFinite(t)) setMaxTradesPerDay(Math.round(t));
+  }, [paper?.owner]);
+
+  // ---- draw candles ----
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -245,6 +287,16 @@ export default function Trading({ user }) {
     ctx.fillStyle = "rgba(0,0,0,0.28)";
     ctx.fillRect(0, 0, cssW, cssH);
 
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 6; i++) {
+      const y = (cssH * i) / 6;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(cssW, y);
+      ctx.stroke();
+    }
+
     const view = candles.slice(-80);
     if (!view.length) return;
 
@@ -252,25 +304,28 @@ export default function Trading({ user }) {
     const lows = view.map(c => c.low);
     const maxP = Math.max(...highs);
     const minP = Math.min(...lows);
+
     const pad = (maxP - minP) * 0.06 || 10;
     const top = maxP + pad;
     const bot = minP - pad;
 
-    const py = (p) => {
+    const px = (p) => {
       const r = (top - p) / (top - bot);
       return clamp(r, 0, 1) * (cssH - 20) + 10;
     };
 
+    const w = cssW;
+    const n = view.length;
     const gap = 2;
-    const candleW = Math.max(4, Math.floor((cssW - 20) / view.length) - gap);
+    const candleW = Math.max(4, Math.floor((w - 20) / n) - gap);
     let x = 10;
 
-    for (let i = 0; i < view.length; i++) {
+    for (let i = 0; i < n; i++) {
       const c = view[i];
-      const openY = py(c.open);
-      const closeY = py(c.close);
-      const highY = py(c.high);
-      const lowY = py(c.low);
+      const openY = px(c.open);
+      const closeY = px(c.close);
+      const highY = px(c.high);
+      const lowY = px(c.low);
 
       const up = c.close >= c.open;
 
@@ -288,7 +343,7 @@ export default function Trading({ user }) {
       x += candleW + gap;
     }
 
-    const lastY = py(last);
+    const lastY = px(last);
     ctx.strokeStyle = "rgba(122,167,255,0.7)";
     ctx.setLineDash([6, 6]);
     ctx.beginPath();
@@ -298,32 +353,6 @@ export default function Trading({ user }) {
     ctx.setLineDash([]);
   }, [candles, last]);
 
-  async function applyOwnerConfig() {
-    const base = apiBase();
-    if (!base) return;
-
-    setCfgMsg("Applying…");
-    try {
-      const res = await fetch(`${base}/api/paper/config`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          baselinePct: Number(cfgBaseline),
-          maxPct: Number(cfgMaxPct),
-          maxTradesPerDay: Number(cfgMaxTrades)
-        })
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      setCfgMsg("✅ Saved");
-      setTimeout(() => setCfgMsg(""), 1500);
-    } catch (e) {
-      setCfgMsg("❌ " + (e?.message || "Failed"));
-    }
-  }
-
   async function sendToAI(text) {
     const clean = (text || "").trim();
     if (!clean) return;
@@ -332,63 +361,145 @@ export default function Trading({ user }) {
 
     const base = apiBase();
     if (!base) {
-      setMessages(prev => [...prev, { from: "ai", text: "Backend URL missing. Set VITE_API_BASE." }]);
+      setMessages(prev => [...prev, { from: "ai", text: "Backend URL missing. Set VITE_API_BASE on Vercel." }]);
       return;
     }
 
     try {
+      const context = {
+        symbol,
+        mode,
+        last,
+        paper: {
+          running: paper.running,
+          cashBalance: paper.cashBalance,
+          equity: paper.equity,
+          pnl: paper.pnl,
+          unrealizedPnL: paper.unrealizedPnL,
+          wins: paper.realized?.wins ?? 0,
+          losses: paper.realized?.losses ?? 0,
+          grossProfit: paper.realized?.grossProfit ?? 0,
+          grossLoss: paper.realized?.grossLoss ?? 0,
+          net: paper.realized?.net ?? paper.pnl ?? 0,
+          feePaid: paper.costs?.feePaid ?? 0,
+          slippageCost: paper.costs?.slippageCost ?? 0,
+          spreadCost: paper.costs?.spreadCost ?? 0,
+          ticksSeen: paper.learnStats?.ticksSeen ?? 0,
+          confidence: paper.learnStats?.confidence ?? 0,
+          decision: paper.learnStats?.decision ?? "WAIT",
+          decisionReason: paper.learnStats?.lastReason ?? "—",
+          position: paper.position || null,
+          owner: paper.owner || null,
+          sizing: paper.sizing || null
+        }
+      };
+
       const res = await fetch(`${base}/api/ai/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ message: clean, context: { symbol, mode, last, paper } })
+        body: JSON.stringify({ message: clean, context })
       });
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMessages(prev => [...prev, { from: "ai", text: "AI error: " + (data?.error || `HTTP ${res.status}`) }]);
+        const msg = data?.error || data?.message || `HTTP ${res.status}`;
+        setMessages(prev => [...prev, { from: "ai", text: "AI error: " + msg }]);
         return;
       }
 
-      setMessages(prev => [...prev, { from: "ai", text: data?.reply ?? "(No reply)" }]);
+      const reply = data?.reply ?? "(No reply from AI)";
+      setMessages(prev => [...prev, { from: "ai", text: reply }]);
     } catch {
       setMessages(prev => [...prev, { from: "ai", text: "Network error talking to AI backend." }]);
     }
   }
 
+  async function savePaperConfig() {
+    const base = apiBase();
+    if (!base) return;
+
+    setSavingCfg(true);
+    setCfgMsg("");
+
+    try {
+      const payload = {
+        baselinePct: baselinePct / 100,
+        maxPct: maxPct / 100,
+        maxTradesPerDay: Number(maxTradesPerDay)
+      };
+
+      const res = await fetch(`${base}/api/paper/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+      setCfgMsg("Saved ✅");
+    } catch (e) {
+      setCfgMsg("Save failed: " + (e?.message || "error"));
+    } finally {
+      setSavingCfg(false);
+    }
+  }
+
   const showRightPanel = showAI && !wideChart;
+
+  const ticksSeen = paper.learnStats?.ticksSeen ?? 0;
+  const conf = paper.learnStats?.confidence ?? 0;
+  const decision = paper.learnStats?.decision ?? "WAIT";
+  const reason = paper.learnStats?.lastReason ?? "—";
 
   const wins = paper.realized?.wins ?? 0;
   const losses = paper.realized?.losses ?? 0;
-  const gain = paper.realized?.grossProfit ?? 0;
-  const lossAmt = paper.realized?.grossLoss ?? 0;
+  const grossProfit = paper.realized?.grossProfit ?? 0;
+  const grossLoss = paper.realized?.grossLoss ?? 0;
   const net = paper.realized?.net ?? paper.pnl ?? 0;
 
-  const cash = paper.cashBalance ?? 0;
-  const equity = paper.equity ?? cash;
+  const feePaid = paper.costs?.feePaid ?? 0;
+  const slip = paper.costs?.slippageCost ?? 0;
+  const spr = paper.costs?.spreadCost ?? 0;
+
+  const cashBal = paper.cashBalance ?? 0;
+  const equity = paper.equity ?? cashBal;
   const unreal = paper.unrealizedPnL ?? 0;
 
-  const sizing = paper.sizing || {};
-  const history = (paper.trades || []).slice().reverse().slice(0, 240);
+  const historyItems = (paper.trades || []).slice().reverse().slice(0, 240);
 
-  // text-style history line
   function historyLine(t) {
     const ts = t?.time ? new Date(t.time).toLocaleTimeString() : "—";
     const sym = t?.symbol || "—";
     const type = t?.type || "—";
-    const strat = t?.strategy || "—";
-    const px = t?.price;
+    const strat = t?.strategy ? String(t.strategy) : "—";
+    const px = Number(t?.price);
+    const usd = t?.usd;
+    const cost = t?.cost;
+    const profit = t?.profit;
+    const holdMs = t?.holdMs;
+    const exitReason = t?.exitReason || t?.note;
 
     if (type === "BUY") {
-      return `${ts} — ENTER • ${sym} • ${strat} • Size ${fmtMoneyCompact(t?.usd, 2)} • Entry ${fmtMoney(px, 2)} • Cost ${fmtMoneyCompact(t?.cost, 2)} • Hold ${t?.holdMs ? fmtDur(t.holdMs) : "—"} • ${t?.note || ""}`;
+      const hold = t?.holdMs ? fmtDur(t.holdMs) : "—";
+      return `${ts} • BUY ${sym} • ${strat} • Notional ${fmtMoneyCompact(usd, 2)} • Entry ${fmtMoney(px, 2)} • Entry cost ${fmtMoneyCompact(cost, 2)} • Planned hold ${hold}`;
     }
 
     if (type === "SELL") {
-      return `${ts} — EXIT • ${sym} • ${strat} • Exit ${fmtMoney(px, 2)} • Held ${t?.holdMs ? fmtDur(t.holdMs) : "—"} • Result ${fmtMoneyCompact(t?.profit, 2)} • Reason ${(t?.exitReason || "—")}`;
+      const held = holdMs !== undefined ? fmtDur(holdMs) : "—";
+      const pr = profit !== undefined ? fmtMoneyCompact(profit, 2) : "—";
+      const rr = niceReason(exitReason);
+      return `${ts} • SELL ${sym} • ${strat} • Exit ${fmtMoney(px, 2)} • Held ${held} • Result ${pr} • Exit: ${rr}`;
     }
 
-    return `${ts} — ${type} ${sym}`;
+    return `${ts} • ${type} ${sym}`;
   }
+
+  const tierBase = paper?.sizing?.tierBase;
+  const sizePct = paper?.sizing?.sizePct;
+  const forceBaseline = paper?.limits?.forceBaseline;
 
   return (
     <div className="tradeWrap">
@@ -396,7 +507,7 @@ export default function Trading({ user }) {
         <div className="tradeTop">
           <div>
             <h2 style={{ margin: 0 }}>Trading Room</h2>
-            <small className="muted">Live feed + scoreboard + owner controls + text history.</small>
+            <small className="muted">Live feed + learning + scoreboard + controls.</small>
           </div>
 
           <div className="actions">
@@ -416,22 +527,32 @@ export default function Trading({ user }) {
             </div>
 
             <div className="pill">
-              <small>Panels</small>
-              <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
-                <button className={showMoney ? "active" : ""} onClick={() => setShowMoney(v => !v)} style={{ width: "auto" }}>Money</button>
-                <button className={showTradeLog ? "active" : ""} onClick={() => setShowTradeLog(v => !v)} style={{ width: "auto" }}>Log</button>
-                <button className={showHistory ? "active" : ""} onClick={() => setShowHistory(v => !v)} style={{ width: "auto" }}>History</button>
-                <button className={showAI ? "active" : ""} onClick={() => setShowAI(v => !v)} style={{ width: "auto" }}>AI</button>
-                <button className={wideChart ? "active" : ""} onClick={() => setWideChart(v => !v)} style={{ width: "auto" }}>Wide</button>
-              </div>
-            </div>
-
-            <div className="pill">
               <small>Feed</small>
-              <div style={{ marginTop: 6, fontWeight: 800 }}>
+              <div style={{ marginTop: 6, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {feedStatus}
               </div>
               <small className="muted">Last: {fmtMoney(last, 2)}</small>
+            </div>
+
+            <div className="pill">
+              <small>Panels</small>
+              <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                <button className={showMoney ? "active" : ""} onClick={() => setShowMoney(v => !v)} style={{ width: "auto" }}>
+                  Money
+                </button>
+                <button className={showTradeLog ? "active" : ""} onClick={() => setShowTradeLog(v => !v)} style={{ width: "auto" }}>
+                  Log
+                </button>
+                <button className={showHistory ? "active" : ""} onClick={() => setShowHistory(v => !v)} style={{ width: "auto" }}>
+                  History
+                </button>
+                <button className={showAI ? "active" : ""} onClick={() => setShowAI(v => !v)} style={{ width: "auto" }}>
+                  AI
+                </button>
+                <button className={wideChart ? "active" : ""} onClick={() => setWideChart(v => !v)} style={{ width: "auto" }}>
+                  Wide
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -439,54 +560,190 @@ export default function Trading({ user }) {
 
       <div className="tradeGrid" style={{ gridTemplateColumns: showRightPanel ? "1.8fr 1fr" : "1fr" }}>
         <div className="card tradeChart">
-          {/* Scoreboard */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 10 }}>
-            <div className="kpiBox"><div className="kpiVal">{fmtNum(wins, 0)}</div><div className="kpiLbl">Wins</div></div>
-            <div className="kpiBox"><div className="kpiVal">{fmtNum(losses, 0)}</div><div className="kpiLbl">Losses</div></div>
-            <div className="kpiBox"><div className="kpiVal">{fmtMoneyCompact(gain, 2)}</div><div className="kpiLbl">Total Gain</div></div>
-            <div className="kpiBox"><div className="kpiVal">{fmtMoneyCompact(lossAmt, 2)}</div><div className="kpiLbl">Total Loss</div></div>
-            <div className="kpiBox"><div className="kpiVal">{fmtMoneyCompact(net, 2)}</div><div className="kpiLbl">Net P&L</div></div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <b>{symbol}</b>
+            <span className={`badge ${paper.running ? "ok" : ""}`}>Paper Trader: {paper.running ? "ON" : "OFF"}</span>
           </div>
 
-          {/* Money */}
+          {/* ✅ Paper Controls Panel */}
+          <div className="card" style={{ marginTop: 12, borderColor: "rgba(43,213,118,0.25)" }}>
+            <b>Paper Controls</b>
+            <div className="muted" style={{ marginTop: 6 }}>
+              Set baseline %, max %, and trades/day. Then hit Save.
+            </div>
+
+            <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+              <label className="muted" style={{ display: "grid", gap: 6 }}>
+                Baseline %: <b style={{ color: "white" }}>{baselinePct}%</b>
+                <input
+                  type="range"
+                  min="1"
+                  max="50"
+                  value={baselinePct}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setBaselinePct(v);
+                    if (maxPct < v) setMaxPct(v);
+                  }}
+                />
+              </label>
+
+              <label className="muted" style={{ display: "grid", gap: 6 }}>
+                Max %: <b style={{ color: "white" }}>{maxPct}%</b>
+                <input
+                  type="range"
+                  min={baselinePct}
+                  max="50"
+                  value={maxPct}
+                  onChange={(e) => setMaxPct(Number(e.target.value))}
+                />
+              </label>
+
+              <label className="muted" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                Trades / Day:
+                <input
+                  type="number"
+                  min="1"
+                  max="500"
+                  value={maxTradesPerDay}
+                  onChange={(e) => setMaxTradesPerDay(Number(e.target.value))}
+                  style={{ width: 110 }}
+                />
+              </label>
+
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <button disabled={savingCfg} onClick={savePaperConfig} style={{ width: 160 }}>
+                  {savingCfg ? "Saving..." : "Save"}
+                </button>
+                {cfgMsg && <span className="muted">{cfgMsg}</span>}
+              </div>
+
+              <div className="muted" style={{ marginTop: 2 }}>
+                Current TierBase: <b style={{ color: "white" }}>{tierBase ? fmtMoneyCompact(tierBase, 0) : "—"}</b>{" "}
+                • Current Size: <b style={{ color: "white" }}>{sizePct != null ? pct(sizePct, 1) : "—"}</b>{" "}
+                • Force Baseline: <b style={{ color: "white" }}>{forceBaseline ? "ON" : "OFF"}</b>
+              </div>
+            </div>
+          </div>
+
+          {/* Learning + Decision */}
+          <div style={{
+            marginTop: 12,
+            display: "grid",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: 10
+          }}>
+            <div className="kpiBox">
+              <div className="kpiVal">{fmtCompact(ticksSeen, 0)}</div>
+              <div className="kpiLbl">Ticks Seen</div>
+            </div>
+            <div className="kpiBox">
+              <div className="kpiVal">{pct(conf, 0)}</div>
+              <div className="kpiLbl">Confidence</div>
+            </div>
+            <div className="kpiBox">
+              <div className="kpiVal">{decision}</div>
+              <div className="kpiLbl">Decision</div>
+            </div>
+            <div className="kpiBox">
+              <div className="kpiVal" title={reason} style={{ fontSize: 14 }}>
+                <span style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {reason}
+                </span>
+              </div>
+              <div className="kpiLbl">Reason</div>
+            </div>
+          </div>
+
+          {/* Scoreboard */}
+          <div style={{
+            marginTop: 10,
+            display: "grid",
+            gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+            gap: 10
+          }}>
+            <div className="kpiBox">
+              <div className="kpiVal">{fmtCompact(wins, 0)}</div>
+              <div className="kpiLbl">Wins</div>
+            </div>
+            <div className="kpiBox">
+              <div className="kpiVal">{fmtCompact(losses, 0)}</div>
+              <div className="kpiLbl">Losses</div>
+            </div>
+            <div className="kpiBox">
+              <div className="kpiVal">{fmtMoneyCompact(grossProfit, 2)}</div>
+              <div className="kpiLbl">Total Gain</div>
+            </div>
+            <div className="kpiBox">
+              <div className="kpiVal">{fmtMoneyCompact(grossLoss, 2)}</div>
+              <div className="kpiLbl">Total Loss</div>
+            </div>
+            <div className="kpiBox">
+              <div className="kpiVal">{fmtMoneyCompact(net, 2)}</div>
+              <div className="kpiLbl">Net P&L</div>
+            </div>
+          </div>
+
+          {/* Costs */}
+          <div style={{
+            marginTop: 10,
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: 10
+          }}>
+            <div className="kpiBox">
+              <div className="kpiVal">{fmtMoneyCompact(feePaid, 2)}</div>
+              <div className="kpiLbl">Fees Paid</div>
+            </div>
+            <div className="kpiBox">
+              <div className="kpiVal">{fmtMoneyCompact(slip, 2)}</div>
+              <div className="kpiLbl">Slippage Cost</div>
+            </div>
+            <div className="kpiBox">
+              <div className="kpiVal">{fmtMoneyCompact(spr, 2)}</div>
+              <div className="kpiLbl">Spread Cost</div>
+            </div>
+          </div>
+
           {showMoney && (
             <div className="kpi" style={{ marginTop: 10 }}>
-              <div><b>{fmtMoneyCompact(cash, 2)}</b><span>Cash</span></div>
-              <div><b>{fmtMoneyCompact(equity, 2)}</b><span>Equity</span></div>
-              <div><b>{fmtMoneyCompact(unreal, 2)}</b><span>Unrealized</span></div>
-              <div><b>{paperStatus}</b><span>Status</span></div>
+              <div>
+                <b>{fmtMoneyCompact(cashBal, 2)}</b>
+                <span>Cash (spendable)</span>
+              </div>
+              <div>
+                <b>{fmtMoneyCompact(equity, 2)}</b>
+                <span>Equity (marked)</span>
+              </div>
+              <div>
+                <b>{fmtMoneyCompact(unreal, 2)}</b>
+                <span>Unrealized P/L</span>
+              </div>
+              <div>
+                <b style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{paperStatus}</b>
+                <span>Status</span>
+              </div>
             </div>
           )}
 
-          {/* ✅ OWNER CONTROLS */}
-          <div className="card" style={{ marginTop: 12, borderColor: "rgba(43,213,118,0.25)" }}>
-            <b>Owner Controls</b>
-            <div className="muted" style={{ marginTop: 6, lineHeight: 1.6 }}>
-              Current sizing: Tier {fmtMoneyCompact(sizing.tierBase, 0)} • Size {pct(sizing.sizePct, 1)} • Est. USD {fmtMoneyCompact(sizing.sizeUsd, 2)}
-            </div>
-
-            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-              <div className="kpiBox">
-                <div className="kpiLbl">Baseline %</div>
-                <input value={cfgBaseline} onChange={(e)=>setCfgBaseline(e.target.value)} placeholder="0.03" />
-              </div>
-              <div className="kpiBox">
-                <div className="kpiLbl">Max %</div>
-                <input value={cfgMaxPct} onChange={(e)=>setCfgMaxPct(e.target.value)} placeholder="0.50" />
-              </div>
-              <div className="kpiBox">
-                <div className="kpiLbl">Trades / Day</div>
-                <input value={cfgMaxTrades} onChange={(e)=>setCfgMaxTrades(e.target.value)} placeholder="40" />
+          {/* Open Position details (live) */}
+          {paper.position && (
+            <div className="card" style={{ marginTop: 12, borderColor: "rgba(122,167,255,0.35)" }}>
+              <b>Open Position</b>
+              <div className="muted" style={{ marginTop: 6, lineHeight: 1.6 }}>
+                <div>
+                  <b>{paper.position.symbol}</b> • {paper.position.strategy || "—"} • Entry {fmtMoney(paper.position.entry, 2)}
+                </div>
+                <div>
+                  Notional {fmtMoneyCompact(paper.position.entryNotionalUsd, 2)} • Qty {fmtNum(paper.position.qty, 6)}
+                </div>
+                <div>
+                  Age {fmtDur(paper.position.ageMs)} • Remaining {paper.position.remainingMs !== null ? fmtDur(paper.position.remainingMs) : "—"}
+                </div>
               </div>
             </div>
+          )}
 
-            <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center" }}>
-              <button onClick={applyOwnerConfig} style={{ width: 160 }}>Apply</button>
-              <div className="muted">{cfgMsg}</div>
-            </div>
-          </div>
-
-          {/* Chart */}
           <div style={{ marginTop: 12, height: 520 }}>
             <canvas
               ref={canvasRef}
@@ -500,7 +757,7 @@ export default function Trading({ user }) {
             />
           </div>
 
-          {/* Trade Log Table */}
+          {/* Trade Log table */}
           {showTradeLog && (
             <div style={{ marginTop: 12 }}>
               <b>Trade Log</b>
@@ -508,52 +765,77 @@ export default function Trading({ user }) {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Time</th><th>Type</th><th>Symbol</th><th>Strategy</th><th>USD</th><th>Price</th><th>Net</th>
+                      <th>Time</th>
+                      <th>Type</th>
+                      <th>Strategy</th>
+                      <th>Price</th>
+                      <th>USD</th>
+                      <th>Entry Cost</th>
+                      <th>Held</th>
+                      <th>Exit</th>
+                      <th>Net P/L</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(paper.trades || []).slice().reverse().slice(0, 30).map((t, i) => (
-                      <tr key={i}>
-                        <td>{t.time ? new Date(t.time).toLocaleTimeString() : "—"}</td>
-                        <td>{t.type || "—"}</td>
-                        <td>{t.symbol || "—"}</td>
-                        <td>{t.strategy || "—"}</td>
-                        <td>{t.usd !== undefined ? fmtMoneyCompact(t.usd, 2) : "—"}</td>
-                        <td>{t.price !== undefined ? fmtMoney(t.price, 2) : "—"}</td>
-                        <td>{t.profit !== undefined ? fmtMoneyCompact(t.profit, 2) : "—"}</td>
-                      </tr>
-                    ))}
+                    {(paper.trades || [])
+                      .slice()
+                      .reverse()
+                      .slice(0, 24)
+                      .map((t, i) => (
+                        <tr key={i}>
+                          <td>{t.time ? new Date(t.time).toLocaleTimeString() : "—"}</td>
+                          <td>{t.type || "—"}</td>
+                          <td>{t.strategy || "—"}</td>
+                          <td>{fmtMoney(t.price, 2)}</td>
+                          <td>{t.usd !== undefined ? fmtMoneyCompact(t.usd, 2) : "—"}</td>
+                          <td>{t.cost !== undefined ? fmtMoneyCompact(t.cost, 2) : "—"}</td>
+                          <td>{t.holdMs !== undefined ? fmtDur(t.holdMs) : "—"}</td>
+                          <td>{t.exitReason ? niceReason(t.exitReason) : (t.note ? niceReason(t.note) : "—")}</td>
+                          <td>{t.profit !== undefined ? fmtMoneyCompact(t.profit, 2) : "—"}</td>
+                        </tr>
+                      ))}
+
+                    {(!paper.trades || paper.trades.length === 0) && (
+                      <tr><td colSpan="9" className="muted">No trades yet (it’s learning)</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
 
-          {/* ✅ TEXT HISTORY (message style) */}
+          {/* ✅ History Bar (scroll + text style) */}
           {showHistory && (
             <div style={{ marginTop: 12 }}>
-              <b>History (Text)</b>
+              <b>History</b>
               <div className="muted" style={{ marginTop: 4 }}>
-                This is the “message-style” log: entry → size → exit → result.
+                Scroll to review how every trade happened (entry, size, strategy, hold time, exit reason, result).
               </div>
 
-              <div style={{
-                marginTop: 10,
-                maxHeight: 360,
-                overflow: "auto",
-                border: "1px solid rgba(255,255,255,0.10)",
-                borderRadius: 12,
-                padding: 10,
-                background: "rgba(0,0,0,0.18)"
-              }}>
-                {history.length === 0 && <div className="muted">No history yet.</div>}
+              <div
+                style={{
+                  marginTop: 10,
+                  maxHeight: 340,
+                  overflow: "auto",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  borderRadius: 12,
+                  padding: 10,
+                  background: "rgba(0,0,0,0.18)"
+                }}
+              >
+                {historyItems.length === 0 && (
+                  <div className="muted">No history yet.</div>
+                )}
 
-                {history.map((t, idx) => (
-                  <div key={idx} style={{
-                    padding: "8px 8px",
-                    borderBottom: "1px solid rgba(255,255,255,0.06)",
-                    lineHeight: 1.5
-                  }}>
+                {historyItems.map((t, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: "8px 8px",
+                      borderBottom: "1px solid rgba(255,255,255,0.06)",
+                      lineHeight: 1.5
+                    }}
+                  >
                     {historyLine(t)}
                   </div>
                 ))}
@@ -562,10 +844,16 @@ export default function Trading({ user }) {
           )}
         </div>
 
-        {/* Right panel */}
         {showRightPanel && (
           <div className="card tradeAI">
-            <b>AI Panel</b>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div>
+                <b>AI Panel</b>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  Ask why it bought/sold • voice below
+                </div>
+              </div>
+            </div>
 
             <div className="chatLog" ref={logRef} style={{ marginTop: 12 }}>
               {messages.map((m, idx) => (
@@ -580,7 +868,7 @@ export default function Trading({ user }) {
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask: why did you enter? what size %? what tier?"
+                placeholder="Ask: why did you enter? what strategy? what’s next?"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     sendToAI(input);
@@ -597,7 +885,12 @@ export default function Trading({ user }) {
               <VoiceAI
                 title="AutoProtect Voice"
                 endpoint="/api/ai/chat"
-                getContext={() => ({ symbol, mode, last, paper })}
+                getContext={() => ({
+                  symbol,
+                  mode,
+                  last,
+                  paper
+                })}
               />
             </div>
           </div>
