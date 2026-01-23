@@ -88,9 +88,9 @@ export default function Trading({ user }) {
 
   const [showMoney, setShowMoney] = useState(true);
   const [showTradeLog, setShowTradeLog] = useState(true);
-  const [showHistory, setShowHistory] = useState(true);
   const [showAI, setShowAI] = useState(true);
   const [wideChart, setWideChart] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
 
   const [paper, setPaper] = useState({
     running: false,
@@ -110,12 +110,8 @@ export default function Trading({ user }) {
   });
   const [paperStatus, setPaperStatus] = useState("Loading…");
 
-  // ✅ UI Controls (owner settings)
-  const [baselinePctUI, setBaselinePctUI] = useState(0.03); // 3%
-  const [maxPctUI, setMaxPctUI] = useState(0.50);          // 50%
-  const [maxTradesUI, setMaxTradesUI] = useState(40);
-  const [configStatus, setConfigStatus] = useState("—");
-  const [saving, setSaving] = useState(false);
+  // ✅ NEW: reset button state
+  const [resetting, setResetting] = useState(false);
 
   const [messages, setMessages] = useState(() => ([
     { from: "ai", text: "AutoProtect ready. Ask me about wins/losses, P&L, open position, and why I entered." }
@@ -246,13 +242,6 @@ export default function Trading({ user }) {
         const data = await res.json();
         setPaper(data);
         setPaperStatus("OK");
-
-        // ✅ sync UI controls from backend (first time / whenever backend changes)
-        if (data?.owner) {
-          setBaselinePctUI(Number(data.owner.baselinePct ?? 0.03));
-          setMaxPctUI(Number(data.owner.maxPct ?? 0.50));
-          setMaxTradesUI(Number(data.owner.maxTradesPerDay ?? 40));
-        }
       } catch {
         setPaperStatus("Error loading paper status");
       }
@@ -263,43 +252,89 @@ export default function Trading({ user }) {
     return () => clearInterval(t);
   }, []);
 
-  async function savePaperConfig() {
-    const base = apiBase();
-    if (!base) return;
+  // ---- draw candles ----
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-    const baseline = clamp(Number(baselinePctUI), 0.001, 0.50);
-    const maxPct = clamp(Number(maxPctUI), baseline, 0.50);
-    const maxTrades = clamp(Number(maxTradesUI), 1, 500);
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth;
+    const cssH = canvas.clientHeight;
+    canvas.width = Math.floor(cssW * dpr);
+    canvas.height = Math.floor(cssH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    setSaving(true);
-    setConfigStatus("Saving…");
+    ctx.clearRect(0, 0, cssW, cssH);
+    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    ctx.fillRect(0, 0, cssW, cssH);
 
-    try {
-      const res = await fetch(`${base}/api/paper/config`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          baselinePct: baseline,
-          maxPct: maxPct,
-          maxTradesPerDay: maxTrades
-        })
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setConfigStatus("Save failed: " + (data?.error || data?.message || `HTTP ${res.status}`));
-      } else {
-        setConfigStatus("Saved ✅");
-        if (data?.snapshot) setPaper(data.snapshot);
-      }
-    } catch {
-      setConfigStatus("Save failed: network error");
-    } finally {
-      setSaving(false);
-      setTimeout(() => setConfigStatus("—"), 4000);
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 6; i++) {
+      const y = (cssH * i) / 6;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(cssW, y);
+      ctx.stroke();
     }
-  }
+
+    const view = candles.slice(-80);
+    if (!view.length) return;
+
+    const highs = view.map(c => c.high);
+    const lows = view.map(c => c.low);
+    const maxP = Math.max(...highs);
+    const minP = Math.min(...lows);
+
+    const pad = (maxP - minP) * 0.06 || 10;
+    const top = maxP + pad;
+    const bot = minP - pad;
+
+    const px = (p) => {
+      const r = (top - p) / (top - bot);
+      return clamp(r, 0, 1) * (cssH - 20) + 10;
+    };
+
+    const w = cssW;
+    const n = view.length;
+    const gap = 2;
+    const candleW = Math.max(4, Math.floor((w - 20) / n) - gap);
+    let x = 10;
+
+    for (let i = 0; i < n; i++) {
+      const c = view[i];
+      const openY = px(c.open);
+      const closeY = px(c.close);
+      const highY = px(c.high);
+      const lowY = px(c.low);
+
+      const up = c.close >= c.open;
+
+      ctx.strokeStyle = "rgba(255,255,255,0.55)";
+      ctx.beginPath();
+      ctx.moveTo(x + candleW / 2, highY);
+      ctx.lineTo(x + candleW / 2, lowY);
+      ctx.stroke();
+
+      ctx.fillStyle = up ? "rgba(43,213,118,0.85)" : "rgba(255,90,95,0.85)";
+      const y = Math.min(openY, closeY);
+      const h = Math.max(2, Math.abs(closeY - openY));
+      ctx.fillRect(x, y, candleW, h);
+
+      x += candleW + gap;
+    }
+
+    const lastY = px(last);
+    ctx.strokeStyle = "rgba(122,167,255,0.7)";
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(0, lastY);
+    ctx.lineTo(cssW, lastY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }, [candles, last]);
 
   async function sendToAI(text) {
     const clean = (text || "").trim();
@@ -318,7 +353,28 @@ export default function Trading({ user }) {
         symbol,
         mode,
         last,
-        paper
+        paper: {
+          running: paper.running,
+          cashBalance: paper.cashBalance,
+          equity: paper.equity,
+          pnl: paper.pnl,
+          unrealizedPnL: paper.unrealizedPnL,
+          wins: paper.realized?.wins ?? 0,
+          losses: paper.realized?.losses ?? 0,
+          grossProfit: paper.realized?.grossProfit ?? 0,
+          grossLoss: paper.realized?.grossLoss ?? 0,
+          net: paper.realized?.net ?? paper.pnl ?? 0,
+          feePaid: paper.costs?.feePaid ?? 0,
+          slippageCost: paper.costs?.slippageCost ?? 0,
+          spreadCost: paper.costs?.spreadCost ?? 0,
+          ticksSeen: paper.learnStats?.ticksSeen ?? 0,
+          confidence: paper.learnStats?.confidence ?? 0,
+          decision: paper.learnStats?.decision ?? "WAIT",
+          decisionReason: paper.learnStats?.lastReason ?? "—",
+          position: paper.position || null,
+          owner: paper.owner || null,
+          sizing: paper.sizing || null
+        }
       };
 
       const res = await fetch(`${base}/api/ai/chat`, {
@@ -339,6 +395,44 @@ export default function Trading({ user }) {
       setMessages(prev => [...prev, { from: "ai", text: reply }]);
     } catch {
       setMessages(prev => [...prev, { from: "ai", text: "Network error talking to AI backend." }]);
+    }
+  }
+
+  // ✅ Reset paper (POST /api/paper/reset)
+  async function resetPaper() {
+    const base = apiBase();
+    if (!base) {
+      alert("Backend URL missing (VITE_API_BASE).");
+      return;
+    }
+
+    // optional key (if you set PAPER_RESET_KEY on backend)
+    const key = (import.meta.env.VITE_PAPER_RESET_KEY || "").trim();
+
+    const ok = window.confirm("Reset PAPER wallet + trades + learning? (This is paper only)");
+    if (!ok) return;
+
+    setResetting(true);
+    try {
+      const res = await fetch(`${base}/api/paper/reset`, {
+        method: "POST",
+        headers: key ? { "x-reset-key": key } : {},
+        credentials: "include"
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data?.error || data?.message || `Reset failed (HTTP ${res.status})`);
+        return;
+      }
+
+      // refresh UI immediately
+      if (data?.snapshot) setPaper(data.snapshot);
+      setPaperStatus("Reset OK");
+    } catch (e) {
+      alert("Reset failed (network).");
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -392,20 +486,13 @@ export default function Trading({ user }) {
     return `${ts} • ${type} ${sym}`;
   }
 
-  // read-only sizing info from backend
-  const tierBase = paper.sizing?.tierBase ?? null;
-  const sizePct = paper.sizing?.sizePct ?? null;
-  const forceBaseline = paper.limits?.forceBaseline ?? false;
-  const lossesToday = paper.limits?.lossesToday ?? 0;
-  const tradesToday = paper.limits?.tradesToday ?? 0;
-
   return (
     <div className="tradeWrap">
       <div className="card">
         <div className="tradeTop">
           <div>
             <h2 style={{ margin: 0 }}>Trading Room</h2>
-            <small className="muted">Live feed + learning + scoreboard + history + owner controls.</small>
+            <small className="muted">Live feed + learning + scoreboard + history.</small>
           </div>
 
           <div className="actions">
@@ -452,6 +539,29 @@ export default function Trading({ user }) {
                 </button>
               </div>
             </div>
+
+            {/* ✅ Reset button (Paper only) */}
+            <div className="pill">
+              <small>Paper Controls</small>
+              <div style={{ marginTop: 6 }}>
+                <button
+                  onClick={resetPaper}
+                  disabled={resetting}
+                  style={{
+                    width: "auto",
+                    padding: "8px 12px",
+                    fontWeight: 900
+                  }}
+                  className={resetting ? "" : ""}
+                >
+                  {resetting ? "Resetting…" : "Reset Paper"}
+                </button>
+                <div className="muted" style={{ marginTop: 6, fontSize: 12, lineHeight: 1.4 }}>
+                  Resets paper wallet + trades + learning buffers (does not affect Live).
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
@@ -461,85 +571,6 @@ export default function Trading({ user }) {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <b>{symbol}</b>
             <span className={`badge ${paper.running ? "ok" : ""}`}>Paper Trader: {paper.running ? "ON" : "OFF"}</span>
-          </div>
-
-          {/* ✅ Owner Controls */}
-          <div className="card" style={{ marginTop: 12, borderColor: "rgba(43,213,118,0.25)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-              <b>Owner Controls (Paper)</b>
-              <span className={`badge ${forceBaseline ? "" : "ok"}`}>
-                Force Baseline: {forceBaseline ? "ON" : "OFF"}
-              </span>
-            </div>
-
-            <div className="muted" style={{ marginTop: 6, lineHeight: 1.6 }}>
-              Trades today: <b>{tradesToday}</b> • Losses today: <b>{lossesToday}</b> •
-              Tier base: <b>{tierBase != null ? fmtMoneyCompact(tierBase, 0) : "—"}</b> •
-              Current size %: <b>{sizePct != null ? pct(sizePct, 1) : "—"}</b>
-            </div>
-
-            <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-              <div className="kpiBox">
-                <div className="kpiLbl">Baseline % (min)</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-                  <input
-                    type="range"
-                    min={0.01}
-                    max={0.10}
-                    step={0.005}
-                    value={baselinePctUI}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setBaselinePctUI(v);
-                      if (maxPctUI < v) setMaxPctUI(v);
-                    }}
-                    style={{ width: "100%" }}
-                  />
-                  <b style={{ width: 70, textAlign: "right" }}>{pct(baselinePctUI, 1)}</b>
-                </div>
-                <small className="muted">3% baseline is your “starting point”.</small>
-              </div>
-
-              <div className="kpiBox">
-                <div className="kpiLbl">Max % (cap)</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-                  <input
-                    type="range"
-                    min={baselinePctUI}
-                    max={0.50}
-                    step={0.01}
-                    value={maxPctUI}
-                    onChange={(e) => setMaxPctUI(Number(e.target.value))}
-                    style={{ width: "100%" }}
-                  />
-                  <b style={{ width: 70, textAlign: "right" }}>{pct(maxPctUI, 0)}</b>
-                </div>
-                <small className="muted">Grows up to this cap when AI performs.</small>
-              </div>
-
-              <div className="kpiBox">
-                <div className="kpiLbl">Trades / Day</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-                  <input
-                    type="number"
-                    min={1}
-                    max={500}
-                    value={maxTradesUI}
-                    onChange={(e) => setMaxTradesUI(Number(e.target.value))}
-                    style={{ width: "100%" }}
-                  />
-                  <b style={{ width: 70, textAlign: "right" }}>{fmtNum(maxTradesUI, 0)}</b>
-                </div>
-                <small className="muted">Paper only for now (Live later).</small>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 12 }}>
-              <div className="muted">Config: <b>{configStatus}</b></div>
-              <button className={saving ? "" : "active"} disabled={saving} onClick={savePaperConfig} style={{ width: 170 }}>
-                {saving ? "Saving…" : "Save Settings"}
-              </button>
-            </div>
           </div>
 
           {/* Learning + Decision */}
@@ -642,7 +673,7 @@ export default function Trading({ user }) {
             </div>
           )}
 
-          {/* Open Position details */}
+          {/* Open Position details (live) */}
           {paper.position && (
             <div className="card" style={{ marginTop: 12, borderColor: "rgba(122,167,255,0.35)" }}>
               <b>Open Position</b>
@@ -673,7 +704,7 @@ export default function Trading({ user }) {
             />
           </div>
 
-          {/* Trade Log */}
+          {/* Trade Log table */}
           {showTradeLog && (
             <div style={{ marginTop: 12 }}>
               <b>Trade Log</b>
@@ -720,12 +751,12 @@ export default function Trading({ user }) {
             </div>
           )}
 
-          {/* History */}
+          {/* History Bar (text-based) */}
           {showHistory && (
             <div style={{ marginTop: 12 }}>
               <b>History</b>
               <div className="muted" style={{ marginTop: 4 }}>
-                Scroll to review every trade (entry, size, strategy, hold time, exit reason, result).
+                Scroll to review how every trade happened (entry, size, strategy, hold time, exit reason, result).
               </div>
 
               <div
