@@ -12,7 +12,6 @@ function apiBase() {
   );
 }
 
-// ---- number formatting ----
 function fmtNum(n, digits = 2) {
   const x = Number(n);
   if (!Number.isFinite(x)) return "—";
@@ -110,8 +109,13 @@ export default function Trading({ user }) {
   });
   const [paperStatus, setPaperStatus] = useState("Loading…");
 
-  // ✅ NEW: reset button state
   const [resetting, setResetting] = useState(false);
+  const [savingCfg, setSavingCfg] = useState(false);
+
+  // ✅ UI control values (edit locally then Save)
+  const [baselinePct, setBaselinePct] = useState(0.03);
+  const [maxPct, setMaxPct] = useState(0.10);
+  const [maxTradesPerDay, setMaxTradesPerDay] = useState(40);
 
   const [messages, setMessages] = useState(() => ([
     { from: "ai", text: "AutoProtect ready. Ask me about wins/losses, P&L, open position, and why I entered." }
@@ -242,6 +246,13 @@ export default function Trading({ user }) {
         const data = await res.json();
         setPaper(data);
         setPaperStatus("OK");
+
+        // ✅ keep UI sliders synced to backend config
+        if (data?.owner) {
+          setBaselinePct(Number(data.owner.baselinePct ?? 0.03));
+          setMaxPct(Number(data.owner.maxPct ?? 0.10));
+          setMaxTradesPerDay(Number(data.owner.maxTradesPerDay ?? 40));
+        }
       } catch {
         setPaperStatus("Error loading paper status");
       }
@@ -353,28 +364,7 @@ export default function Trading({ user }) {
         symbol,
         mode,
         last,
-        paper: {
-          running: paper.running,
-          cashBalance: paper.cashBalance,
-          equity: paper.equity,
-          pnl: paper.pnl,
-          unrealizedPnL: paper.unrealizedPnL,
-          wins: paper.realized?.wins ?? 0,
-          losses: paper.realized?.losses ?? 0,
-          grossProfit: paper.realized?.grossProfit ?? 0,
-          grossLoss: paper.realized?.grossLoss ?? 0,
-          net: paper.realized?.net ?? paper.pnl ?? 0,
-          feePaid: paper.costs?.feePaid ?? 0,
-          slippageCost: paper.costs?.slippageCost ?? 0,
-          spreadCost: paper.costs?.spreadCost ?? 0,
-          ticksSeen: paper.learnStats?.ticksSeen ?? 0,
-          confidence: paper.learnStats?.confidence ?? 0,
-          decision: paper.learnStats?.decision ?? "WAIT",
-          decisionReason: paper.learnStats?.lastReason ?? "—",
-          position: paper.position || null,
-          owner: paper.owner || null,
-          sizing: paper.sizing || null
-        }
+        paper
       };
 
       const res = await fetch(`${base}/api/ai/chat`, {
@@ -398,18 +388,13 @@ export default function Trading({ user }) {
     }
   }
 
-  // ✅ Reset paper (POST /api/paper/reset)
+  // ✅ Reset paper
   async function resetPaper() {
     const base = apiBase();
-    if (!base) {
-      alert("Backend URL missing (VITE_API_BASE).");
-      return;
-    }
+    if (!base) return alert("Backend URL missing (VITE_API_BASE).");
 
-    // optional key (if you set PAPER_RESET_KEY on backend)
     const key = (import.meta.env.VITE_PAPER_RESET_KEY || "").trim();
-
-    const ok = window.confirm("Reset PAPER wallet + trades + learning? (This is paper only)");
+    const ok = window.confirm("Reset PAPER wallet + trades + learning? (Paper only)");
     if (!ok) return;
 
     setResetting(true);
@@ -421,18 +406,55 @@ export default function Trading({ user }) {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert(data?.error || data?.message || `Reset failed (HTTP ${res.status})`);
-        return;
-      }
+      if (!res.ok) return alert(data?.error || `Reset failed (HTTP ${res.status})`);
 
-      // refresh UI immediately
       if (data?.snapshot) setPaper(data.snapshot);
       setPaperStatus("Reset OK");
-    } catch (e) {
+    } catch {
       alert("Reset failed (network).");
     } finally {
       setResetting(false);
+    }
+  }
+
+  // ✅ Save config (baseline/max/trades day)
+  async function savePaperConfig() {
+    const base = apiBase();
+    if (!base) return alert("Backend URL missing (VITE_API_BASE).");
+
+    const key = (import.meta.env.VITE_PAPER_CONFIG_KEY || "").trim();
+
+    // keep rules sane
+    const b = clamp(Number(baselinePct), 0.001, 0.5);
+    const m = clamp(Number(maxPct), b, 0.5);
+    const tpd = clamp(Number(maxTradesPerDay), 1, 500);
+
+    setSavingCfg(true);
+    try {
+      const res = await fetch(`${base}/api/paper/config`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(key ? { "x-config-key": key } : {})
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          baselinePct: b,
+          maxPct: m,
+          maxTradesPerDay: tpd
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return alert(data?.error || `Save failed (HTTP ${res.status})`);
+
+      // keep UI synced
+      setPaper(prev => ({ ...prev, owner: data.owner, sizing: data.sizing, limits: data.limits }));
+      setPaperStatus("Config Saved");
+    } catch {
+      alert("Save failed (network).");
+    } finally {
+      setSavingCfg(false);
     }
   }
 
@@ -456,6 +478,11 @@ export default function Trading({ user }) {
   const cashBal = paper.cashBalance ?? 0;
   const equity = paper.equity ?? cashBal;
   const unreal = paper.unrealizedPnL ?? 0;
+
+  const tierBase = paper.sizing?.tierBase ?? null;
+  const sizePct = paper.sizing?.sizePct ?? null;
+  const forceBaseline = !!paper.limits?.forceBaseline;
+  const lossesToday = paper.limits?.lossesToday ?? 0;
 
   const historyItems = (paper.trades || []).slice().reverse().slice(0, 240);
 
@@ -492,7 +519,7 @@ export default function Trading({ user }) {
         <div className="tradeTop">
           <div>
             <h2 style={{ margin: 0 }}>Trading Room</h2>
-            <small className="muted">Live feed + learning + scoreboard + history.</small>
+            <small className="muted">Live feed + learning + scoreboard + history + controls.</small>
           </div>
 
           <div className="actions">
@@ -540,24 +567,91 @@ export default function Trading({ user }) {
               </div>
             </div>
 
-            {/* ✅ Reset button (Paper only) */}
-            <div className="pill">
+            {/* ✅ Paper Controls: reset + config */}
+            <div className="pill" style={{ minWidth: 260 }}>
               <small>Paper Controls</small>
-              <div style={{ marginTop: 6 }}>
-                <button
-                  onClick={resetPaper}
-                  disabled={resetting}
-                  style={{
-                    width: "auto",
-                    padding: "8px 12px",
-                    fontWeight: 900
-                  }}
-                  className={resetting ? "" : ""}
-                >
+
+              <div style={{ marginTop: 8 }}>
+                <button onClick={resetPaper} disabled={resetting} style={{ width: "auto", fontWeight: 900 }}>
                   {resetting ? "Resetting…" : "Reset Paper"}
                 </button>
-                <div className="muted" style={{ marginTop: 6, fontSize: 12, lineHeight: 1.4 }}>
-                  Resets paper wallet + trades + learning buffers (does not affect Live).
+                <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                  Paper only (wallet + trades + learning).
+                </div>
+              </div>
+
+              <hr style={{ margin: "12px 0", borderColor: "rgba(255,255,255,0.10)" }} />
+
+              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+                Baseline % (min)
+              </div>
+              <input
+                type="range"
+                min="0.01"
+                max="0.50"
+                step="0.01"
+                value={baselinePct}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setBaselinePct(v);
+                  // keep max >= baseline
+                  if (Number(maxPct) < v) setMaxPct(v);
+                }}
+                style={{ width: "100%" }}
+              />
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span className="muted" style={{ fontSize: 12 }}>1%</span>
+                <b style={{ fontSize: 12 }}>{pct(baselinePct, 0)}</b>
+                <span className="muted" style={{ fontSize: 12 }}>50%</span>
+              </div>
+
+              <div className="muted" style={{ fontSize: 12, margin: "10px 0 6px" }}>
+                Max % (cap)
+              </div>
+              <input
+                type="range"
+                min={baselinePct}
+                max="0.50"
+                step="0.01"
+                value={maxPct}
+                onChange={(e) => setMaxPct(Number(e.target.value))}
+                style={{ width: "100%" }}
+              />
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span className="muted" style={{ fontSize: 12 }}>{pct(baselinePct, 0)}</span>
+                <b style={{ fontSize: 12 }}>{pct(maxPct, 0)}</b>
+                <span className="muted" style={{ fontSize: 12 }}>50%</span>
+              </div>
+
+              <div className="muted" style={{ fontSize: 12, margin: "10px 0 6px" }}>
+                Trades / Day
+              </div>
+              <input
+                type="number"
+                value={maxTradesPerDay}
+                min={1}
+                max={500}
+                onChange={(e) => setMaxTradesPerDay(e.target.value)}
+                style={{ width: "100%" }}
+              />
+
+              <button
+                onClick={savePaperConfig}
+                disabled={savingCfg}
+                style={{ width: "100%", marginTop: 10, fontWeight: 900 }}
+              >
+                {savingCfg ? "Saving…" : "Save Config"}
+              </button>
+
+              <div style={{ marginTop: 10, fontSize: 12, lineHeight: 1.4 }}>
+                <div className="muted">
+                  Current Tier Base: <b>{tierBase != null ? fmtMoneyCompact(tierBase, 0) : "—"}</b>
+                </div>
+                <div className="muted">
+                  Current Size %: <b>{sizePct != null ? pct(sizePct, 1) : "—"}</b>
+                </div>
+                <div className="muted">
+                  Force Baseline: <b>{forceBaseline ? "ON" : "OFF"}</b> (losses today: {lossesToday})
                 </div>
               </div>
             </div>
@@ -566,14 +660,13 @@ export default function Trading({ user }) {
         </div>
       </div>
 
-      <div className="tradeGrid" style={{ gridTemplateColumns: showRightPanel ? "1.8fr 1fr" : "1fr" }}>
+      <div className="tradeGrid" style={{ gridTemplateColumns: showAI && !wideChart ? "1.8fr 1fr" : "1fr" }}>
         <div className="card tradeChart">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <b>{symbol}</b>
             <span className={`badge ${paper.running ? "ok" : ""}`}>Paper Trader: {paper.running ? "ON" : "OFF"}</span>
           </div>
 
-          {/* Learning + Decision */}
           <div style={{
             marginTop: 10,
             display: "grid",
@@ -602,7 +695,6 @@ export default function Trading({ user }) {
             </div>
           </div>
 
-          {/* Scoreboard */}
           <div style={{
             marginTop: 10,
             display: "grid",
@@ -631,7 +723,6 @@ export default function Trading({ user }) {
             </div>
           </div>
 
-          {/* Costs */}
           <div style={{
             marginTop: 10,
             display: "grid",
@@ -673,7 +764,6 @@ export default function Trading({ user }) {
             </div>
           )}
 
-          {/* Open Position details (live) */}
           {paper.position && (
             <div className="card" style={{ marginTop: 12, borderColor: "rgba(122,167,255,0.35)" }}>
               <b>Open Position</b>
@@ -704,7 +794,6 @@ export default function Trading({ user }) {
             />
           </div>
 
-          {/* Trade Log table */}
           {showTradeLog && (
             <div style={{ marginTop: 12 }}>
               <b>Trade Log</b>
@@ -751,12 +840,11 @@ export default function Trading({ user }) {
             </div>
           )}
 
-          {/* History Bar (text-based) */}
           {showHistory && (
             <div style={{ marginTop: 12 }}>
               <b>History</b>
               <div className="muted" style={{ marginTop: 4 }}>
-                Scroll to review how every trade happened (entry, size, strategy, hold time, exit reason, result).
+                Scroll to review every trade as text.
               </div>
 
               <div
@@ -791,7 +879,7 @@ export default function Trading({ user }) {
           )}
         </div>
 
-        {showRightPanel && (
+        {showAI && !wideChart && (
           <div className="card tradeAI">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <div>
