@@ -7,21 +7,84 @@
   --ok:#2bd576;
   --warn:#ffd166;
   --danger:#ff5a5f;
+
+  /* ✅ brand / watermark controls */
+  --wm-opacity: .07;            /* watermark strength */
+  --wm-size: min(760px, 86vw);  /* watermark size */
+  --wm-blur: 0px;               /* optional blur */
 }
 
 *{box-sizing:border-box}
 html,body{height:100%}
+
+/* ✅ IMPORTANT: background + watermark live here (fixed), content scrolls above it */
 body{
   margin:0;
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+  color:var(--text);
+  overflow-x:hidden; /* ✅ stop side-scroll on phones */
+  background: var(--bg);
+}
+
+/* ✅ Fixed background layer + watermark */
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+
   background:
     radial-gradient(1100px 600px at 20% 0%, rgba(80,140,255,.20), transparent 55%),
     radial-gradient(1000px 700px at 90% 40%, rgba(0,255,170,.10), transparent 55%),
     var(--bg);
-  color:var(--text);
-  overflow-x:hidden; /* ✅ stop side-scroll on phones */
 }
 
+/* ✅ Watermark logo (uses your GitHub image link) */
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+
+  /* NOTE: swap this URL anytime you want to change the watermark */
+  background-image: url("https://github.com/user-attachments/assets/0895f9e4-83c4-4088-8658-7a6aeb728af2");
+  background-repeat:no-repeat;
+  background-position:center 40%;
+  background-size: var(--wm-size);
+  opacity: var(--wm-opacity);
+  filter: blur(var(--wm-blur));
+  transform: translateZ(0);
+}
+
+/* ✅ Fixed small corner logo (top-left) */
+.autoshield-corner-logo{
+  position:fixed;
+  top:14px;
+  left:14px;
+  z-index:50;
+  width:44px;
+  height:44px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.25);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+
+.autoshield-corner-logo img{
+  width:85%;
+  height:85%;
+  object-fit:contain;
+  opacity:.95;
+}
+
+/* Keep your container + cards exactly the same */
 .container{max-width:1100px;margin:0 auto;padding:24px;}
 .card{
   background:var(--panel);
@@ -220,6 +283,15 @@ button.active{
   .tradeGrid{grid-template-columns: 1fr;}
   .tradeChart, .tradeAI{min-height:auto;}
   .pill{min-width:140px;}
+
+  .autoshield-corner-logo{
+    top:10px; left:10px;
+    width:40px; height:40px;
+  }
+  :root{
+    --wm-opacity: .06;
+    --wm-size: min(640px, 92vw);
+  }
 }
 
 @media (max-width: 560px){
@@ -229,4 +301,14 @@ button.active{
   .kpiVal{font-size:16px;}
   .kpi b{font-size:18px;}
   .table th,.table td{font-size:12px;}
+
+  :root{
+    --wm-opacity: .05;
+    --wm-size: min(560px, 96vw);
+  }
+}
+
+/* Optional: if user prefers reduced motion, keep it calm */
+@media (prefers-reduced-motion: reduce){
+  *{scroll-behavior:auto}
 }
