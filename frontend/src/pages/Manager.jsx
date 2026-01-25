@@ -1,5 +1,18 @@
+// frontend/src/pages/Manager.jsx
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
+
+function fmtTime(v){
+  try { return new Date(v).toLocaleString(); } catch { return '—'; }
+}
+
+function sevBadge(sev){
+  const s = String(sev || '').toLowerCase();
+  if (s.includes('high') || s.includes('critical') || s.includes('danger')) return 'danger';
+  if (s.includes('med') || s.includes('warn')) return 'warn';
+  if (s.includes('low') || s.includes('info')) return '';
+  return '';
+}
 
 export default function Manager({ user }) {
   const [overview, setOverview] = useState(null);
@@ -17,9 +30,9 @@ export default function Manager({ user }) {
         api.managerAudit(200),
         api.managerNotifications(),
       ]);
-      setOverview(ov);
-      setAudit(au || []);
-      setNotifications(no || []);
+      setOverview(ov || null);
+      setAudit(Array.isArray(au) ? au : []);
+      setNotifications(Array.isArray(no) ? no : []);
     } catch (e) {
       setErr(e?.message || 'Failed to load manager room data');
     } finally {
@@ -30,74 +43,138 @@ export default function Manager({ user }) {
   useEffect(() => { load(); }, []);
 
   return (
-    <div className="grid">
-      <div className="card">
-        <h2>Manager Room</h2>
-        <p style={{marginTop:6}}>Full visibility of Cybersecurity gadgets + platform activity.</p>
-        <div style={{height:10}} />
-        <button onClick={load} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
-        {err && <p className="error" style={{marginTop:10}}>{err}</p>}
-      </div>
+    <div className="row">
+      {/* LEFT COLUMN */}
+      <div className="col">
+        <div className="card">
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap'}}>
+            <div>
+              <h2 style={{margin:0}}>Manager Room</h2>
+              <p style={{marginTop:6}}>
+                Full visibility of cybersecurity posture + platform activity.
+              </p>
+            </div>
 
-      <div className="card">
-        <h3>Security Overview</h3>
-        {!overview && <p>{loading ? 'Loading…' : 'No data'}</p>}
-        {overview && (
-          <div className="kpi">
-            <div><b>{overview.users}</b><span>Users</span></div>
-            <div><b>{overview.companies}</b><span>Companies</span></div>
-            <div><b>{overview.auditEvents}</b><span>Audit events</span></div>
-            <div><b>{overview.notifications}</b><span>Notifications</span></div>
+            <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
+              <span className="badge">Role: {user?.role || 'Manager'}</span>
+              <button onClick={load} disabled={loading} style={{minWidth:140}}>
+                {loading ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
           </div>
-        )}
-        <p style={{marginTop:10}}><small>Tip: Trading Terminal is in the top menu → Trading.</small></p>
-      </div>
 
-      <div className="card">
-        <h3>Notifications</h3>
-        {notifications.length === 0 && <p><small>{loading ? 'Loading…' : 'No notifications yet.'}</small></p>}
-        <ul className="list">
-          {notifications.slice(0, 8).map(n => (
-            <li key={n.id}>
-              <span className={`dot ${n.severity || 'info'}`} aria-hidden="true"></span>
-              <div>
-                <div style={{display:'flex', justifyContent:'space-between', gap:10}}>
-                  <b>{n.title}</b>
-                  <small>{new Date(n.createdAt).toLocaleString()}</small>
-                </div>
-                <div><small>{n.message}</small></div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="card">
-        <h3>Audit Log</h3>
-        {audit.length === 0 && <p><small>{loading ? 'Loading…' : 'No audit events yet.'}</small></p>}
-        <div className="tableWrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Action</th>
-                <th>Actor</th>
-                <th>Target</th>
-              </tr>
-            </thead>
-            <tbody>
-              {audit.slice(0, 20).map(ev => (
-                <tr key={ev.id}>
-                  <td><small>{new Date(ev.at).toLocaleString()}</small></td>
-                  <td><small>{ev.action}</small></td>
-                  <td><small>{ev.actorId || '-'}</small></td>
-                  <td><small>{(ev.targetType || '-') + ':' + (ev.targetId || '-')}</small></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {err && (
+            <div className="card" style={{marginTop:12, borderColor:'rgba(255,90,95,.55)'}}>
+              <b className="error">Error:</b> {err}
+            </div>
+          )}
         </div>
-        <p style={{marginTop:10}}><small>Managers have read-only visibility here by default.</small></p>
+
+        <div style={{height:14}} />
+
+        <div className="card">
+          <h3 style={{marginTop:0}}>Security Overview</h3>
+
+          {!overview && (
+            <p><small>{loading ? 'Loading…' : 'No data'}</small></p>
+          )}
+
+          {overview && (
+            <>
+              <div className="kpi" style={{marginTop:10}}>
+                <div><b>{overview.users ?? 0}</b><span>Users</span></div>
+                <div><b>{overview.companies ?? 0}</b><span>Companies</span></div>
+                <div><b>{overview.auditEvents ?? 0}</b><span>Audit events</span></div>
+                <div><b>{overview.notifications ?? 0}</b><span>Notifications</span></div>
+              </div>
+
+              <div style={{marginTop:10}}>
+                <small className="muted">
+                  Tip: Trading Terminal is in the top menu → <b>Trading</b>.
+                </small>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div style={{height:14}} />
+
+        <div className="card">
+          <h3 style={{marginTop:0}}>Notifications</h3>
+
+          {notifications.length === 0 && (
+            <p><small className="muted">{loading ? 'Loading…' : 'No notifications yet.'}</small></p>
+          )}
+
+          {notifications.length > 0 && (
+            <div className="tableWrap" style={{maxHeight:320}}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Severity</th>
+                    <th>Title</th>
+                    <th>Message</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {notifications.slice(0, 20).map((n) => (
+                    <tr key={n.id || (n.createdAt + ':' + n.title)}>
+                      <td><small>{fmtTime(n.createdAt)}</small></td>
+                      <td>
+                        <span className={`badge ${sevBadge(n.severity)}`}>
+                          {String(n.severity || 'info').toUpperCase()}
+                        </span>
+                      </td>
+                      <td><small><b>{n.title || '—'}</b></small></td>
+                      <td><small>{n.message || '—'}</small></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* RIGHT COLUMN */}
+      <div className="col">
+        <div className="card">
+          <h3 style={{marginTop:0}}>Audit Log</h3>
+
+          {audit.length === 0 && (
+            <p><small className="muted">{loading ? 'Loading…' : 'No audit events yet.'}</small></p>
+          )}
+
+          {audit.length > 0 && (
+            <div className="tableWrap" style={{maxHeight:620}}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Action</th>
+                    <th>Actor</th>
+                    <th>Target</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {audit.slice(0, 60).map((ev) => (
+                    <tr key={ev.id || (ev.at + ':' + ev.action)}>
+                      <td><small>{fmtTime(ev.at)}</small></td>
+                      <td><small>{ev.action || '—'}</small></td>
+                      <td><small>{ev.actorId || '—'}</small></td>
+                      <td><small>{(ev.targetType || '—') + ':' + (ev.targetId || '—')}</small></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div style={{marginTop:10}}>
+            <small className="muted">Managers are read-only here by default.</small>
+          </div>
+        </div>
       </div>
     </div>
   );
