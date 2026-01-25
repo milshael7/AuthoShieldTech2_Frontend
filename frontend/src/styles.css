@@ -7,6 +7,15 @@
   --ok:#2bd576;
   --warn:#ffd166;
   --danger:#ff5a5f;
+
+  /* ✅ Put your images here (public folder paths) */
+  --logo-url: url("/autoshield-logo.png");
+  --wm-url: url("/autoshield-watermark.png");
+
+  /* watermark tuning */
+  --wm-opacity: .08;      /* smaller = fainter */
+  --wm-size: 820px;       /* watermark size */
+  --wm-y: 56%;            /* vertical position */
 }
 
 *{box-sizing:border-box}
@@ -15,28 +24,48 @@ html,body{height:100%}
 body{
   margin:0;
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+  color:var(--text);
+  overflow-x:hidden;
+
+  /* ✅ Clean base background (no “big logo” here) */
   background:
     radial-gradient(1100px 600px at 20% 0%, rgba(80,140,255,.20), transparent 55%),
     radial-gradient(1000px 700px at 90% 40%, rgba(0,255,170,.10), transparent 55%),
     var(--bg);
-  color:var(--text);
-  overflow-x:hidden;
 }
 
-/* ✅ app container */
-.container{max-width:1100px;margin:0 auto;padding:24px;}
+/* ✅ True watermark layer behind everything (no black box) */
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:-1;
 
-/* ✅ cards/panels */
+  background-image: var(--wm-url);
+  background-repeat:no-repeat;
+  background-position: 50% var(--wm-y);
+  background-size: var(--wm-size);
+  opacity: var(--wm-opacity);
+
+  /* makes it look “stamped” instead of a photo */
+  filter: grayscale(1) contrast(1.05);
+}
+
+.container{max-width:1100px;margin:0 auto;padding:24px;}
 .card{
   background:var(--panel);
   border:1px solid var(--line);
   border-radius:16px;
   padding:16px;
+  backdrop-filter: blur(6px);
 }
 
 .row{display:flex;gap:16px;flex-wrap:wrap;}
 .col{flex:1;min-width:280px;}
 small{color:var(--muted)}
+.muted{opacity:.75;}
+.error{color:#ff6b6b;}
 
 input,select,button,textarea{
   width:100%;
@@ -81,18 +110,18 @@ button.active{
 
 .brand{display:flex;align-items:center;gap:10px;}
 
-/* ✅ THIS is the ONLY logo spot (the little square) */
+/* ✅ THIS is the small square logo next to AutoShield TECH */
 .logo{
   width:38px;
   height:38px;
   border-radius:12px;
   border:1px solid var(--line);
+  background-color: rgba(0,0,0,.22);
 
-  /* shows your uploaded logo */
-  background-color: rgba(0,0,0,.25);
-  background-image: url("/autoshield-logo.png");
-  background-repeat: no-repeat;
-  background-position: center;
+  /* pulls from /public/autoshield-logo.png */
+  background-image: var(--logo-url);
+  background-repeat:no-repeat;
+  background-position:center;
   background-size: cover;
 }
 
@@ -124,8 +153,6 @@ button.active{
   font-size:13px;
   white-space:nowrap;
 }
-.error{color:#ff6b6b;}
-.muted{opacity:.75;}
 
 /* --- Trading terminal layout --- */
 .tradeWrap{width:100%; max-width:1100px; margin:0 auto;}
@@ -163,10 +190,8 @@ button.active{
   margin-top:10px;
   min-width:0;
 }
-.chatBox input{
-  flex:1;
-  min-width:0;
-}
+.chatBox input{flex:1;min-width:0;}
+
 .chatMsg{
   padding:10px;
   border-radius:10px;
