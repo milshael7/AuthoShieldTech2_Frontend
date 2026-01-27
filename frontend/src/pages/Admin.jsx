@@ -1,3 +1,4 @@
+// frontend/src/pages/Admin.jsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api.js';
 import NotificationList from '../components/NotificationList.jsx';
@@ -24,12 +25,15 @@ export default function Admin({ user }) {
       api.adminCompanies(),
       api.adminNotifications(),
     ]);
-    setUsers(u);
-    setCompanies(c);
-    setNotes(n);
+    setUsers(u || []);
+    setCompanies(c || []);
+    setNotes(n || []);
   };
 
-  useEffect(() => { load().catch(e => alert(e.message)); }, []);
+  useEffect(() => {
+    load().catch(e => alert(e.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const createUser = async (e) => {
     e.preventDefault();
@@ -41,8 +45,9 @@ export default function Admin({ user }) {
         companyId: newUser.companyId || null,
       };
       await api.adminCreateUser(payload);
-      setNewUser({ email:'', role:'Individual', companyId:'', password:'' });
+      setNewUser({ email: '', role: 'Individual', companyId: '', password: '' });
       await load();
+      alert('User created.');
     } catch (e) {
       alert(e.message);
     }
@@ -58,9 +63,11 @@ export default function Admin({ user }) {
     }
   };
 
+  // ✅ FIXED: correct field name + correct toggle direction
   const toggleAutoprotect = async (u) => {
     try {
-      await api.adminUpdateSubscription(u.id, { autoprotectEnabled: !u.autoprotechEnabled });
+      const next = !u.autoprotectEnabled;
+      await api.adminUpdateSubscription(u.id, { autoprotectEnabled: next });
       await load();
     } catch (e) {
       alert(e.message);
@@ -80,16 +87,25 @@ export default function Admin({ user }) {
     e.preventDefault();
     try {
       await api.adminCreateCompany({ name: newCompany.name.trim() });
-      setNewCompany({ name:'' });
+      setNewCompany({ name: '' });
       await load();
+      alert('Company created.');
     } catch (e) {
       alert(e.message);
     }
   };
 
-  const companyOptions = useMemo(() => companies.map(c => (
-    <option key={c.id} value={c.id}>{c.name}</option>
-  )), [companies]);
+  const companyOptions = useMemo(() => (
+    companies.map(c => (
+      <option key={c.id} value={c.id}>{c.name}</option>
+    ))
+  ), [companies]);
+
+  const companyNameById = useMemo(() => {
+    const m = new Map();
+    (companies || []).forEach(c => m.set(c.id, c.name));
+    return m;
+  }, [companies]);
 
   return (
     <div className="grid">
@@ -102,21 +118,41 @@ export default function Admin({ user }) {
         <h3>Create user</h3>
         <form onSubmit={createUser} className="form">
           <label>Email</label>
-          <input value={newUser.email} onChange={e=>setNewUser({...newUser,email:e.target.value})} placeholder="name@company.com" required />
+          <input
+            value={newUser.email}
+            onChange={e => setNewUser({ ...newUser, email: e.target.value })}
+            placeholder="name@company.com"
+            required
+          />
+
           <label>Role</label>
-          <select value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})}>
-            <option>Individual</option>
-            <option>Company</option>
-            <option>Manager</option>
-            <option>Admin</option>
+          <select
+            value={newUser.role}
+            onChange={e => setNewUser({ ...newUser, role: e.target.value })}
+          >
+            <option value="Individual">Individual</option>
+            <option value="Company">Company</option>
+            <option value="Manager">Manager</option>
+            <option value="Admin">Admin</option>
           </select>
+
           <label>Company (optional)</label>
-          <select value={newUser.companyId} onChange={e=>setNewUser({...newUser,companyId:e.target.value})}>
+          <select
+            value={newUser.companyId}
+            onChange={e => setNewUser({ ...newUser, companyId: e.target.value })}
+          >
             <option value="">— none —</option>
             {companyOptions}
           </select>
+
           <label>Temporary password</label>
-          <input value={newUser.password} onChange={e=>setNewUser({...newUser,password:e.target.value})} placeholder="Set a temp password" required />
+          <input
+            value={newUser.password}
+            onChange={e => setNewUser({ ...newUser, password: e.target.value })}
+            placeholder="Set a temp password"
+            required
+          />
+
           <button type="submit">Create user</button>
         </form>
       </div>
@@ -125,32 +161,61 @@ export default function Admin({ user }) {
         <h3>Create company</h3>
         <form onSubmit={createCompany} className="form">
           <label>Name</label>
-          <input value={newCompany.name} onChange={e=>setNewCompany({name:e.target.value})} placeholder="Company name" required />
+          <input
+            value={newCompany.name}
+            onChange={e => setNewCompany({ name: e.target.value })}
+            placeholder="Company name"
+            required
+          />
           <button type="submit">Create company</button>
         </form>
       </div>
 
       <div className="card">
         <h3>Users</h3>
-        <div className="table">
-          <div className="row head">
-            <div>Email</div><div>Role</div><div>Subscription</div><div>AutoProtect</div><div>Actions</div>
-          </div>
-          {users.map(u => (
-            <div className="row" key={u.id}>
-              <div>{u.email}</div>
-              <div>{u.role}</div>
-              <div>{u.subscriptionStatus}</div>
-              <div>{u.autoprotechEnabled ? 'On' : 'Off'}</div>
-              <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
-                <button onClick={()=>rotateId(u.id)}>Rotate ID</button>
-                <button onClick={()=>toggleAutoprotect(u)}>{u.autoprotechEnabled?'Disable':'Enable'} AutoProtect</button>
-                <button onClick={()=>setSub(u,'Active')}>Set Active</button>
-                <button onClick={()=>setSub(u,'PastDue')}>Set PastDue</button>
-                <button onClick={()=>setSub(u,'Locked')}>Lock</button>
-              </div>
-            </div>
-          ))}
+
+        <div className="tableWrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Company</th>
+                <th>Subscription</th>
+                <th>AutoProtect</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id}>
+                  <td>{u.email}</td>
+                  <td>{u.role}</td>
+                  <td>{u.companyId ? (companyNameById.get(u.companyId) || u.companyId) : '—'}</td>
+                  <td>{u.subscriptionStatus}</td>
+                  <td>{u.autoprotectEnabled ? 'On' : 'Off'}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => rotateId(u.id)}>Rotate ID</button>
+                      <button onClick={() => toggleAutoprotect(u)}>
+                        {u.autoprotectEnabled ? 'Disable' : 'Enable'} AutoProtect
+                      </button>
+                      <button onClick={() => setSub(u, 'Active')}>Set Active</button>
+                      <button onClick={() => setSub(u, 'PastDue')}>Set PastDue</button>
+                      <button onClick={() => setSub(u, 'Locked')}>Lock</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {users.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="muted">No users yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
