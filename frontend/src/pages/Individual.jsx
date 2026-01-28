@@ -1,30 +1,29 @@
-// frontend/src/pages/Individual.jsx
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import NotificationList from '../components/NotificationList.jsx';
 
-function Dot({ status }) {
-  const s = String(status || 'info').toLowerCase();
-  const bg =
-    s === 'ok' ? 'rgba(43,213,118,.9)' :
-    s === 'warn' ? 'rgba(255,209,102,.95)' :
-    s === 'danger' ? 'rgba(255,90,95,.95)' :
-    'rgba(122,167,255,.9)';
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        width: 10,
-        height: 10,
-        borderRadius: 999,
-        display: 'inline-block',
-        background: bg,
-        boxShadow: '0 0 0 3px rgba(255,255,255,0.05)',
-        marginRight: 8,
-        flex: '0 0 auto'
-      }}
-    />
-  );
+function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+
+function calcScore({ summary, checks }) {
+  // Simple MVP score (0–100) based on checks + activity
+  const list = checks?.checks || [];
+  if (!list.length) return 60;
+
+  let base = 80;
+  for (const c of list) {
+    if (c.status === 'danger') base -= 22;
+    else if (c.status === 'warn') base -= 12;
+    else if (c.status === 'ok') base += 2;
+  }
+
+  const notes = summary?.totals?.notifications ?? 0;
+  const audit = summary?.totals?.auditEvents ?? 0;
+
+  // Too many events/alerts drags score down a bit (MVP)
+  base -= Math.min(18, Math.floor(notes / 5));
+  base -= Math.min(12, Math.floor(audit / 30));
+
+  return clamp(base, 0, 100);
 }
 
 export default function Individual({ user }) {
@@ -36,37 +35,36 @@ export default function Individual({ user }) {
   });
   const [created, setCreated] = useState(null);
 
-  // ✅ NEW: posture state
-  const [summary, setSummary] = useState(null);
-  const [checks, setChecks] = useState([]);
-  const [recent, setRecent] = useState({ audit: [], notifications: [] });
-  const [loadingPosture, setLoadingPosture] = useState(true);
+  // ✅ new posture data
+  const [postureSummary, setPostureSummary] = useState(null);
+  const [postureChecks, setPostureChecks] = useState(null);
+  const [postureRecent, setPostureRecent] = useState(null);
   const [postureErr, setPostureErr] = useState('');
 
   const loadNotes = async () => setNotes(await api.meNotifications());
 
   const loadPosture = async () => {
-    setLoadingPosture(true);
     setPostureErr('');
     try {
       const [s, c, r] = await Promise.all([
         api.postureSummary(),
         api.postureChecks(),
-        api.postureRecent(50),
+        api.postureRecent(30),
       ]);
-      setSummary(s || null);
-      setChecks(c?.checks || []);
-      setRecent({ audit: r?.audit || [], notifications: r?.notifications || [] });
+      setPostureSummary(s);
+      setPostureChecks(c);
+      setPostureRecent(r);
     } catch (e) {
       setPostureErr(e?.message || 'Failed to load posture data');
-    } finally {
-      setLoadingPosture(false);
     }
   };
 
-  async function loadAll() {
-    await Promise.all([loadNotes(), loadPosture()]);
-  }
+  const loadAll = async () => {
+    await Promise.all([
+      loadNotes(),
+      loadPosture(),
+    ]);
+  };
 
   useEffect(() => { loadAll().catch(e => alert(e.message)); }, []);
 
@@ -86,92 +84,166 @@ export default function Individual({ user }) {
       });
       setCreated(p);
       setProject({ title:'', issueType:'phishing', details:'' });
-      await loadNotes();
-      await loadPosture();
+      await loadAll();
     } catch (e) { alert(e.message); }
   };
 
+  const score = calcScore({ summary: postureSummary, checks: postureChecks });
+  const meterPct = `${score}%`;
+
+  // MVP “coverage” bars (fake signals for now — we’ll wire real ones later)
+  const coverage = [
+    { label: 'Threat', val: clamp(score - 10, 0, 100) },
+    { label: 'Vuln', val: clamp(score - 18, 0, 100) },
+    { label: 'Access', val: clamp(score - 6, 0, 100) },
+    { label: 'Data', val: clamp(score - 14, 0, 100) },
+  ];
+
   return (
     <div className="grid">
+
+      {/* ✅ Posture dashboard (matches your picture vibe) */}
+      <div className="card" style={{gridColumn:'1 / -1'}}>
+        <div className="postureWrap">
+
+          <div className="postureCard">
+            <div className="postureTop">
+              <div className="postureTitle">
+                <b>Security Posture</b>
+                <small>
+                  Scope: {postureSummary?.scope?.type || '—'} • Updated: {postureSummary?.time ? new Date(postureSummary.time).toLocaleString() : '—'}
+                </small>
+              </div>
+
+              <div className="postureScore">
+                <div className="scoreRing">{score}</div>
+                <div className="scoreMeta">
+                  <b>Overall Score</b>
+                  <span>{score >= 80 ? 'Healthy' : (score >= 60 ? 'Watch' : 'At Risk')}</span>
+                </div>
+                <button onClick={loadPosture}>Refresh</button>
+              </div>
+            </div>
+
+            {postureErr && <p className="error" style={{marginTop:10}}>{postureErr}</p>}
+
+            <div className="meter" aria-hidden="true">
+              <div style={{width: meterPct}} />
+            </div>
+
+            <div className="coverGrid">
+              {coverage.map(x => (
+                <div key={x.label}>
+                  <div className="coverItemTop">
+                    <b>{x.label} Coverage</b>
+                    <small>{x.val}%</small>
+                  </div>
+                  <div className="coverBar" aria-hidden="true">
+                    <div style={{width: `${x.val}%`}} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{height:14}} />
+
+            <b style={{display:'block', marginBottom:8}}>Recommended checks</b>
+            <div className="list">
+              {(postureChecks?.checks || []).slice(0, 4).map(c => (
+                <div className="card" key={c.id} style={{background:'rgba(0,0,0,.18)'}}>
+                  <div style={{display:'flex', justifyContent:'space-between', gap:10, alignItems:'center'}}>
+                    <div>
+                      <b>{c.title}</b>
+                      <div><small>{c.message}</small></div>
+                    </div>
+                    <span className={`badge ${c.status === 'ok' ? 'ok' : (c.status === 'danger' ? 'danger' : 'warn')}`}>
+                      {c.status.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {(!postureChecks?.checks || postureChecks.checks.length === 0) && (
+                <small className="muted">No checks yet.</small>
+              )}
+            </div>
+          </div>
+
+          <div className="postureCard radarBox">
+            <div className="postureTop">
+              <div className="postureTitle">
+                <b>Signal Radar</b>
+                <small>MVP visual (we’ll connect real signals later)</small>
+              </div>
+            </div>
+
+            <div className="radar" />
+
+            <div style={{height:12}} />
+            <b style={{display:'block', marginBottom:8}}>Recent activity</b>
+
+            <div className="tableWrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Type</th>
+                    <th>Action/Title</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const a = (postureRecent?.audit || []).slice(0, 6).map(x => ({
+                      t: x.at || x.time || x.createdAt,
+                      type: 'audit',
+                      label: x.action || 'event'
+                    }));
+                    const n = (postureRecent?.notifications || []).slice(0, 6).map(x => ({
+                      t: x.createdAt || x.at || x.time,
+                      type: 'note',
+                      label: x.title || 'notification'
+                    }));
+                    const merged = [...a, ...n]
+                      .filter(x => x.t)
+                      .sort((p, q) => new Date(q.t) - new Date(p.t))
+                      .slice(0, 8);
+
+                    if (merged.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={3} className="muted">No recent activity yet.</td>
+                        </tr>
+                      );
+                    }
+
+                    return merged.map((x, idx) => (
+                      <tr key={idx}>
+                        <td><small>{new Date(x.t).toLocaleString()}</small></td>
+                        <td><small>{x.type}</small></td>
+                        <td><small>{x.label}</small></td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Existing cards (kept) */}
       <div className="card">
         <h2>Cybersecurity Dashboard</h2>
-        <p><small>Report an issue and track posture + activity.</small></p>
-        <div style={{ height: 10 }} />
-        <button onClick={loadAll} disabled={loadingPosture}>
-          {loadingPosture ? 'Refreshing…' : 'Refresh dashboard'}
-        </button>
-        {postureErr && <p className="error" style={{ marginTop: 10 }}>{postureErr}</p>}
+        <p><small>Report an issue and track AutoProtect actions.</small></p>
       </div>
 
-      {/* ✅ Posture Summary */}
-      <div className="card">
-        <h3>Security Posture (Summary)</h3>
-        {!summary && <p><small>{loadingPosture ? 'Loading…' : 'No data yet.'}</small></p>}
-        {summary && (
-          <>
-            <div className="muted" style={{ marginTop: 6 }}>
-              Scope: <b>{summary.scope?.type || '—'}</b>
-              {summary.scope?.companyId ? ` • Company: ${summary.scope.companyId}` : ''}
-              {summary.scope?.userId ? ` • User: ${summary.scope.userId}` : ''}
-            </div>
-
-            <div className="kpi" style={{ marginTop: 10 }}>
-              <div><b>{summary.totals?.auditEvents ?? 0}</b><span>Audit events</span></div>
-              <div><b>{summary.totals?.notifications ?? 0}</b><span>Notifications</span></div>
-              {typeof summary.totals?.users !== 'undefined' && (
-                <div><b>{summary.totals.users}</b><span>Users</span></div>
-              )}
-              {typeof summary.totals?.companies !== 'undefined' && (
-                <div><b>{summary.totals.companies}</b><span>Companies</span></div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* ✅ Checks */}
-      <div className="card">
-        <h3>Checks</h3>
-        {checks.length === 0 && (
-          <p><small>{loadingPosture ? 'Loading…' : 'No checks yet.'}</small></p>
-        )}
-
-        {checks.length > 0 && (
-          <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
-            {checks.map(ch => (
-              <div
-                key={ch.id}
-                style={{
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  background: 'rgba(0,0,0,0.18)',
-                  borderRadius: 12,
-                  padding: 12
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                    <Dot status={ch.status} />
-                    <b style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {ch.title}
-                    </b>
-                  </div>
-                  <small className="muted">{ch.at ? new Date(ch.at).toLocaleString() : ''}</small>
-                </div>
-                <div style={{ marginTop: 6 }}><small>{ch.message}</small></div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Existing: Report issue */}
       <div className="card">
         <h3>Report a security issue</h3>
         <form onSubmit={create} className="form">
           <label>Title</label>
           <input
             value={project.title}
-            onChange={e => setProject({ ...project, title: e.target.value })}
+            onChange={e=>setProject({...project,title:e.target.value})}
             placeholder="e.g., suspicious login attempt"
             required
           />
@@ -179,7 +251,7 @@ export default function Individual({ user }) {
           <label>Type</label>
           <select
             value={project.issueType}
-            onChange={e => setProject({ ...project, issueType: e.target.value })}
+            onChange={e=>setProject({...project,issueType:e.target.value})}
           >
             <option value="phishing">Phishing</option>
             <option value="account_takeover">Account takeover</option>
@@ -191,98 +263,34 @@ export default function Individual({ user }) {
           <label>Details</label>
           <textarea
             value={project.details}
-            onChange={e => setProject({ ...project, details: e.target.value })}
+            onChange={e=>setProject({...project,details:e.target.value})}
             placeholder="What happened? What did you notice?"
             rows={4}
           />
-
           <button type="submit">Create case</button>
         </form>
 
         {created && (
-          <div style={{ marginTop: 12 }}>
+          <div style={{marginTop:12}}>
             <b>Created case:</b> <code>{created.id}</code>
             <div><small>Status: {created.status || 'Open'}</small></div>
           </div>
         )}
       </div>
 
-      {/* Existing: Notifications */}
       <div className="card">
         <h3>Notifications</h3>
         <NotificationList items={notes} onRead={markRead} />
       </div>
 
-      {/* ✅ Recent Activity (audit + notifications) */}
       <div className="card">
-        <h3>Recent Activity</h3>
-
-        <div style={{ marginTop: 10 }}>
-          <b>Audit</b>
-          <div className="tableWrap" style={{ marginTop: 8, maxHeight: 280, overflow: 'auto' }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Action</th>
-                  <th>Actor</th>
-                  <th>Target</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(recent.audit || []).slice(0, 25).map((ev, i) => (
-                  <tr key={ev.id || i}>
-                    <td><small>{ev.at ? new Date(ev.at).toLocaleString() : '—'}</small></td>
-                    <td><small>{ev.action || '—'}</small></td>
-                    <td><small>{ev.actorId || '—'}</small></td>
-                    <td><small>{(ev.targetType || '—') + ':' + (ev.targetId || '—')}</small></td>
-                  </tr>
-                ))}
-                {(recent.audit || []).length === 0 && (
-                  <tr><td colSpan="4" className="muted">No audit events yet.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div style={{ height: 14 }} />
-
-        <div>
-          <b>System Notifications (recent)</b>
-          <div className="tableWrap" style={{ marginTop: 8, maxHeight: 280, overflow: 'auto' }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Title</th>
-                  <th>Severity</th>
-                  <th>Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(recent.notifications || []).slice(0, 25).map((n, i) => (
-                  <tr key={n.id || i}>
-                    <td><small>{n.createdAt ? new Date(n.createdAt).toLocaleString() : '—'}</small></td>
-                    <td><small>{n.title || '—'}</small></td>
-                    <td><small>{n.severity || 'info'}</small></td>
-                    <td><small>{n.message || '—'}</small></td>
-                  </tr>
-                ))}
-                {(recent.notifications || []).length === 0 && (
-                  <tr><td colSpan="4" className="muted">No notifications yet.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <p style={{ marginTop: 10 }}>
-          <small className="muted">
-            MVP note: these are starter “posture signals”. Next step is wiring real checks (MFA status, login anomalies, device trust, endpoint alerts).
-          </small>
-        </p>
+        <h3>How AutoProtect works (MVP)</h3>
+        <p><small>
+          Right now, AutoProtect creates an audit trail and notifications. Next step is wiring the always-on AI worker
+          to monitor logins, requests, and trading activity and automatically trigger blocks/alerts.
+        </small></p>
       </div>
+
     </div>
   );
 }
