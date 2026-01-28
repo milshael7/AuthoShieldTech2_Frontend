@@ -34,11 +34,8 @@ async function req(path, { method = 'GET', body, auth = true, headers: extraHead
 
 export const api = {
   // Auth
-  login: (email, password) =>
-    req('/api/auth/login', { method: 'POST', body: { email, password }, auth: false }),
-
-  resetPassword: (email, newPassword) =>
-    req('/api/auth/reset-password', { method: 'POST', body: { email, newPassword }, auth: false }),
+  login: (email, password) => req('/api/auth/login', { method: 'POST', body: { email, password }, auth: false }),
+  resetPassword: (email, newPassword) => req('/api/auth/reset-password', { method: 'POST', body: { email, newPassword }, auth: false }),
 
   // Me
   meNotifications: () => req('/api/me/notifications'),
@@ -58,21 +55,38 @@ export const api = {
   managerOverview: () => req('/api/manager/overview'),
   managerUsers: () => req('/api/manager/users'),
   managerCompanies: () => req('/api/manager/companies'),
-  managerNotifications: () => req('/api/manager/notifications'),
+  managerNotifications: (limit = 200) => req(`/api/manager/notifications?limit=${encodeURIComponent(limit)}`),
   managerAudit: (limit = 200) => req(`/api/manager/audit?limit=${encodeURIComponent(limit)}`),
+
+  // Company
+  companyMe: () => req('/api/company/me'),
+  companyNotifications: () => req('/api/company/notifications'),
+  companyMarkRead: (id) => req(`/api/company/notifications/${id}/read`, { method: 'POST' }),
+  companyAddMember: (userId) => req('/api/company/members', { method: 'POST', body: { userId } }),
+  companyRemoveMember: (userId) => req(`/api/company/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
 
   // Trading
   tradingSymbols: () => req('/api/trading/symbols'),
   tradingCandles: (symbol) => req(`/api/trading/candles?symbol=${encodeURIComponent(symbol)}`),
+
+  // Paper (status/reset/config)
+  paperStatus: () => req('/api/paper/status'),
+  paperReset: (resetKey) =>
+    req('/api/paper/reset', {
+      method: 'POST',
+      headers: resetKey ? { 'x-reset-key': resetKey } : {},
+    }),
+  // If your backend has /api/paper/config (setConfig), keep this:
+  paperConfig: (payload) => req('/api/paper/config', { method: 'POST', body: payload }),
+
+  // Posture (Cybersecurity dashboards)
+  postureSummary: () => req('/api/posture/summary'),
+  postureChecks: () => req('/api/posture/checks'),
+  postureRecent: (limit = 50) => req(`/api/posture/recent?limit=${encodeURIComponent(limit)}`),
 
   // AI
   aiChat: (message, context) => req('/api/ai/chat', { method: 'POST', body: { message, context } }),
   aiTrainingStatus: () => req('/api/ai/training/status'),
   aiTrainingStart: () => req('/api/ai/training/start', { method: 'POST' }),
   aiTrainingStop: () => req('/api/ai/training/stop', { method: 'POST' }),
-
-  // ✅ NEW: Cybersecurity Posture (MVP)
-  postureSummary: () => req('/api/posture/summary'),
-  postureChecks: () => req('/api/posture/checks'),
-  postureRecent: (limit = 50) => req(`/api/posture/recent?limit=${encodeURIComponent(limit)}`),
 };
