@@ -8,8 +8,7 @@ function pct(n) {
 }
 
 function scoreFromChecks(checks = []) {
-  // Simple MVP scoring:
-  // ok = 1, warn = 0.6, danger = 0.25
+  // ok = 1, warn = 0.6, danger = 0.25, info/other = 0.5
   if (!checks.length) return 0;
   const val = checks.reduce((s, c) => {
     const st = String(c.status || 'info').toLowerCase();
@@ -22,23 +21,21 @@ function scoreFromChecks(checks = []) {
 }
 
 function coverageModel({ summary, checks }) {
-  // “Looks legit” bars (MVP placeholders tied to real signals we have)
-  // You can swap these later for real telemetry.
   const score = scoreFromChecks(checks);
 
-  // Base categories
   const autoprotect = checks.find(c => c.id === 'autoprotect');
   const autoprotectPct = autoprotect?.status === 'ok' ? 92 : 55;
 
   const passwordPct = checks.find(c => c.id === 'password')?.status === 'ok' ? 86 : 60;
   const mfaPct = checks.find(c => c.id === 'mfa')?.status === 'ok' ? 78 : 58;
 
-  // Activity “confidence” based on real counts (audit/notifications)
   const auditN = Number(summary?.totals?.auditEvents || 0);
   const noteN = Number(summary?.totals?.notifications || 0);
-  const activityPct = Math.max(35, Math.min(95, Math.round(35 + Math.log10(1 + auditN + noteN) * 35)));
+  const activityPct = Math.max(
+    35,
+    Math.min(95, Math.round(35 + Math.log10(1 + auditN + noteN) * 35))
+  );
 
-  // Overall meter uses score as the main driver
   const meter = score;
 
   return {
@@ -53,7 +50,10 @@ function coverageModel({ summary, checks }) {
   };
 }
 
-export default function PosturePanel({ title = 'Security Posture', subtitle = 'Live posture snapshot (MVP)' }) {
+export default function PosturePanel({
+  title = 'Security Posture',
+  subtitle = 'Live posture snapshot (MVP)'
+}) {
   const [summary, setSummary] = useState(null);
   const [checks, setChecks] = useState([]);
   const [recent, setRecent] = useState({ audit: [], notifications: [] });
@@ -144,7 +144,10 @@ export default function PosturePanel({ title = 'Security Posture', subtitle = 'L
               )}
 
               {checks.map(c => (
-                <div key={c.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
+                <div
+                  key={c.id}
+                  style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}
+                >
                   <span className={`dot ${c.status || 'info'}`} aria-hidden="true" />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
@@ -183,9 +186,11 @@ export default function PosturePanel({ title = 'Security Posture', subtitle = 'L
         <div className="card" style={{ padding: 12, background: 'rgba(0,0,0,.18)' }}>
           <b style={{ fontSize: 13 }}>Notifications</b>
           <div style={{ height: 10 }} />
+
           {(recent.notifications || []).length === 0 && (
             <small>{loading ? 'Loading…' : 'No notifications yet.'}</small>
           )}
+
           <ul className="list">
             {(recent.notifications || []).slice(0, 8).map(n => (
               <li key={n.id}>
@@ -193,7 +198,11 @@ export default function PosturePanel({ title = 'Security Posture', subtitle = 'L
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                     <b>{n.title || 'Notification'}</b>
-                    <small>{n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</small>
+
+                    {/* ✅ FIX: backend uses "at" not "createdAt" */}
+                    <small>
+                      {n.at ? new Date(n.at).toLocaleString() : ''}
+                    </small>
                   </div>
                   <div><small>{n.message || ''}</small></div>
                 </div>
@@ -207,6 +216,7 @@ export default function PosturePanel({ title = 'Security Posture', subtitle = 'L
         <div className="card" style={{ padding: 12, background: 'rgba(0,0,0,.18)' }}>
           <b style={{ fontSize: 13 }}>Audit Log</b>
           <div style={{ height: 10 }} />
+
           {(recent.audit || []).length === 0 && (
             <small>{loading ? 'Loading…' : 'No audit events yet.'}</small>
           )}
@@ -223,7 +233,7 @@ export default function PosturePanel({ title = 'Security Posture', subtitle = 'L
               </thead>
               <tbody>
                 {(recent.audit || []).slice(0, 10).map(ev => (
-                  <tr key={ev.id || ev.at + ev.action}>
+                  <tr key={ev.id || `${ev.at || ''}-${ev.action || ''}`}>
                     <td><small>{ev.at ? new Date(ev.at).toLocaleString() : ''}</small></td>
                     <td><small>{ev.action || ''}</small></td>
                     <td><small>{ev.actorId || '—'}</small></td>
