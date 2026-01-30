@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+// frontend/src/lib/api.js
+
+const API_BASE = (import.meta.env.VITE_API_BASE || '').trim();
 
 const TOKEN_KEY = 'as_token';
 const USER_KEY = 'as_user';
@@ -14,8 +16,20 @@ export const getSavedUser = () => {
 export const saveUser = (u) => localStorage.setItem(USER_KEY, JSON.stringify(u));
 export const clearUser = () => localStorage.removeItem(USER_KEY);
 
-async function req(path, { method = 'GET', body, auth = true, headers: extraHeaders = {} } = {}) {
-  const headers = { 'Content-Type': 'application/json', ...extraHeaders };
+// Internal request helper
+async function req(
+  path,
+  { method = 'GET', body, auth = true, headers: extraHeaders = {} } = {}
+) {
+  if (!API_BASE) {
+    throw new Error('Missing VITE_API_BASE (frontend env). Set it on Vercel and redeploy.');
+  }
+
+  const headers = { ...extraHeaders };
+
+  // Only set JSON content-type when sending JSON
+  const hasBody = typeof body !== 'undefined';
+  if (hasBody) headers['Content-Type'] = 'application/json';
 
   if (auth) {
     const t = getToken();
@@ -25,11 +39,22 @@ async function req(path, { method = 'GET', body, auth = true, headers: extraHead
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: hasBody ? JSON.stringify(body) : undefined,
   });
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  // Try JSON first, but don’t crash if backend returns text/html
+  let data = {};
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  if (ct.includes('application/json')) {
+    data = await res.json().catch(() => ({}));
+  } else {
+    const text = await res.text().catch(() => '');
+    data = { error: text || undefined };
+  }
+
+  if (!res.ok) {
+    throw new Error(data.error || data.message || `Request failed (${res.status})`);
+  }
   return data;
 }
 
@@ -39,17 +64,21 @@ export const api = {
     req('/api/auth/login', { method: 'POST', body: { email, password }, auth: false }),
 
   resetPassword: (email, newPassword) =>
-    req('/api/auth/reset-password', { method: 'POST', body: { email, newPassword }, auth: false }),
+    req('/api/auth/reset-password', {
+      method: 'POST',
+      body: { email, newPassword },
+      auth: false
+    }),
 
   // ---------------- Me ----------------
   meNotifications: () => req('/api/me/notifications'),
-  markMyNotificationRead: (id) => req(`/api/me/notifications/${id}/read`, { method: 'POST' }),
+  markMyNotificationRead: (id) => req(`/api/me/notifications/${id}/read`, { method: 'POST', body: {} }),
   createProject: (payload) => req('/api/me/projects', { method: 'POST', body: payload }),
 
   // ---------------- Admin ----------------
   adminUsers: () => req('/api/admin/users'),
   adminCreateUser: (payload) => req('/api/admin/users', { method: 'POST', body: payload }),
-  adminRotateUserId: (id) => req(`/api/admin/users/${id}/rotate-id`, { method: 'POST' }),
+  adminRotateUserId: (id) => req(`/api/admin/users/${id}/rotate-id`, { method: 'POST', body: {} }),
   adminUpdateSubscription: (id, payload) =>
     req(`/api/admin/users/${id}/subscription`, { method: 'POST', body: payload }),
   adminCompanies: () => req('/api/admin/companies'),
@@ -61,20 +90,24 @@ export const api = {
   managerUsers: () => req('/api/manager/users'),
   managerCompanies: () => req('/api/manager/companies'),
   managerNotifications: () => req('/api/manager/notifications'),
-  managerAudit: (limit = 200) => req(`/api/manager/audit?limit=${encodeURIComponent(limit)}`),
+  managerAudit: (limit = 200) =>
+    req(`/api/manager/audit?limit=${encodeURIComponent(limit)}`),
 
   // ---------------- Trading ----------------
   tradingSymbols: () => req('/api/trading/symbols'),
-  tradingCandles: (symbol) => req(`/api/trading/candles?symbol=${encodeURIComponent(symbol)}`),
+  tradingCandles: (symbol) =>
+    req(`/api/trading/candles?symbol=${encodeURIComponent(symbol)}`),
 
   // ---------------- AI ----------------
-  aiChat: (message, context) => req('/api/ai/chat', { method: 'POST', body: { message, context } }),
+  aiChat: (message, context) =>
+    req('/api/ai/chat', { method: 'POST', body: { message, context } }),
   aiTrainingStatus: () => req('/api/ai/training/status'),
-  aiTrainingStart: () => req('/api/ai/training/start', { method: 'POST' }),
-  aiTrainingStop: () => req('/api/ai/training/stop', { method: 'POST' }),
+  aiTrainingStart: () => req('/api/ai/training/start', { method: 'POST', body: {} }),
+  aiTrainingStop: () => req('/api/ai/training/stop', { method: 'POST', body: {} }),
 
   // ---------------- Paper (controls) ----------------
   paperStatus: () => req('/api/paper/status'),
+
   paperReset: (resetKey) =>
     req('/api/paper/reset', {
       method: 'POST',
@@ -83,6 +116,7 @@ export const api = {
     }),
 
   paperGetConfig: () => req('/api/paper/config'),
+
   paperSetConfig: ({ baselinePct, maxPct, maxTradesPerDay }, ownerKey) =>
     req('/api/paper/config', {
       method: 'POST',
@@ -93,5 +127,6 @@ export const api = {
   // ---------------- Posture (cyber dashboards) ----------------
   postureSummary: () => req('/api/posture/summary'),
   postureChecks: () => req('/api/posture/checks'),
-  postureRecent: (limit = 50) => req(`/api/posture/recent?limit=${encodeURIComponent(limit)}`),
+  postureRecent: (limit = 50) =>
+    req(`/api/posture/recent?limit=${encodeURIComponent(limit)}`),
 };
