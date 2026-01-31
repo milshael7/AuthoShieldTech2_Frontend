@@ -1,5 +1,5 @@
 // frontend/src/pages/Trading.jsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import VoiceAI from "../components/VoiceAI";
 
 function clamp(n, a, b) {
@@ -77,6 +77,19 @@ function niceReason(r) {
   return r;
 }
 
+function toInt(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.floor(n) : fallback;
+}
+
+function toNum(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+const OWNER_KEY_LS = "as_owner_key";
+const RESET_KEY_LS = "as_reset_key";
+
 export default function Trading({ user }) {
   const UI_SYMBOLS = ["BTCUSD", "ETHUSD"];
   const UI_TO_BACKEND = { BTCUSD: "BTCUSDT", ETHUSD: "ETHUSDT" };
@@ -93,6 +106,20 @@ export default function Trading({ user }) {
 
   // control history panel
   const [showHistory, setShowHistory] = useState(true);
+
+  // ✅ NEW: Trading Controls panel
+  const [showControls, setShowControls] = useState(true);
+  const [ownerKey, setOwnerKey] = useState(() => localStorage.getItem(OWNER_KEY_LS) || "");
+  const [resetKey, setResetKey] = useState(() => localStorage.getItem(RESET_KEY_LS) || "");
+  const [cfgStatus, setCfgStatus] = useState("—");
+  const [cfgBusy, setCfgBusy] = useState(false);
+
+  // Local editable config (we keep it separate so polling doesn't clobber typing)
+  const [cfgForm, setCfgForm] = useState({
+    baselinePct: 0.02,     // 2%
+    maxPct: 0.05,          // 5%
+    maxTradesPerDay: 12,   // 12 trades/day
+  });
 
   const [paper, setPaper] = useState({
     running: false,
@@ -207,7 +234,12 @@ export default function Trading({ user }) {
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-          if (msg?.type === "tick" && msg.symbol === wantedBackendSymbol) {
+
+          // Supports both:
+          // 1) {type:'tick', symbol, price, ts}
+          // 2) {symbol, price, ts} (no type)
+          const isTick = (msg?.type === "tick") || (msg && msg.symbol && msg.price);
+          if (isTick && msg.symbol === wantedBackendSymbol) {
             applyTick(Number(msg.price), Number(msg.ts || Date.now()));
           }
         } catch {}
@@ -247,6 +279,39 @@ export default function Trading({ user }) {
     fetchStatus();
     t = setInterval(fetchStatus, 2000);
     return () => clearInterval(t);
+  }, []);
+
+  // ✅ NEW: Load paper config once (and sync form once, without clobbering edits)
+  useEffect(() => {
+    const base = apiBase();
+    if (!base) return;
+
+    let cancelled = false;
+
+    const loadCfg = async () => {
+      try {
+        const res = await fetch(`${base}/api/paper/config`, { credentials: "include" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+        const cfg = data?.config || data || {};
+        if (cancelled) return;
+
+        // If backend already has values, reflect them in the form
+        setCfgForm((prev) => ({
+          baselinePct: Number.isFinite(Number(cfg.baselinePct)) ? Number(cfg.baselinePct) : prev.baselinePct,
+          maxPct: Number.isFinite(Number(cfg.maxPct)) ? Number(cfg.maxPct) : prev.maxPct,
+          maxTradesPerDay: Number.isFinite(Number(cfg.maxTradesPerDay)) ? Number(cfg.maxTradesPerDay) : prev.maxTradesPerDay,
+        }));
+
+        setCfgStatus("Loaded");
+      } catch (e) {
+        if (!cancelled) setCfgStatus(e?.message || "Failed to load");
+      }
+    };
+
+    loadCfg();
+    return () => { cancelled = true; };
   }, []);
 
   // ---- draw candles ----
@@ -368,7 +433,8 @@ export default function Trading({ user }) {
           confidence: paper.learnStats?.confidence ?? 0,
           decision: paper.learnStats?.decision ?? "WAIT",
           decisionReason: paper.learnStats?.lastReason ?? "—",
-          position: paper.position || null
+          position: paper.position || null,
+          config: paper.config || null
         }
       };
 
@@ -444,6 +510,106 @@ export default function Trading({ user }) {
     return `${ts} • ${type} ${sym}`;
   }
 
+  // ✅ NEW: Derived “amount” display based on current equity
+  const baselineUsd = useMemo(() => {
+    const bp = toNum(cfgForm.baselinePct, 0);
+    return Math.max(0, equity * bp);
+  }, [cfgForm.baselinePct, equity]);
+
+  const maxUsd = useMemo(() => {
+    const mp = toNum(cfgForm.maxPct, 0);
+    return Math.max(0, equity * mp);
+  }, [cfgForm.maxPct, equity]);
+
+  // ✅ NEW: Save config (one-shot)
+  const savePaperConfig = async () => {
+    const base = apiBase();
+    if (!base) return alert("Missing VITE_API_BASE");
+
+    const baselinePct = clamp(toNum(cfgForm.baselinePct, 0.02), 0, 1);
+    const maxPct = clamp(toNum(cfgForm.maxPct, 0.05), 0, 1);
+    const maxTradesPerDay = clamp(toInt(cfgForm.maxTradesPerDay, 12), 1, 1000);
+
+    if (maxPct < baselinePct) return alert("Max % must be >= Baseline %");
+
+    setCfgBusy(true);
+    setCfgStatus("Saving…");
+    try {
+      localStorage.setItem(OWNER_KEY_LS, ownerKey || "");
+
+      const res = await fetch(`${base}/api/paper/config`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(ownerKey ? { "x-owner-key": String(ownerKey) } : {})
+        },
+        credentials: "include",
+        body: JSON.stringify({ baselinePct, maxPct, maxTradesPerDay })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+      setCfgStatus("Saved ✅");
+
+      // reflect to paper.config immediately (without waiting for next poll)
+      setPaper((prev) => ({
+        ...prev,
+        config: { ...(prev.config || {}), baselinePct, maxPct, maxTradesPerDay }
+      }));
+    } catch (e) {
+      setCfgStatus("Save failed");
+      alert(e?.message || "Failed to save config");
+    } finally {
+      setCfgBusy(false);
+      setTimeout(() => setCfgStatus((s) => (s === "Saved ✅" ? "OK" : s)), 800);
+    }
+  };
+
+  // ✅ NEW: Reset paper session (one-shot)
+  const resetPaper = async () => {
+    const base = apiBase();
+    if (!base) return alert("Missing VITE_API_BASE");
+    if (!resetKey) return alert("Enter reset key first.");
+
+    if (!confirm("Reset paper trading stats + trades?")) return;
+
+    setCfgBusy(true);
+    try {
+      localStorage.setItem(RESET_KEY_LS, resetKey || "");
+
+      const res = await fetch(`${base}/api/paper/reset`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-reset-key": String(resetKey)
+        },
+        credentials: "include",
+        body: JSON.stringify({})
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+      alert("Paper reset ✅");
+    } catch (e) {
+      alert(e?.message || "Reset failed");
+    } finally {
+      setCfgBusy(false);
+    }
+  };
+
+  // ✅ NEW: Quick “anti one-sided” safety suggestions (UI only, backend logic later)
+  const winRate = useMemo(() => {
+    const w = Number(wins) || 0;
+    const l = Number(losses) || 0;
+    const total = w + l;
+    if (!total) return 0;
+    return w / total;
+  }, [wins, losses]);
+
+  const showRightPanel = showAI && !wideChart;
+
   return (
     <div className="tradeWrap">
       <div className="card">
@@ -489,6 +655,9 @@ export default function Trading({ user }) {
                 <button className={showHistory ? "active" : ""} onClick={() => setShowHistory(v => !v)} style={{ width: "auto" }}>
                   History
                 </button>
+                <button className={showControls ? "active" : ""} onClick={() => setShowControls(v => !v)} style={{ width: "auto" }}>
+                  Controls
+                </button>
                 <button className={showAI ? "active" : ""} onClick={() => setShowAI(v => !v)} style={{ width: "auto" }}>
                   AI
                 </button>
@@ -500,6 +669,117 @@ export default function Trading({ user }) {
           </div>
         </div>
       </div>
+
+      {/* ✅ NEW: Trading Controls Panel (one-shot, full feature in one place) */}
+      {showControls && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <div>
+              <b>AI Trading Controls (Paper)</b>
+              <div className="muted" style={{ marginTop: 4 }}>
+                Set trade size, cap, and trades/day. This controls how aggressive the paper trader can be.
+              </div>
+              <div className="muted" style={{ marginTop: 6 }}>
+                Equity: <b>{fmtMoneyCompact(equity, 2)}</b> • Win rate: <b>{(winRate * 100).toFixed(0)}%</b> • Config: <b>{cfgStatus}</b>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button onClick={savePaperConfig} disabled={cfgBusy} style={{ width: "auto", minWidth: 170 }}>
+                {cfgBusy ? "Working…" : "Save Controls"}
+              </button>
+              <button onClick={resetPaper} disabled={cfgBusy} style={{ width: "auto", minWidth: 170 }}>
+                Reset Paper (key)
+              </button>
+            </div>
+          </div>
+
+          <div style={{ height: 12 }} />
+
+          <div className="grid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+            <div className="card" style={{ background: "rgba(0,0,0,.18)" }}>
+              <b style={{ fontSize: 13 }}>Trade Size</b>
+              <div className="muted" style={{ marginTop: 6, lineHeight: 1.5 }}>
+                Baseline % = normal size. Max % = ceiling size.
+                We also show the estimated USD amount based on your current equity.
+              </div>
+
+              <div style={{ marginTop: 10 }} className="form">
+                <label>Baseline % (normal trade size)</label>
+                <input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  max="1"
+                  value={cfgForm.baselinePct}
+                  onChange={(e) => setCfgForm((p) => ({ ...p, baselinePct: toNum(e.target.value, 0) }))}
+                  placeholder="0.02 = 2%"
+                />
+                <small className="muted">Est. baseline amount: <b>{fmtMoneyCompact(baselineUsd, 2)}</b></small>
+
+                <label style={{ marginTop: 10 }}>Max % (cap)</label>
+                <input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  max="1"
+                  value={cfgForm.maxPct}
+                  onChange={(e) => setCfgForm((p) => ({ ...p, maxPct: toNum(e.target.value, 0) }))}
+                  placeholder="0.05 = 5%"
+                />
+                <small className="muted">Est. max amount: <b>{fmtMoneyCompact(maxUsd, 2)}</b></small>
+
+                <label style={{ marginTop: 10 }}>Max trades per day</label>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  max="1000"
+                  value={cfgForm.maxTradesPerDay}
+                  onChange={(e) => setCfgForm((p) => ({ ...p, maxTradesPerDay: toInt(e.target.value, 1) }))}
+                  placeholder="12"
+                />
+                <small className="muted">This prevents overtrading and helps reduce “one-sided losing.”</small>
+              </div>
+            </div>
+
+            <div className="card" style={{ background: "rgba(0,0,0,.18)" }}>
+              <b style={{ fontSize: 13 }}>Keys + Safety Notes</b>
+
+              <div className="form" style={{ marginTop: 10 }}>
+                <label>Owner key (required to save config)</label>
+                <input
+                  value={ownerKey}
+                  onChange={(e) => setOwnerKey(e.target.value)}
+                  placeholder="x-owner-key"
+                />
+
+                <label style={{ marginTop: 10 }}>Reset key (required to reset paper)</label>
+                <input
+                  value={resetKey}
+                  onChange={(e) => setResetKey(e.target.value)}
+                  placeholder="x-reset-key"
+                />
+
+                <div style={{ marginTop: 12 }}>
+                  <b style={{ fontSize: 13 }}>Not one-sided (wins &gt; losses)</b>
+                  <div className="muted" style={{ marginTop: 6, lineHeight: 1.5 }}>
+                    This panel enforces *risk limits* (size + trades/day).
+                    The “win bias” logic (stop trading after losing streaks / low edge) is the next backend step.
+                  </div>
+                  <div className="muted" style={{ marginTop: 8 }}>
+                    Next backend step we’ll add: daily loss cutoff + cooldown + edge threshold so it learns and pauses instead of bleeding.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 10 }} className="muted">
+            Tip: If saving fails, it usually means the backend rejected the <b>x-owner-key</b>.
+          </div>
+        </div>
+      )}
 
       <div className="tradeGrid" style={{ gridTemplateColumns: showRightPanel ? "1.8fr 1fr" : "1fr" }}>
         <div className="card tradeChart">
