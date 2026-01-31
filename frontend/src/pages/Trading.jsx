@@ -101,20 +101,18 @@ export default function Trading({ user }) {
 
   const [showMoney, setShowMoney] = useState(true);
   const [showTradeLog, setShowTradeLog] = useState(true);
+  const [showHistory, setShowHistory] = useState(true);
   const [showAI, setShowAI] = useState(true);
   const [wideChart, setWideChart] = useState(false);
 
-  // control history panel
-  const [showHistory, setShowHistory] = useState(true);
-
-  // ✅ NEW: Trading Controls panel
+  // ✅ Trading Controls panel
   const [showControls, setShowControls] = useState(true);
   const [ownerKey, setOwnerKey] = useState(() => localStorage.getItem(OWNER_KEY_LS) || "");
   const [resetKey, setResetKey] = useState(() => localStorage.getItem(RESET_KEY_LS) || "");
   const [cfgStatus, setCfgStatus] = useState("—");
   const [cfgBusy, setCfgBusy] = useState(false);
 
-  // Local editable config (we keep it separate so polling doesn't clobber typing)
+  // Local editable config (separate so polling doesn't clobber typing)
   const [cfgForm, setCfgForm] = useState({
     baselinePct: 0.02,     // 2%
     maxPct: 0.05,          // 5%
@@ -234,10 +232,6 @@ export default function Trading({ user }) {
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-
-          // Supports both:
-          // 1) {type:'tick', symbol, price, ts}
-          // 2) {symbol, price, ts} (no type)
           const isTick = (msg?.type === "tick") || (msg && msg.symbol && msg.price);
           if (isTick && msg.symbol === wantedBackendSymbol) {
             applyTick(Number(msg.price), Number(msg.ts || Date.now()));
@@ -253,7 +247,7 @@ export default function Trading({ user }) {
       clearInterval(fallbackTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol]);
+  }, [symbol, last]);
 
   // ---- paper status polling ----
   useEffect(() => {
@@ -281,7 +275,7 @@ export default function Trading({ user }) {
     return () => clearInterval(t);
   }, []);
 
-  // ✅ NEW: Load paper config once (and sync form once, without clobbering edits)
+  // ✅ Load paper config once (sync form once, no clobber while typing)
   useEffect(() => {
     const base = apiBase();
     if (!base) return;
@@ -297,7 +291,6 @@ export default function Trading({ user }) {
         const cfg = data?.config || data || {};
         if (cancelled) return;
 
-        // If backend already has values, reflect them in the form
         setCfgForm((prev) => ({
           baselinePct: Number.isFinite(Number(cfg.baselinePct)) ? Number(cfg.baselinePct) : prev.baselinePct,
           maxPct: Number.isFinite(Number(cfg.maxPct)) ? Number(cfg.maxPct) : prev.maxPct,
@@ -459,8 +452,6 @@ export default function Trading({ user }) {
     }
   }
 
-  const showRightPanel = showAI && !wideChart;
-
   const ticksSeen = paper.learnStats?.ticksSeen ?? 0;
   const conf = paper.learnStats?.confidence ?? 0;
   const decision = paper.learnStats?.decision ?? "WAIT";
@@ -480,7 +471,6 @@ export default function Trading({ user }) {
   const equity = paper.equity ?? cashBal;
   const unreal = paper.unrealizedPnL ?? 0;
 
-  // history newest first
   const historyItems = (paper.trades || []).slice().reverse().slice(0, 240);
 
   function historyLine(t) {
@@ -488,7 +478,7 @@ export default function Trading({ user }) {
     const sym = t?.symbol || "—";
     const type = t?.type || "—";
     const strat = t?.strategy ? String(t.strategy) : "—";
-    const px = Number(t?.price);
+    const pxv = Number(t?.price);
     const usd = t?.usd;
     const cost = t?.cost;
     const profit = t?.profit;
@@ -497,20 +487,20 @@ export default function Trading({ user }) {
 
     if (type === "BUY") {
       const hold = t?.holdMs ? fmtDur(t.holdMs) : "—";
-      return `${ts} • BUY ${sym} • ${strat} • Notional ${fmtMoneyCompact(usd, 2)} • Entry ${fmtMoney(px, 2)} • Entry cost ${fmtMoneyCompact(cost, 2)} • Planned hold ${hold}`;
+      return `${ts} • BUY ${sym} • ${strat} • Notional ${fmtMoneyCompact(usd, 2)} • Entry ${fmtMoney(pxv, 2)} • Entry cost ${fmtMoneyCompact(cost, 2)} • Planned hold ${hold}`;
     }
 
     if (type === "SELL") {
       const held = holdMs !== undefined ? fmtDur(holdMs) : "—";
       const pr = profit !== undefined ? fmtMoneyCompact(profit, 2) : "—";
       const rr = niceReason(exitReason);
-      return `${ts} • SELL ${sym} • ${strat} • Exit ${fmtMoney(px, 2)} • Held ${held} • Result ${pr} • Exit: ${rr}`;
+      return `${ts} • SELL ${sym} • ${strat} • Exit ${fmtMoney(pxv, 2)} • Held ${held} • Result ${pr} • Exit: ${rr}`;
     }
 
     return `${ts} • ${type} ${sym}`;
   }
 
-  // ✅ NEW: Derived “amount” display based on current equity
+  // ✅ Derived “amount” display based on equity
   const baselineUsd = useMemo(() => {
     const bp = toNum(cfgForm.baselinePct, 0);
     return Math.max(0, equity * bp);
@@ -521,7 +511,7 @@ export default function Trading({ user }) {
     return Math.max(0, equity * mp);
   }, [cfgForm.maxPct, equity]);
 
-  // ✅ NEW: Save config (one-shot)
+  // ✅ Save config (one-shot)
   const savePaperConfig = async () => {
     const base = apiBase();
     if (!base) return alert("Missing VITE_API_BASE");
@@ -552,7 +542,6 @@ export default function Trading({ user }) {
 
       setCfgStatus("Saved ✅");
 
-      // reflect to paper.config immediately (without waiting for next poll)
       setPaper((prev) => ({
         ...prev,
         config: { ...(prev.config || {}), baselinePct, maxPct, maxTradesPerDay }
@@ -566,7 +555,7 @@ export default function Trading({ user }) {
     }
   };
 
-  // ✅ NEW: Reset paper session (one-shot)
+  // ✅ Reset paper session (one-shot)
   const resetPaper = async () => {
     const base = apiBase();
     if (!base) return alert("Missing VITE_API_BASE");
@@ -599,7 +588,6 @@ export default function Trading({ user }) {
     }
   };
 
-  // ✅ NEW: Quick “anti one-sided” safety suggestions (UI only, backend logic later)
   const winRate = useMemo(() => {
     const w = Number(wins) || 0;
     const l = Number(losses) || 0;
@@ -608,6 +596,7 @@ export default function Trading({ user }) {
     return w / total;
   }, [wins, losses]);
 
+  // ✅ ONLY ONCE (fixes your duplicate variable bug)
   const showRightPanel = showAI && !wideChart;
 
   return (
@@ -670,7 +659,7 @@ export default function Trading({ user }) {
         </div>
       </div>
 
-      {/* ✅ NEW: Trading Controls Panel (one-shot, full feature in one place) */}
+      {/* ✅ Trading Controls Panel */}
       {showControls && (
         <div className="card" style={{ marginTop: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -764,11 +753,8 @@ export default function Trading({ user }) {
                 <div style={{ marginTop: 12 }}>
                   <b style={{ fontSize: 13 }}>Not one-sided (wins &gt; losses)</b>
                   <div className="muted" style={{ marginTop: 6, lineHeight: 1.5 }}>
-                    This panel enforces *risk limits* (size + trades/day).
-                    The “win bias” logic (stop trading after losing streaks / low edge) is the next backend step.
-                  </div>
-                  <div className="muted" style={{ marginTop: 8 }}>
-                    Next backend step we’ll add: daily loss cutoff + cooldown + edge threshold so it learns and pauses instead of bleeding.
+                    This panel enforces risk limits (size + trades/day).
+                    The “win bias” logic (pause on losing streak / daily loss cutoff) is the next backend step.
                   </div>
                 </div>
               </div>
@@ -888,7 +874,6 @@ export default function Trading({ user }) {
             </div>
           )}
 
-          {/* Open Position details (live) */}
           {paper.position && (
             <div className="card" style={{ marginTop: 12, borderColor: "rgba(122,167,255,0.35)" }}>
               <b>Open Position</b>
@@ -919,7 +904,6 @@ export default function Trading({ user }) {
             />
           </div>
 
-          {/* Trade Log table */}
           {showTradeLog && (
             <div style={{ marginTop: 12 }}>
               <b>Trade Log</b>
@@ -966,7 +950,6 @@ export default function Trading({ user }) {
             </div>
           )}
 
-          {/* History Bar */}
           {showHistory && (
             <div style={{ marginTop: 12 }}>
               <b>History</b>
