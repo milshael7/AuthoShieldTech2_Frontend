@@ -1,3 +1,4 @@
+// frontend/src/App.jsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   api,
@@ -18,18 +19,16 @@ import Trading from "./pages/Trading.jsx";
 
 /**
  * App.jsx (FULL DROP-IN)
- * Fixes:
- * - ✅ Uses the correct logo class from styles.css (.logo) instead of .brandLogo
- * - ✅ Stabilizes handlers (useCallback) to reduce re-renders
- * - ✅ Better boot/session recovery messaging
- * - ✅ Mobile-friendly nav/actions layout (wrap + spacing)
- * - ✅ Hardens role routing and view switching
+ * Goals:
+ * - Keep your existing flow (Login -> Dashboard -> Trading tab)
+ * - Use stable handlers to reduce unnecessary rerenders
+ * - Keep nav/actions mobile-friendly
+ * - Use .logo (your CSS supports both .logo and .brandLogo now)
  */
 
 function Brand() {
   return (
     <div className="brand">
-      {/* styles.css defines .logo (not .brandLogo) */}
       <div className="logo" aria-hidden="true" />
       <div className="brandTitle">
         <b>AutoShield</b>
@@ -67,36 +66,35 @@ export default function App() {
     }
   }, []);
 
-  const onLogin = useCallback(
-    async (email, password) => {
-      setBusy(true);
-      setBootError(null);
-      try {
-        const res = await api.login(email, password);
+  const onLogin = useCallback(async (email, password) => {
+    setBusy(true);
+    setBootError(null);
+    try {
+      const res = await api.login(email, password);
 
-        if (!res?.token || !res?.user) {
-          throw new Error("Login failed: missing token or user profile.");
-        }
-
-        setToken(res.token);
-        saveUser(res.user);
-        setUser(res.user);
-        setView("dashboard");
-      } catch (e) {
-        const msg =
-          e?.message ||
-          "Login failed. Please check your email/password and try again.";
-        setBootError(msg);
-        // make sure we don’t keep a partial session
-        clearToken();
-        clearUser();
-        setUser(null);
-      } finally {
-        setBusy(false);
+      if (!res?.token || !res?.user) {
+        throw new Error("Login failed: missing token or user profile.");
       }
-    },
-    []
-  );
+
+      setToken(res.token);
+      saveUser(res.user);
+      setUser(res.user);
+      setView("dashboard");
+    } catch (e) {
+      const msg =
+        e?.message ||
+        "Login failed. Please check your email/password and try again.";
+      setBootError(msg);
+
+      // Don’t keep a partial session
+      clearToken();
+      clearUser();
+      setUser(null);
+      setView("dashboard");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
 
   // Gate: if not logged in, show Login
   if (!user) {
@@ -113,6 +111,7 @@ export default function App() {
           </div>
         )}
 
+        {/* If your Login component ignores busy prop, that’s fine */}
         <Login onLogin={onLogin} busy={busy} />
       </div>
     );
@@ -134,7 +133,9 @@ export default function App() {
             </small>
           </p>
           <div style={{ height: 10 }} />
-          <button onClick={signOut}>Back to login</button>
+          <button onClick={signOut} type="button">
+            Back to login
+          </button>
         </div>
       );
     }
@@ -162,8 +163,10 @@ export default function App() {
       <div className="nav">
         <Brand />
 
-        {/* actions already has flex-wrap in your CSS; keep it compact and mobile-safe */}
-        <div className="actions" style={{ maxWidth: 760, justifyContent: "flex-end" }}>
+        <div
+          className="actions"
+          style={{ maxWidth: 760, justifyContent: "flex-end" }}
+        >
           <button
             className={view === "dashboard" ? "active" : ""}
             onClick={() => setView("dashboard")}
@@ -181,9 +184,7 @@ export default function App() {
           </button>
 
           <span className="badge">{user.role}</span>
-
           <span className={`badge ${subClass}`}>{subStatus}</span>
-
           {autoprotectEnabled && <span className="badge ok">AutoProtect</span>}
 
           <button onClick={signOut} type="button">
