@@ -1,6 +1,5 @@
 // frontend/src/lib/api.js
-
-const API_BASE = (import.meta.env.VITE_API_BASE || '').trim();
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 const TOKEN_KEY = 'as_token';
 const USER_KEY = 'as_user';
@@ -16,20 +15,9 @@ export const getSavedUser = () => {
 export const saveUser = (u) => localStorage.setItem(USER_KEY, JSON.stringify(u));
 export const clearUser = () => localStorage.removeItem(USER_KEY);
 
-// Internal request helper
-async function req(
-  path,
-  { method = 'GET', body, auth = true, headers: extraHeaders = {} } = {}
-) {
-  if (!API_BASE) {
-    throw new Error('Missing VITE_API_BASE (frontend env). Set it on Vercel and redeploy.');
-  }
-
-  const headers = { ...extraHeaders };
-
-  // Only set JSON content-type when sending JSON
-  const hasBody = typeof body !== 'undefined';
-  if (hasBody) headers['Content-Type'] = 'application/json';
+// ✅ One request helper (supports extra headers)
+async function req(path, { method = 'GET', body, auth = true, headers: extraHeaders = {} } = {}) {
+  const headers = { 'Content-Type': 'application/json', ...extraHeaders };
 
   if (auth) {
     const t = getToken();
@@ -39,22 +27,11 @@ async function req(
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
-    body: hasBody ? JSON.stringify(body) : undefined,
+    body: body ? JSON.stringify(body) : undefined,
   });
 
-  // Try JSON first, but don’t crash if backend returns text/html
-  let data = {};
-  const ct = (res.headers.get('content-type') || '').toLowerCase();
-  if (ct.includes('application/json')) {
-    data = await res.json().catch(() => ({}));
-  } else {
-    const text = await res.text().catch(() => '');
-    data = { error: text || undefined };
-  }
-
-  if (!res.ok) {
-    throw new Error(data.error || data.message || `Request failed (${res.status})`);
-  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
 
@@ -64,21 +41,17 @@ export const api = {
     req('/api/auth/login', { method: 'POST', body: { email, password }, auth: false }),
 
   resetPassword: (email, newPassword) =>
-    req('/api/auth/reset-password', {
-      method: 'POST',
-      body: { email, newPassword },
-      auth: false
-    }),
+    req('/api/auth/reset-password', { method: 'POST', body: { email, newPassword }, auth: false }),
 
-  // ---------------- Me ----------------
+  // ---------------- Me (Individual) ----------------
   meNotifications: () => req('/api/me/notifications'),
-  markMyNotificationRead: (id) => req(`/api/me/notifications/${id}/read`, { method: 'POST', body: {} }),
+  markMyNotificationRead: (id) => req(`/api/me/notifications/${id}/read`, { method: 'POST' }),
   createProject: (payload) => req('/api/me/projects', { method: 'POST', body: payload }),
 
   // ---------------- Admin ----------------
   adminUsers: () => req('/api/admin/users'),
   adminCreateUser: (payload) => req('/api/admin/users', { method: 'POST', body: payload }),
-  adminRotateUserId: (id) => req(`/api/admin/users/${id}/rotate-id`, { method: 'POST', body: {} }),
+  adminRotateUserId: (id) => req(`/api/admin/users/${id}/rotate-id`, { method: 'POST' }),
   adminUpdateSubscription: (id, payload) =>
     req(`/api/admin/users/${id}/subscription`, { method: 'POST', body: payload }),
   adminCompanies: () => req('/api/admin/companies'),
@@ -89,21 +62,31 @@ export const api = {
   managerOverview: () => req('/api/manager/overview'),
   managerUsers: () => req('/api/manager/users'),
   managerCompanies: () => req('/api/manager/companies'),
-  managerNotifications: () => req('/api/manager/notifications'),
-  managerAudit: (limit = 200) =>
-    req(`/api/manager/audit?limit=${encodeURIComponent(limit)}`),
+  managerNotifications: (limit = 200) => req(`/api/manager/notifications?limit=${encodeURIComponent(limit)}`),
+  managerAudit: (limit = 200) => req(`/api/manager/audit?limit=${encodeURIComponent(limit)}`),
+
+  // ---------------- Company ----------------
+  companyMe: () => req('/api/company/me'),
+  companyNotifications: () => req('/api/company/notifications'),
+  companyMarkRead: (id) => req(`/api/company/notifications/${id}/read`, { method: 'POST' }),
+
+  companyAddMember: (userId) =>
+    req('/api/company/members/add', { method: 'POST', body: { userId } }),
+
+  companyRemoveMember: (userId) =>
+    req('/api/company/members/remove', { method: 'POST', body: { userId } }),
 
   // ---------------- Trading ----------------
   tradingSymbols: () => req('/api/trading/symbols'),
-  tradingCandles: (symbol) =>
-    req(`/api/trading/candles?symbol=${encodeURIComponent(symbol)}`),
+  tradingCandles: (symbol) => req(`/api/trading/candles?symbol=${encodeURIComponent(symbol)}`),
 
   // ---------------- AI ----------------
   aiChat: (message, context) =>
     req('/api/ai/chat', { method: 'POST', body: { message, context } }),
+
   aiTrainingStatus: () => req('/api/ai/training/status'),
-  aiTrainingStart: () => req('/api/ai/training/start', { method: 'POST', body: {} }),
-  aiTrainingStop: () => req('/api/ai/training/stop', { method: 'POST', body: {} }),
+  aiTrainingStart: () => req('/api/ai/training/start', { method: 'POST' }),
+  aiTrainingStop: () => req('/api/ai/training/stop', { method: 'POST' }),
 
   // ---------------- Paper (controls) ----------------
   paperStatus: () => req('/api/paper/status'),
@@ -112,7 +95,7 @@ export const api = {
     req('/api/paper/reset', {
       method: 'POST',
       body: {},
-      headers: resetKey ? { 'x-reset-key': String(resetKey) } : {}
+      headers: resetKey ? { 'x-reset-key': String(resetKey) } : {},
     }),
 
   paperGetConfig: () => req('/api/paper/config'),
@@ -121,12 +104,11 @@ export const api = {
     req('/api/paper/config', {
       method: 'POST',
       body: { baselinePct, maxPct, maxTradesPerDay },
-      headers: ownerKey ? { 'x-owner-key': String(ownerKey) } : {}
+      headers: ownerKey ? { 'x-owner-key': String(ownerKey) } : {},
     }),
 
   // ---------------- Posture (cyber dashboards) ----------------
   postureSummary: () => req('/api/posture/summary'),
   postureChecks: () => req('/api/posture/checks'),
-  postureRecent: (limit = 50) =>
-    req(`/api/posture/recent?limit=${encodeURIComponent(limit)}`),
+  postureRecent: (limit = 50) => req(`/api/posture/recent?limit=${encodeURIComponent(limit)}`),
 };
