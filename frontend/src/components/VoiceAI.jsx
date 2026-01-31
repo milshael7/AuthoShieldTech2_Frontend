@@ -12,14 +12,27 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
  * Notes:
  * - Browser TTS quality depends on device voices.
  * - FIX INCLUDED: when Voice finishes speaking and auto-resumes mic, we do NOT wipe the UI text boxes anymore.
+ * - IMPORTANT FIX: no hardcoded backend URL. VoiceAI now uses the same VITE_API_BASE/VITE_BACKEND_URL as the rest of the app.
  */
 
 function getApiBase() {
-  return (
-    (import.meta.env.VITE_API_BASE ||
-      import.meta.env.VITE_BACKEND_URL ||
-      "https://authoshieldtech2.onrender.com") + ""
-  ).trim();
+  // Use env if provided, otherwise use same-origin (relative fetch)
+  return String(import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || "").trim();
+}
+
+function isAbsoluteUrl(s) {
+  return /^https?:\/\//i.test(String(s || "")) || /^wss?:\/\//i.test(String(s || ""));
+}
+
+function joinUrl(base, path) {
+  const b = String(base || "").trim();
+  const p = String(path || "").trim();
+
+  if (!p) return b || "";
+  if (isAbsoluteUrl(p)) return p;
+
+  if (!b) return p; // same-origin relative
+  return b.replace(/\/+$/, "") + "/" + p.replace(/^\/+/, "");
 }
 
 const LS_VOICE = "autoprotect_voice_choice_v2";
@@ -139,6 +152,7 @@ async function waitForVoices(timeoutMs = 1400) {
 }
 
 export default function VoiceAI({ endpoint = "/api/ai/chat", title = "AutoProtect Voice", getContext }) {
+  // NOTE: read API base from env and keep it consistent with Trading.jsx behavior
   const API_BASE = useMemo(() => getApiBase(), []);
   const SpeechRecognition = useMemo(() => window.SpeechRecognition || window.webkitSpeechRecognition, []);
 
@@ -406,8 +420,6 @@ export default function VoiceAI({ endpoint = "/api/ai/chat", title = "AutoProtec
       }
 
       recRef.current.lang = voiceLang || DEFAULT_LANG;
-
-      // Some browsers throw if start() is called twice quickly; guard with try/catch
       recRef.current.start();
     } catch {}
   };
@@ -455,16 +467,14 @@ export default function VoiceAI({ endpoint = "/api/ai/chat", title = "AutoProtec
       u.onerror = () => {
         speakingRef.current = false;
         setStatus("Reply ready");
-        if (shouldResume) {
-          setTimeout(() => startListening({ resetUi: false }), 250);
-        }
+        if (shouldResume) setTimeout(() => startListening({ resetUi: false }), 250);
       };
 
       u.onend = () => {
         speakingRef.current = false;
         setStatus(conversationMode ? "Conversation listening…" : "Reply ready");
         if (shouldResume) {
-          // ✅ FIX: resume mic without clearing “You said / AI says”
+          // ✅ resume mic without clearing “You said / AI says”
           setTimeout(() => startListening({ resetUi: false }), 250);
         }
       };
@@ -479,31 +489,29 @@ export default function VoiceAI({ endpoint = "/api/ai/chat", title = "AutoProtec
     }
   };
 
-  const buildAiHints = (ctx) => {
-    return {
-      assistant_style: {
-        tone: "natural, helpful, not robotic",
-        behavior: [
-          "Answer like a smart assistant, not a script.",
-          "If the user asks about trading, explain using the live page context (paper stats, position, decision, reason).",
-          "If user asks a general question, answer normally.",
-          "If you must guess, say it's a guess.",
-          "When explaining a trade, include: what happened, why, risk, and what to watch next.",
-        ],
-      },
-      page_context: {
-        page: "Trading Room",
-        features: [
-          "Live price feed",
-          "Paper trader (auto entries/exits)",
-          "Wins/Losses + Net P&L",
-          "Trade history + log",
-          "AI controls: trade size % + max trades/day (if provided in context)",
-        ],
-      },
-      context_snapshot: ctx || {},
-    };
-  };
+  const buildAiHints = (ctx) => ({
+    assistant_style: {
+      tone: "natural, helpful, not robotic",
+      behavior: [
+        "Answer like a smart assistant, not a script.",
+        "If the user asks about trading, explain using the live page context (paper stats, position, decision, reason).",
+        "If user asks a general question, answer normally.",
+        "If you must guess, say it's a guess.",
+        "When explaining a trade, include: what happened, why, risk, and what to watch next.",
+      ],
+    },
+    page_context: {
+      page: "Trading Room",
+      features: [
+        "Live price feed",
+        "Paper trader (auto entries/exits)",
+        "Wins/Losses + Net P&L",
+        "Trade history + log",
+        "AI controls: trade size % + max trades/day (if provided in context)",
+      ],
+    },
+    context_snapshot: ctx || {},
+  });
 
   async function sendToAI(message) {
     const clean = safeStr(message).trim();
@@ -529,7 +537,9 @@ export default function VoiceAI({ endpoint = "/api/ai/chat", title = "AutoProtec
     };
 
     try {
-      const res = await fetch(API_BASE + endpoint, {
+      const url = joinUrl(API_BASE, endpoint);
+
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
