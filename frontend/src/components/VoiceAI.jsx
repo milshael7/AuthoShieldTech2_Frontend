@@ -9,9 +9,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
  * - Better AI prompts/context packaging (page-aware + non-robotic guidance)
  * - Single file, copy/paste ready
  *
- * Reality check:
- * - True ChatGPT-grade voice requires a server TTS (e.g., OpenAI TTS). Browser SpeechSynthesis quality depends on device voices.
- * - This file selects the most natural available voice on the device and avoids the “robot loop” behavior.
+ * Notes:
+ * - Browser TTS quality depends on device voices.
+ * - FIX INCLUDED: when Voice finishes speaking and auto-resumes mic, we do NOT wipe the UI text boxes anymore.
  */
 
 function getApiBase() {
@@ -43,8 +43,8 @@ const cleanTextForSpeech = (t) =>
 
 /**
  * Pick “best” voices:
- * - Prefer: en-US, “Natural/Neural/Enhanced/Premium”, then Google/Microsoft, then anything English.
- * - We do NOT show raw voice names in UI; we map to “Natural US”, etc.
+ * - Prefer: en-US, “Natural/Neural/Enhanced/Premium”, then Google/Microsoft/Apple, then anything English.
+ * - UI shows friendly labels, not raw voice names.
  */
 function buildVoiceOptions(voices) {
   const list = Array.isArray(voices) ? voices : [];
@@ -59,7 +59,6 @@ function buildVoiceOptions(voices) {
   const premiumHint = /natural|neural|enhanced|premium|online|cloud/i;
   const vendorHint = /google|microsoft|apple|siri/i;
 
-  // Score voice for selection
   const scoreVoice = (v) => {
     let s = 0;
     if (isEN(v)) s += 10;
@@ -69,7 +68,6 @@ function buildVoiceOptions(voices) {
     if (premiumHint.test(name(v))) s += 20;
     if (vendorHint.test(name(v))) s += 8;
 
-    // A few known “good” names across platforms
     if (/samantha|ava|olivia|emma|allison|jenny|aria/i.test(name(v))) s += 6;
     if (/alex|daniel|guy|davis|matthew|ryan|tom/i.test(name(v))) s += 6;
 
@@ -78,7 +76,6 @@ function buildVoiceOptions(voices) {
 
   const sorted = list.slice().sort((a, b) => scoreVoice(b) - scoreVoice(a));
 
-  // Build friendly options from top matches (unique by name)
   const used = new Set();
   const out = [];
 
@@ -94,7 +91,6 @@ function buildVoiceOptions(voices) {
     });
   };
 
-  // Primary picks
   push("natural_us", "Natural US", (v) => isUS(v) && premiumHint.test(name(v)));
   push("clear_us", "Clear US", (v) => isUS(v));
   push("natural_uk", "Natural UK", (v) => isUK(v) && premiumHint.test(name(v)));
@@ -103,7 +99,6 @@ function buildVoiceOptions(voices) {
   push("natural_en", "Natural English", (v) => isEN(v) && premiumHint.test(name(v)));
   push("english", "English", (v) => isEN(v));
 
-  // Fallback: at least one option
   if (out.length === 0 && sorted.length) {
     out.push({
       id: "fallback",
@@ -143,16 +138,9 @@ async function waitForVoices(timeoutMs = 1400) {
   });
 }
 
-export default function VoiceAI({
-  endpoint = "/api/ai/chat",
-  title = "AutoProtect Voice",
-  getContext,
-}) {
+export default function VoiceAI({ endpoint = "/api/ai/chat", title = "AutoProtect Voice", getContext }) {
   const API_BASE = useMemo(() => getApiBase(), []);
-  const SpeechRecognition = useMemo(
-    () => window.SpeechRecognition || window.webkitSpeechRecognition,
-    []
-  );
+  const SpeechRecognition = useMemo(() => window.SpeechRecognition || window.webkitSpeechRecognition, []);
 
   // Support flags
   const [speechSupported, setSpeechSupported] = useState(true);
@@ -242,7 +230,6 @@ export default function VoiceAI({
       const opts = buildVoiceOptions(voices);
       setVoiceOptions(opts);
 
-      // If saved choice isn’t present, pick first available
       if (opts.length && !opts.some((o) => o.id === voiceChoice)) {
         setVoiceChoice(opts[0].id);
       }
@@ -319,7 +306,7 @@ export default function VoiceAI({
       setListening(false);
       clearTimeout(silenceTimerRef.current);
 
-      // In push-to-talk mode: send whatever we heard when it ends
+      // Push-to-talk: send whatever we heard when it ends
       if (!conversationMode) {
         const finalText = (bufferFinalRef.current + " " + interimRef.current).trim();
         bufferFinalRef.current = "";
@@ -329,7 +316,6 @@ export default function VoiceAI({
         if (finalText) void sendToAI(finalText);
         setStatus("Idle");
       } else {
-        // In conversation mode, if we ended (mobile may stop), we stay paused until user restarts.
         setStatus("Conversation paused (tap Start to resume)");
       }
     };
@@ -359,7 +345,7 @@ export default function VoiceAI({
         silenceTimerRef.current = setTimeout(() => {
           const msg = (bufferFinalRef.current + " " + interimRef.current).trim();
           if (!msg) return;
-          if (msg === lastSendRef.current) return; // don’t double-send
+          if (msg === lastSendRef.current) return;
           lastSendRef.current = msg;
 
           bufferFinalRef.current = "";
@@ -382,6 +368,19 @@ export default function VoiceAI({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [SpeechRecognition, conversationMode, voiceLang]);
 
+  // Clean shutdown (avoid “stuck speaking” on navigation)
+  useEffect(() => {
+    return () => {
+      try {
+        if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      } catch {}
+      try {
+        recRef.current?.stop?.();
+      } catch {}
+      clearTimeout(silenceTimerRef.current);
+    };
+  }, []);
+
   /** Stop recognition safely */
   const stopListening = () => {
     if (!recRef.current) return;
@@ -391,15 +390,24 @@ export default function VoiceAI({
   };
 
   /** Start recognition safely */
-  const startListening = () => {
+  const startListening = (opts = {}) => {
     if (!recRef.current) return;
+
+    const { resetUi = true } = opts;
+
     try {
       bufferFinalRef.current = "";
       interimRef.current = "";
       lastSendRef.current = "";
-      setYouSaid("");
-      setAiSays("");
+
+      if (resetUi) {
+        setYouSaid("");
+        setAiSays("");
+      }
+
       recRef.current.lang = voiceLang || DEFAULT_LANG;
+
+      // Some browsers throw if start() is called twice quickly; guard with try/catch
       recRef.current.start();
     } catch {}
   };
@@ -422,7 +430,7 @@ export default function VoiceAI({
     const say = cleanTextForSpeech(text);
     if (!say) return;
 
-    // If we’re in conversation mode, pause listening while speaking to avoid feedback loops
+    // Pause listening while speaking (avoid echo loops)
     const shouldResume = conversationMode && listening;
     if (shouldResume) stopListening();
 
@@ -430,7 +438,6 @@ export default function VoiceAI({
       const synth = window.speechSynthesis;
       const { voice, lang } = await pickVoiceObject();
 
-      // cancel any previous speech
       try {
         synth.cancel();
       } catch {}
@@ -442,41 +449,37 @@ export default function VoiceAI({
       if (voice) u.voice = voice;
 
       speakingRef.current = true;
+
       u.onstart = () => setStatus("Speaking…");
+
       u.onerror = () => {
         speakingRef.current = false;
         setStatus("Reply ready");
         if (shouldResume) {
-          // tiny delay helps mobile
-          setTimeout(() => startListening(), 250);
+          setTimeout(() => startListening({ resetUi: false }), 250);
         }
       };
+
       u.onend = () => {
         speakingRef.current = false;
         setStatus(conversationMode ? "Conversation listening…" : "Reply ready");
         if (shouldResume) {
-          setTimeout(() => startListening(), 250);
+          // ✅ FIX: resume mic without clearing “You said / AI says”
+          setTimeout(() => startListening({ resetUi: false }), 250);
         }
       };
 
-      // Mobile Safari sometimes needs a small delay after cancel
       await sleep(80);
       try {
         synth.speak(u);
       } catch {}
     } catch {
       speakingRef.current = false;
-      if (shouldResume) setTimeout(() => startListening(), 250);
+      if (shouldResume) setTimeout(() => startListening({ resetUi: false }), 250);
     }
   };
 
-  /**
-   * Better “non-robotic” system-style hints:
-   * - Encourage clarity, explain trade events, use the provided context
-   * - Allow general questions too
-   */
   const buildAiHints = (ctx) => {
-    // Keep it short: this goes with every request.
     return {
       assistant_style: {
         tone: "natural, helpful, not robotic",
@@ -511,7 +514,6 @@ export default function VoiceAI({
     setStatus("Thinking…");
     setAiSays("");
 
-    // Gather context from the page (Trading.jsx already passes rich data)
     const ctx = (() => {
       try {
         return typeof getContext === "function" ? getContext() || {} : {};
@@ -520,7 +522,6 @@ export default function VoiceAI({
       }
     })();
 
-    // Add better hints so the backend AI can respond less “robotic”
     const payload = {
       message: clean,
       context: ctx,
@@ -546,13 +547,7 @@ export default function VoiceAI({
         return;
       }
 
-      const text =
-        data?.reply ??
-        data?.text ??
-        data?.message ??
-        data?.output ??
-        data?.result ??
-        "";
+      const text = data?.reply ?? data?.text ?? data?.message ?? data?.output ?? data?.result ?? "";
 
       if (!text) {
         setAiSays("(No reply from AI)");
@@ -575,9 +570,7 @@ export default function VoiceAI({
   }
 
   const preview = async () => {
-    await speak(
-      "Voice preview. AutoProtect is ready. Ask me why a trade happened, your win rate, or any question."
-    );
+    await speak("Voice preview. AutoProtect is ready. Ask me why a trade happened, your win rate, or any question.");
   };
 
   if (!speechSupported && !ttsSupported) {
@@ -586,9 +579,7 @@ export default function VoiceAI({
         <div style={rowTop}>
           <div style={titleStyle}>{title}</div>
         </div>
-        <div style={{ opacity: 0.85 }}>
-          This device doesn’t support speech recognition or speech playback.
-        </div>
+        <div style={{ opacity: 0.85 }}>This device doesn’t support speech recognition or speech playback.</div>
       </div>
     );
   }
@@ -607,21 +598,13 @@ export default function VoiceAI({
 
         <div style={{ marginTop: 10 }}>
           <label style={toggle}>
-            <input
-              type="checkbox"
-              checked={voiceReply}
-              onChange={() => setVoiceReply((v) => !v)}
-            />
+            <input type="checkbox" checked={voiceReply} onChange={() => setVoiceReply((v) => !v)} />
             Voice reply
           </label>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
             <span style={{ fontSize: 12, opacity: 0.8 }}>Voice</span>
-            <select
-              value={voiceChoice}
-              onChange={(e) => setVoiceChoice(e.target.value)}
-              style={selectStyle}
-            >
+            <select value={voiceChoice} onChange={(e) => setVoiceChoice(e.target.value)} style={selectStyle}>
               {voiceOptions.length === 0 && <option value="fallback">Default Voice</option>}
               {voiceOptions.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -650,7 +633,7 @@ export default function VoiceAI({
         <button
           onClick={() => {
             if (listening) stopListening();
-            else startListening();
+            else startListening({ resetUi: true });
           }}
           style={btnPrimary}
           type="button"
@@ -659,30 +642,18 @@ export default function VoiceAI({
         </button>
 
         <label style={toggle}>
-          <input
-            type="checkbox"
-            checked={conversationMode}
-            onChange={() => setConversationMode((v) => !v)}
-          />
+          <input type="checkbox" checked={conversationMode} onChange={() => setConversationMode((v) => !v)} />
           Conversation mode (hands-free)
         </label>
 
         <label style={toggle}>
-          <input
-            type="checkbox"
-            checked={voiceReply}
-            onChange={() => setVoiceReply((v) => !v)}
-          />
+          <input type="checkbox" checked={voiceReply} onChange={() => setVoiceReply((v) => !v)} />
           Voice reply
         </label>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 12, opacity: 0.8 }}>Voice</span>
-          <select
-            value={voiceChoice}
-            onChange={(e) => setVoiceChoice(e.target.value)}
-            style={selectStyle}
-          >
+          <select value={voiceChoice} onChange={(e) => setVoiceChoice(e.target.value)} style={selectStyle}>
             {voiceOptions.length === 0 && <option value="fallback">Default Voice</option>}
             {voiceOptions.map((v) => (
               <option key={v.id} value={v.id}>
@@ -698,11 +669,7 @@ export default function VoiceAI({
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 12, opacity: 0.8 }}>Lang</span>
-          <select
-            value={voiceLang}
-            onChange={(e) => setVoiceLang(e.target.value)}
-            style={selectStyle}
-          >
+          <select value={voiceLang} onChange={(e) => setVoiceLang(e.target.value)} style={selectStyle}>
             <option value="en-US">en-US</option>
             <option value="en-GB">en-GB</option>
             <option value="en-AU">en-AU</option>
