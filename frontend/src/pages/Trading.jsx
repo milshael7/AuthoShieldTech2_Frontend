@@ -80,6 +80,9 @@ function toNum(v, fallback = 0) {
 const OWNER_KEY_LS = "as_owner_key";
 const RESET_KEY_LS = "as_reset_key";
 
+// ✅ Your corner mark (public/)
+const AUTOSHIELD_MARK_SRC = "/autoshield-logo.png";
+
 export default function Trading({ user }) {
   const UI_SYMBOLS = ["BTCUSD", "ETHUSD"];
   const UI_TO_BACKEND = { BTCUSD: "BTCUSDT", ETHUSD: "ETHUSDT" };
@@ -418,7 +421,6 @@ export default function Trading({ user }) {
     return `${ts} • ${type} ${sym}`;
   }
 
-  // ✅ Derived “amount” display based on equity
   const baselineUsd = useMemo(() => {
     const bp = toNum(cfgForm.baselinePct, 0);
     return Math.max(0, equity * bp);
@@ -429,7 +431,6 @@ export default function Trading({ user }) {
     return Math.max(0, equity * mp);
   }, [cfgForm.maxPct, equity]);
 
-  // ✅ Save config (one-shot)
   const savePaperConfig = async () => {
     const base = apiBase();
     if (!base) return alert("Missing VITE_API_BASE");
@@ -459,7 +460,6 @@ export default function Trading({ user }) {
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
 
       setCfgStatus("Saved ✅");
-
       setPaper((prev) => ({
         ...prev,
         config: { ...(prev.config || {}), baselinePct, maxPct, maxTradesPerDay },
@@ -473,7 +473,6 @@ export default function Trading({ user }) {
     }
   };
 
-  // ✅ Reset paper session (one-shot)
   const resetPaper = async () => {
     const base = apiBase();
     if (!base) return alert("Missing VITE_API_BASE");
@@ -515,10 +514,8 @@ export default function Trading({ user }) {
     return w / total;
   }, [wins, losses]);
 
-  // ✅ Right sidebar only if AI visible and not wide-chart
   const showRightPanel = showAI && !wideChart;
 
-  // ✅ Layout
   const layoutCols = useMemo(() => {
     if (wideChart) return "1fr";
     if (showRightPanel) return "320px 1fr 360px";
@@ -868,9 +865,46 @@ export default function Trading({ user }) {
             </div>
           )}
 
-          {/* ✅ REAL TradingView-style Chart */}
+          {/* ✅ REAL TradingView-style Chart + ✅ AutoShield corner mark */}
           <div style={{ marginTop: 12 }}>
-            <TVChart candles={candles} height={chartHeight} symbol={symbol} last={last} />
+            <div
+              style={{
+                position: "relative",
+                borderRadius: 14,
+                overflow: "hidden",
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(0,0,0,0.18)",
+              }}
+            >
+              <TVChart candles={candles} height={chartHeight} symbol={symbol} last={last} />
+
+              {/* AutoShield “TV-style” mark (bottom-left) */}
+              <img
+                src={AUTOSHIELD_MARK_SRC}
+                alt=""
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: 12,
+                  bottom: 10,
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+
+                  // blend + subtlety
+                  opacity: 0.22,
+                  mixBlendMode: "screen",
+                  filter: "grayscale(1) brightness(1.25) contrast(1.05)",
+
+                  // never block chart interactions
+                  pointerEvents: "none",
+                  userSelect: "none",
+
+                  // tiny glow so it reads on dark backgrounds
+                  boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
+                }}
+              />
+            </div>
           </div>
 
           {/* Trade Log */}
