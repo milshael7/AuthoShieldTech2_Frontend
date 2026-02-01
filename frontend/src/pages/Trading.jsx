@@ -395,7 +395,10 @@ export default function Trading({ user }) {
 
     const base = apiBase();
     if (!base) {
-      setMessages((prev) => [...prev, { from: "ai", text: "Backend URL missing. Set VITE_API_BASE on Vercel." }]);
+      setMessages((prev) => [
+        ...prev,
+        { from: "ai", text: "Backend URL missing. Set VITE_API_BASE on Vercel." },
+      ]);
       return;
     }
 
@@ -483,10 +486,10 @@ export default function Trading({ user }) {
 
     if (type === "BUY") {
       const hold = t?.holdMs ? fmtDur(t.holdMs) : "—";
-      return `${ts} • BUY ${sym} • ${strat} • Notional ${fmtMoneyCompact(usd, 2)} • Entry ${fmtMoney(
-        pxv,
+      return `${ts} • BUY ${sym} • ${strat} • Notional ${fmtMoneyCompact(
+        usd,
         2
-      )} • Entry cost ${fmtMoneyCompact(cost, 2)} • Planned hold ${hold}`;
+      )} • Entry ${fmtMoney(pxv, 2)} • Entry cost ${fmtMoneyCompact(cost, 2)} • Planned hold ${hold}`;
     }
 
     if (type === "SELL") {
@@ -499,7 +502,6 @@ export default function Trading({ user }) {
     return `${ts} • ${type} ${sym}`;
   }
 
-  // ✅ Derived “amount” display based on equity
   const baselineUsd = useMemo(() => {
     const bp = toNum(cfgForm.baselinePct, 0);
     return Math.max(0, equity * bp);
@@ -510,7 +512,6 @@ export default function Trading({ user }) {
     return Math.max(0, equity * mp);
   }, [cfgForm.maxPct, equity]);
 
-  // ✅ Save config (one-shot)
   const savePaperConfig = async () => {
     const base = apiBase();
     if (!base) return alert("Missing VITE_API_BASE");
@@ -554,13 +555,11 @@ export default function Trading({ user }) {
     }
   };
 
-  // ✅ Reset paper session (one-shot)
   const resetPaper = async () => {
     const base = apiBase();
     if (!base) return alert("Missing VITE_API_BASE");
     if (!resetKey) return alert("Enter reset key first.");
 
-    // eslint-disable-next-line no-restricted-globals
     if (!confirm("Reset paper trading stats + trades?")) return;
 
     setCfgBusy(true);
@@ -596,107 +595,95 @@ export default function Trading({ user }) {
     return w / total;
   }, [wins, losses]);
 
-  // ✅ Right sidebar only if AI visible and not wide-chart
   const showRightPanel = showAI && !wideChart;
-
-  // ✅ Layout columns (now we actually apply styles.css grid feel)
-  const layoutCols = useMemo(() => {
-    if (wideChart) return "1fr";
-    if (showRightPanel) return "1.35fr 0.9fr"; // chart + AI terminal
-    return "1fr"; // chart only
-  }, [wideChart, showRightPanel]);
 
   return (
     <div className="tradeWrap">
-      {/* ======= TOP HEADER ======= */}
+      {/* ======= TOP BAR (exchange panel vibe) ======= */}
       <div className="card tradeTop">
-        <div style={{ flex: 1, minWidth: 260 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-            <h2 style={{ margin: 0, letterSpacing: 0.2 }}>Trading Room</h2>
-
-            <span className="badge">
-              Feed: <b>{feedStatus}</b>
-            </span>
-
-            <span className="badge">
-              Last: <b>{fmtMoney(last, 2)}</b>
-            </span>
-
-            <span className={`badge ${paper.running ? "ok" : "warn"}`}>
-              Paper: <b>{paper.running ? "ON" : "OFF"}</b>
-            </span>
-          </div>
-
-          <div style={{ marginTop: 6 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+              <h2 style={{ margin: 0 }}>Trading Room</h2>
+              <span className="badge">
+                Feed: <b>{feedStatus}</b>
+              </span>
+              <span className="badge">
+                Last: <b>{fmtMoney(last, 2)}</b>
+              </span>
+              <span className={`badge ${paper.running ? "ok" : ""}`}>
+                Paper: <b>{paper.running ? "ON" : "OFF"}</b>
+              </span>
+            </div>
             <small>Live feed + candles + paper trader + AI explanations.</small>
           </div>
-        </div>
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <div className="pill">
-            <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 900 }}>Mode</div>
-            <div className="actions" style={{ marginTop: 8 }}>
-              <button className={mode === "Live" ? "active" : ""} onClick={() => setMode("Live")} type="button">
-                Live
-              </button>
-              <button className={mode === "Paper" ? "active" : ""} onClick={() => setMode("Paper")} type="button">
-                Paper
-              </button>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div className="pill">
+              <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Mode</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                <button className={mode === "Live" ? "active" : ""} onClick={() => setMode("Live")} type="button">
+                  Live
+                </button>
+                <button className={mode === "Paper" ? "active" : ""} onClick={() => setMode("Paper")} type="button">
+                  Paper
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="pill">
-            <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 900 }}>Symbol</div>
-            <select value={symbol} onChange={(e) => setSymbol(e.target.value)} style={{ marginTop: 8 }}>
-              {UI_SYMBOLS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
+            <div className="pill">
+              <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Symbol</div>
+              <select value={symbol} onChange={(e) => setSymbol(e.target.value)} style={{ marginTop: 8 }}>
+                {UI_SYMBOLS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="pill">
-            <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 900 }}>Panels</div>
-            <div className="actions" style={{ marginTop: 8 }}>
-              <button className={showMoney ? "active" : ""} onClick={() => setShowMoney((v) => !v)} type="button">
-                Money
-              </button>
-              <button className={showTradeLog ? "active" : ""} onClick={() => setShowTradeLog((v) => !v)} type="button">
-                Log
-              </button>
-              <button className={showHistory ? "active" : ""} onClick={() => setShowHistory((v) => !v)} type="button">
-                History
-              </button>
-              <button className={showControls ? "active" : ""} onClick={() => setShowControls((v) => !v)} type="button">
-                Controls
-              </button>
-              <button className={showAI ? "active" : ""} onClick={() => setShowAI((v) => !v)} type="button">
-                AI
-              </button>
-              <button className={wideChart ? "active" : ""} onClick={() => setWideChart((v) => !v)} type="button">
-                Wide
-              </button>
+            <div className="pill">
+              <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Panels</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                <button className={showMoney ? "active" : ""} onClick={() => setShowMoney((v) => !v)} type="button">
+                  Money
+                </button>
+                <button className={showTradeLog ? "active" : ""} onClick={() => setShowTradeLog((v) => !v)} type="button">
+                  Log
+                </button>
+                <button className={showHistory ? "active" : ""} onClick={() => setShowHistory((v) => !v)} type="button">
+                  History
+                </button>
+                <button className={showControls ? "active" : ""} onClick={() => setShowControls((v) => !v)} type="button">
+                  Controls
+                </button>
+                <button className={showAI ? "active" : ""} onClick={() => setShowAI((v) => !v)} type="button">
+                  AI
+                </button>
+                <button className={wideChart ? "active" : ""} onClick={() => setWideChart((v) => !v)} type="button">
+                  Wide
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ======= CONTROLS ======= */}
+      {/* ======= CONTROLS (paper trader config) ======= */}
       {showControls && (
         <div className="card" style={{ marginTop: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <div>
               <b style={{ fontSize: 14 }}>AI Trading Controls (Paper)</b>
               <div style={{ marginTop: 6 }}>
                 <small>
-                  Equity: <b>{fmtMoneyCompact(equity, 2)}</b> • Win rate: <b>{(winRate * 100).toFixed(0)}%</b> • Config:{" "}
+                  Equity <b>{fmtMoneyCompact(equity, 2)}</b> • Win rate <b>{(winRate * 100).toFixed(0)}%</b> • Config{" "}
                   <b>{cfgStatus}</b>
                 </small>
               </div>
             </div>
 
-            <div className="actions" style={{ minWidth: 320 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button onClick={savePaperConfig} disabled={cfgBusy} type="button">
                 {cfgBusy ? "Working…" : "Save Controls"}
               </button>
@@ -707,15 +694,17 @@ export default function Trading({ user }) {
           </div>
 
           <div className="grid" style={{ marginTop: 14 }}>
-            <div className="card" style={{ padding: 12 }}>
+            <div className="card" style={{ background: "rgba(0,0,0,.18)" }}>
               <b style={{ fontSize: 13 }}>Trade Size</b>
               <div style={{ marginTop: 6 }}>
-                <small>Baseline % = normal size. Max % = ceiling. Estimated USD uses current equity.</small>
+                <small>
+                  Baseline % = normal size. Max % = ceiling size. Estimated USD uses current equity.
+                </small>
               </div>
 
               <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                 <div>
-                  <label style={labelStyle}>Baseline %</label>
+                  <label>Baseline %</label>
                   <input
                     type="number"
                     step="0.001"
@@ -731,7 +720,7 @@ export default function Trading({ user }) {
                 </div>
 
                 <div>
-                  <label style={labelStyle}>Max %</label>
+                  <label>Max %</label>
                   <input
                     type="number"
                     step="0.001"
@@ -747,7 +736,7 @@ export default function Trading({ user }) {
                 </div>
 
                 <div>
-                  <label style={labelStyle}>Max trades/day</label>
+                  <label>Max trades/day</label>
                   <input
                     type="number"
                     step="1"
@@ -762,15 +751,15 @@ export default function Trading({ user }) {
               </div>
             </div>
 
-            <div className="card" style={{ padding: 12 }}>
+            <div className="card" style={{ background: "rgba(0,0,0,.18)" }}>
               <b style={{ fontSize: 13 }}>Keys</b>
               <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                 <div>
-                  <label style={labelStyle}>Owner key</label>
+                  <label>Owner key</label>
                   <input value={ownerKey} onChange={(e) => setOwnerKey(e.target.value)} placeholder="x-owner-key" />
                 </div>
                 <div>
-                  <label style={labelStyle}>Reset key</label>
+                  <label>Reset key</label>
                   <input value={resetKey} onChange={(e) => setResetKey(e.target.value)} placeholder="x-reset-key" />
                 </div>
                 <small>
@@ -782,20 +771,65 @@ export default function Trading({ user }) {
         </div>
       )}
 
-      {/* ======= MAIN TERMINAL GRID ======= */}
-      <div
-        className="tradeGrid"
-        style={{
-          gridTemplateColumns: layoutCols,
-          marginTop: 14,
-        }}
-      >
-        {/* ======= CHART / STATS PANEL ======= */}
-        <div className="card tradeChart">
-          {/* Top row: decision */}
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      {/* ======= MAIN GRID (terminal layout) ======= */}
+      <div className="tradeGrid" style={{ marginTop: 14, gridTemplateColumns: wideChart ? "1fr" : undefined }}>
+        {/* LEFT SIDEBAR (only when not wide) */}
+        {!wideChart && (
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <b style={{ fontSize: 13 }}>Market</b>
               <span className="badge">{symbol}</span>
+            </div>
+
+            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+              <div className="kpiBox">
+                <div className="kpiLbl">Last</div>
+                <div className="kpiVal">{fmtMoney(last, 2)}</div>
+              </div>
+
+              <div className="kpiBox">
+                <div className="kpiLbl">Feed</div>
+                <div style={{ fontWeight: 900 }}>{feedStatus}</div>
+                <small>Paper: {paper.running ? "ON" : "OFF"}</small>
+              </div>
+
+              {showMoney && (
+                <div className="kpiBox">
+                  <div className="kpiLbl">Balances</div>
+                  <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                    <div>
+                      <small>
+                        Cash: <b>{fmtMoneyCompact(cashBal, 2)}</b>
+                      </small>
+                    </div>
+                    <div>
+                      <small>
+                        Equity: <b>{fmtMoneyCompact(equity, 2)}</b>
+                      </small>
+                    </div>
+                    <div>
+                      <small>
+                        Unrealized: <b>{fmtMoneyCompact(unreal, 2)}</b>
+                      </small>
+                    </div>
+                    <div>
+                      <small>
+                        Status: <b>{paperStatus}</b>
+                      </small>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* CENTER: CHART + KPIs + LOGS */}
+        <div className="card tradeChart">
+          {/* Row: symbol + decision */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <b style={{ fontSize: 14 }}>{symbol}</b>
               <span className="badge">
                 Decision: <b>{decision}</b>
               </span>
@@ -806,80 +840,65 @@ export default function Trading({ user }) {
                 Ticks: <b>{fmtCompact(ticksSeen, 0)}</b>
               </span>
             </div>
-
             <span className="badge" title={reason} style={{ maxWidth: 520, overflow: "hidden", textOverflow: "ellipsis" }}>
               Reason: <b>{reason}</b>
             </span>
           </div>
 
-          {/* KPI grid (NOW USING CSS .kpi/.kpiBox styles you already wrote) */}
-          <div className="kpi" style={{ marginTop: 12 }}>
-            <div className="kpiBox">
-              <div className="kpiVal">{fmtCompact(wins, 0)}</div>
-              <div className="kpiLbl">Wins</div>
+          {/* KPIs */}
+          <div className="kpi">
+            <div>
+              <b>{fmtCompact(wins, 0)}</b>
+              <span>Wins</span>
             </div>
-            <div className="kpiBox">
-              <div className="kpiVal">{fmtCompact(losses, 0)}</div>
-              <div className="kpiLbl">Losses</div>
+            <div>
+              <b>{fmtCompact(losses, 0)}</b>
+              <span>Losses</span>
             </div>
-            <div className="kpiBox">
-              <div className="kpiVal">{fmtMoneyCompact(grossProfit, 2)}</div>
-              <div className="kpiLbl">Total Gain</div>
+            <div>
+              <b>{fmtMoneyCompact(grossProfit, 2)}</b>
+              <span>Total Gain</span>
             </div>
-            <div className="kpiBox">
-              <div className="kpiVal">{fmtMoneyCompact(grossLoss, 2)}</div>
-              <div className="kpiLbl">Total Loss</div>
+            <div>
+              <b>{fmtMoneyCompact(grossLoss, 2)}</b>
+              <span>Total Loss</span>
             </div>
-            <div className="kpiBox">
-              <div className="kpiVal">{fmtMoneyCompact(net, 2)}</div>
-              <div className="kpiLbl">Net P&L</div>
+            <div>
+              <b>{fmtMoneyCompact(net, 2)}</b>
+              <span>Net P&amp;L</span>
             </div>
-            <div className="kpiBox">
-              <div className="kpiVal">{fmtMoneyCompact(feePaid, 2)}</div>
-              <div className="kpiLbl">Fees</div>
+            <div>
+              <b>{fmtMoneyCompact(feePaid, 2)}</b>
+              <span>Fees</span>
             </div>
-            <div className="kpiBox">
-              <div className="kpiVal">{fmtMoneyCompact(slip, 2)}</div>
-              <div className="kpiLbl">Slippage</div>
+            <div>
+              <b>{fmtMoneyCompact(slip, 2)}</b>
+              <span>Slippage</span>
             </div>
-            <div className="kpiBox">
-              <div className="kpiVal">{fmtMoneyCompact(spr, 2)}</div>
-              <div className="kpiLbl">Spread</div>
+            <div>
+              <b>{fmtMoneyCompact(spr, 2)}</b>
+              <span>Spread</span>
             </div>
           </div>
 
-          {showMoney && (
-            <div className="card" style={{ marginTop: 14, padding: 12 }}>
-              <b style={{ fontSize: 13 }}>Balances</b>
-              <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
-                <small>
-                  Cash: <b>{fmtMoneyCompact(cashBal, 2)}</b>
-                </small>
-                <small>
-                  Equity: <b>{fmtMoneyCompact(equity, 2)}</b>
-                </small>
-                <small>
-                  Unrealized: <b>{fmtMoneyCompact(unreal, 2)}</b>
-                </small>
-                <small>
-                  Status: <b>{paperStatus}</b>
-                </small>
-              </div>
-            </div>
-          )}
-
+          {/* Open Position */}
           {paper.position && (
-            <div className="card" style={{ marginTop: 14, padding: 12, borderColor: "rgba(122,167,255,0.35)" }}>
+            <div className="card" style={{ marginTop: 14, borderColor: "rgba(122,167,255,0.35)" }}>
               <b>Open Position</b>
-              <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+              <div style={{ marginTop: 8 }}>
                 <small>
                   <b>{paper.position.symbol}</b> • {paper.position.strategy || "—"} • Entry{" "}
                   <b>{fmtMoney(paper.position.entry, 2)}</b>
                 </small>
+              </div>
+              <div style={{ marginTop: 8 }}>
                 <small>
-                  Notional <b>{fmtMoneyCompact(paper.position.usd ?? paper.position.entryNotionalUsd, 2)}</b> • Qty{" "}
+                  Notional{" "}
+                  <b>{fmtMoneyCompact(paper.position.usd ?? paper.position.entryNotionalUsd, 2)}</b> • Qty{" "}
                   <b>{fmtNum(paper.position.qty, 6)}</b>
                 </small>
+              </div>
+              <div style={{ marginTop: 8 }}>
                 <small>
                   Age <b>{fmtDur(paper.position.ageMs)}</b> • Remaining{" "}
                   <b>{paper.position.remainingMs !== null ? fmtDur(paper.position.remainingMs) : "—"}</b>
@@ -898,7 +917,6 @@ export default function Trading({ user }) {
                 borderRadius: 14,
                 border: "1px solid rgba(255,255,255,0.10)",
                 background: "rgba(0,0,0,0.20)",
-                display: "block",
               }}
             />
           </div>
@@ -907,8 +925,8 @@ export default function Trading({ user }) {
           {showTradeLog && (
             <div style={{ marginTop: 14 }}>
               <b>Trade Log</b>
-              <div className="tableWrap" style={{ marginTop: 10 }}>
-                <table className="table tableSticky">
+              <div className="tableWrap">
+                <table className="table">
                   <thead>
                     <tr>
                       {["Time", "Type", "Strategy", "Price", "USD", "Entry Cost", "Held", "Exit", "Net P/L"].map((h) => (
@@ -937,7 +955,9 @@ export default function Trading({ user }) {
 
                     {(!paper.trades || paper.trades.length === 0) && (
                       <tr>
-                        <td colSpan={9}>No trades yet (it’s learning)</td>
+                        <td colSpan={9} className="muted">
+                          No trades yet (it’s learning)
+                        </td>
                       </tr>
                     )}
                   </tbody>
@@ -954,7 +974,7 @@ export default function Trading({ user }) {
                 <small>Scroll to review how every trade happened (entry, size, strategy, hold time, exit reason, result).</small>
               </div>
 
-              <div className="card" style={{ marginTop: 10, padding: 10, maxHeight: 340, overflow: "auto" }}>
+              <div className="card" style={{ marginTop: 10, maxHeight: 340, overflow: "auto", background: "rgba(0,0,0,0.18)" }}>
                 {historyItems.length === 0 && <div className="muted">No history yet.</div>}
 
                 {historyItems.map((t, idx) => (
@@ -976,18 +996,16 @@ export default function Trading({ user }) {
           )}
         </div>
 
-        {/* ======= AI TERMINAL PANEL ======= */}
+        {/* RIGHT: AI + VOICE */}
         {showRightPanel && (
           <div className="card tradeAI">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <div>
                 <b style={{ fontSize: 13 }}>AI Assistant</b>
-                <div style={{ marginTop: 4 }}>
+                <div>
                   <small>Ask why it bought/sold • voice below</small>
                 </div>
               </div>
-
-              <span className="badge ok">AutoProtect</span>
             </div>
 
             <div ref={logRef} className="chatLog" style={{ marginTop: 12 }}>
@@ -1014,19 +1032,23 @@ export default function Trading({ user }) {
                 }}
               />
               <button
-                style={{ width: 120 }}
                 onClick={() => {
                   sendToAI(input);
                   setInput("");
                 }}
                 type="button"
+                style={{ width: "auto", minWidth: 110 }}
               >
                 Send
               </button>
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <VoiceAI title="AutoProtect Voice" endpoint="/api/ai/chat" getContext={() => ({ symbol, mode, last, paper })} />
+              <VoiceAI
+                title="AutoProtect Voice"
+                endpoint="/api/ai/chat"
+                getContext={() => ({ symbol, mode, last, paper })}
+              />
             </div>
           </div>
         )}
@@ -1034,5 +1056,3 @@ export default function Trading({ user }) {
     </div>
   );
 }
-
-const labelStyle = { fontSize: 12, opacity: 0.75, fontWeight: 900, display: "block", marginBottom: 6 };
