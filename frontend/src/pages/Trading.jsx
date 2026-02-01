@@ -105,6 +105,30 @@ export default function Trading({ user }) {
   const [cfgStatus, setCfgStatus] = useState("—");
   const [cfgBusy, setCfgBusy] = useState(false);
 
+  // ✅ REAL responsive breakpoint (fixes the iPhone squeeze issue)
+  const [isNarrow, setIsNarrow] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia?.("(max-width: 980px)")?.matches ?? false;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia?.("(max-width: 980px)");
+    if (!mq) return;
+
+    const onChange = () => setIsNarrow(!!mq.matches);
+    onChange();
+
+    try {
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    } catch {
+      // Safari fallback
+      mq.addListener(onChange);
+      return () => mq.removeListener(onChange);
+    }
+  }, []);
+
   // Local editable config (separate so polling doesn't clobber typing)
   const [cfgForm, setCfgForm] = useState({
     baselinePct: 0.02,
@@ -514,13 +538,16 @@ export default function Trading({ user }) {
     return w / total;
   }, [wins, losses]);
 
+  // ✅ Right sidebar only if AI visible and not wide-chart
   const showRightPanel = showAI && !wideChart;
 
+  // ✅ Layout: MOBILE = 1 column, DESKTOP = 2/3 columns
   const layoutCols = useMemo(() => {
+    if (isNarrow) return "1fr";
     if (wideChart) return "1fr";
     if (showRightPanel) return "320px 1fr 360px";
     return "320px 1fr";
-  }, [wideChart, showRightPanel]);
+  }, [isNarrow, wideChart, showRightPanel]);
 
   const baseCard = {
     borderRadius: 14,
@@ -590,7 +617,8 @@ export default function Trading({ user }) {
     opacity: 0.75,
   };
 
-  const chartHeight = wideChart ? 620 : 520;
+  // ✅ On mobile we want it slightly shorter so it fits nicer
+  const chartHeight = isNarrow ? 420 : wideChart ? 620 : 520;
 
   return (
     <div style={{ padding: 12 }}>
@@ -865,7 +893,7 @@ export default function Trading({ user }) {
             </div>
           )}
 
-          {/* ✅ REAL TradingView-style Chart + ✅ AutoShield corner mark */}
+          {/* ✅ Chart + ✅ AutoShield mark that HIDES the TV mark */}
           <div style={{ marginTop: 12 }}>
             <div
               style={{
@@ -878,32 +906,41 @@ export default function Trading({ user }) {
             >
               <TVChart candles={candles} height={chartHeight} symbol={symbol} last={last} />
 
-              {/* AutoShield “TV-style” mark (bottom-left) */}
-              <img
-                src={AUTOSHIELD_MARK_SRC}
-                alt=""
+              {/* AutoShield mark (covers bottom-left TV icon area) */}
+              <div
                 aria-hidden="true"
                 style={{
                   position: "absolute",
-                  left: 12,
-                  bottom: 10,
-                  width: 34,
-                  height: 34,
-                  borderRadius: 10,
-
-                  // blend + subtlety
-                  opacity: 0.22,
-                  mixBlendMode: "screen",
-                  filter: "grayscale(1) brightness(1.25) contrast(1.05)",
-
-                  // never block chart interactions
+                  left: 10,
+                  bottom: 8,
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
+                  background: "rgba(0,0,0,0.55)",   // covers the TV icon underneath
+                  backdropFilter: "blur(6px)",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  display: "grid",
+                  placeItems: "center",
                   pointerEvents: "none",
-                  userSelect: "none",
-
-                  // tiny glow so it reads on dark backgrounds
-                  boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
+                  zIndex: 50,
+                  boxShadow: "0 10px 24px rgba(0,0,0,0.35)",
                 }}
-              />
+              >
+                <img
+                  src={AUTOSHIELD_MARK_SRC}
+                  alt=""
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 10,
+                    opacity: 0.55,                  // visible enough to replace it
+                    filter: "grayscale(1) brightness(1.15) contrast(1.05)",
+                    mixBlendMode: "screen",
+                    pointerEvents: "none",
+                    userSelect: "none",
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -987,7 +1024,7 @@ export default function Trading({ user }) {
               ref={logRef}
               style={{
                 marginTop: 12,
-                height: 360,
+                height: isNarrow ? 260 : 360,
                 overflow: "auto",
                 borderRadius: 12,
                 border: "1px solid rgba(255,255,255,0.10)",
