@@ -516,93 +516,99 @@ export default function Trading({ user }) {
     return w / total;
   }, [wins, losses]);
 
-  // ✅ Right sidebar only if AI visible and not wide-chart
-  const showRightPanel = showAI && !wideChart;
+  const chartHeight = wideChart ? 620 : 520;
 
   return (
     <div className="tradeWrap">
       {/* ======= TOP HEADER ======= */}
-      <div className="tradeTop">
-        <div className="card" style={{ flex: 1, minWidth: 280 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-            <h2 style={{ margin: 0 }}>Trading Room</h2>
-            <span className="badge">
-              Feed: <b style={{ marginLeft: 6 }}>{feedStatus}</b>
-            </span>
-            <span className="badge">
-              Last: <b style={{ marginLeft: 6 }}>{fmtMoney(last, 2)}</b>
-            </span>
-            <span className={`badge ${paper.running ? "ok" : ""}`}>
-              Paper: <b style={{ marginLeft: 6 }}>{paper.running ? "ON" : "OFF"}</b>
-            </span>
-          </div>
-          <div style={{ marginTop: 6 }} className="muted">
-            Live feed + TradingView-style chart + paper trader + AI explanations.
-          </div>
-        </div>
+      <div className="card tradeHeader">
+        <div className="tradeHeaderTop">
+          <div className="tradeHeaderLeft">
+            <div className="tradeHeaderTitleRow">
+              <h2 className="tradeTitle">Trading Room</h2>
 
-        {/* Controls “pills” */}
-        <div className="pill">
-          <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Mode</div>
-          <div className="actions" style={{ marginTop: 8 }}>
-            <button className={mode === "Live" ? "active" : ""} onClick={() => setMode("Live")} type="button">
-              Live
-            </button>
-            <button className={mode === "Paper" ? "active" : ""} onClick={() => setMode("Paper")} type="button">
-              Paper
-            </button>
+              <span className="badge">
+                Feed: <b style={{ marginLeft: 6 }}>{feedStatus}</b>
+              </span>
+
+              <span className="badge">
+                Last: <b style={{ marginLeft: 6 }}>{fmtMoney(last, 2)}</b>
+              </span>
+
+              <span className="badge ok">
+                Paper: <b style={{ marginLeft: 6 }}>{paper.running ? "ON" : "OFF"}</b>
+              </span>
+            </div>
+
+            <div className="tradeSub">
+              Live feed + TradingView-style chart + paper trader + AI explanations.
+            </div>
           </div>
-        </div>
 
-        <div className="pill">
-          <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Symbol</div>
-          <select value={symbol} onChange={(e) => setSymbol(e.target.value)} style={{ marginTop: 8 }}>
-            {UI_SYMBOLS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
+          <div className="tradeHeaderRight">
+            <div className="pill">
+              <div className="pillLabel">Mode</div>
+              <div className="pillRow">
+                <button className={mode === "Live" ? "active" : ""} onClick={() => setMode("Live")} type="button">
+                  Live
+                </button>
+                <button className={mode === "Paper" ? "active" : ""} onClick={() => setMode("Paper")} type="button">
+                  Paper
+                </button>
+              </div>
+            </div>
 
-        <div className="pill">
-          <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Panels</div>
-          <div className="actions" style={{ marginTop: 8 }}>
-            <button className={showMoney ? "active" : ""} onClick={() => setShowMoney((v) => !v)} type="button">
-              Money
-            </button>
-            <button className={showTradeLog ? "active" : ""} onClick={() => setShowTradeLog((v) => !v)} type="button">
-              Log
-            </button>
-            <button className={showHistory ? "active" : ""} onClick={() => setShowHistory((v) => !v)} type="button">
-              History
-            </button>
-            <button className={showControls ? "active" : ""} onClick={() => setShowControls((v) => !v)} type="button">
-              Controls
-            </button>
-            <button className={showAI ? "active" : ""} onClick={() => setShowAI((v) => !v)} type="button">
-              AI
-            </button>
-            <button className={wideChart ? "active" : ""} onClick={() => setWideChart((v) => !v)} type="button">
-              Wide
-            </button>
+            <div className="pill">
+              <div className="pillLabel">Symbol</div>
+              <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
+                {UI_SYMBOLS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="pill">
+              <div className="pillLabel">Panels</div>
+              <div className="pillRow">
+                <button className={showMoney ? "active" : ""} onClick={() => setShowMoney((v) => !v)} type="button">
+                  Money
+                </button>
+                <button className={showTradeLog ? "active" : ""} onClick={() => setShowTradeLog((v) => !v)} type="button">
+                  Log
+                </button>
+                <button className={showHistory ? "active" : ""} onClick={() => setShowHistory((v) => !v)} type="button">
+                  History
+                </button>
+                <button className={showControls ? "active" : ""} onClick={() => setShowControls((v) => !v)} type="button">
+                  Controls
+                </button>
+                <button className={showAI ? "active" : ""} onClick={() => setShowAI((v) => !v)} type="button">
+                  AI
+                </button>
+                <button className={wideChart ? "active" : ""} onClick={() => setWideChart((v) => !v)} type="button">
+                  Wide
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* ======= CONTROLS ======= */}
       {showControls && (
-        <div className="card" style={{ marginTop: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div className="card tradeControls">
+          <div className="tradeControlsTop">
             <div>
-              <b>AI Trading Controls (Paper)</b>
-              <div className="muted" style={{ marginTop: 6, fontSize: 12, lineHeight: 1.5 }}>
+              <b style={{ fontSize: 14 }}>AI Trading Controls (Paper)</b>
+              <div style={{ marginTop: 6, opacity: 0.75, fontSize: 12, lineHeight: 1.5 }}>
                 Equity: <b>{fmtMoneyCompact(equity, 2)}</b> • Win rate: <b>{(winRate * 100).toFixed(0)}%</b> • Config:{" "}
                 <b>{cfgStatus}</b>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div className="tradeControlsBtns">
               <button onClick={savePaperConfig} disabled={cfgBusy} type="button">
                 {cfgBusy ? "Working…" : "Save Controls"}
               </button>
@@ -612,12 +618,10 @@ export default function Trading({ user }) {
             </div>
           </div>
 
-          <div style={{ height: 12 }} />
-
-          <div className="grid">
-            <div className="card" style={{ background: "rgba(0,0,0,.18)" }}>
+          <div className="tradeControlsGrid">
+            <div className="card tradeInnerCard">
               <b style={{ fontSize: 13 }}>Trade Size</b>
-              <div className="muted" style={{ marginTop: 6, fontSize: 12, lineHeight: 1.5 }}>
+              <div style={{ marginTop: 6, opacity: 0.75, fontSize: 12, lineHeight: 1.5 }}>
                 Baseline % = normal size. Max % = ceiling size. Estimated USD uses current equity.
               </div>
 
@@ -633,7 +637,7 @@ export default function Trading({ user }) {
                     onChange={(e) => setCfgForm((p) => ({ ...p, baselinePct: toNum(e.target.value, 0) }))}
                     placeholder="0.02 = 2%"
                   />
-                  <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                  <div style={{ marginTop: 6, opacity: 0.75, fontSize: 12 }}>
                     Est. baseline amount: <b>{fmtMoneyCompact(baselineUsd, 2)}</b>
                   </div>
                 </div>
@@ -649,7 +653,7 @@ export default function Trading({ user }) {
                     onChange={(e) => setCfgForm((p) => ({ ...p, maxPct: toNum(e.target.value, 0) }))}
                     placeholder="0.05 = 5%"
                   />
-                  <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                  <div style={{ marginTop: 6, opacity: 0.75, fontSize: 12 }}>
                     Est. max amount: <b>{fmtMoneyCompact(maxUsd, 2)}</b>
                   </div>
                 </div>
@@ -665,14 +669,14 @@ export default function Trading({ user }) {
                     onChange={(e) => setCfgForm((p) => ({ ...p, maxTradesPerDay: toInt(e.target.value, 1) }))}
                     placeholder="12"
                   />
-                  <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                  <div style={{ marginTop: 6, opacity: 0.75, fontSize: 12 }}>
                     This prevents overtrading and helps reduce one-sided losing.
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="card" style={{ background: "rgba(0,0,0,.18)" }}>
+            <div className="card tradeInnerCard">
               <b style={{ fontSize: 13 }}>Keys</b>
               <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
                 <div>
@@ -683,7 +687,7 @@ export default function Trading({ user }) {
                   <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Reset key</div>
                   <input value={resetKey} onChange={(e) => setResetKey(e.target.value)} placeholder="x-reset-key" />
                 </div>
-                <div className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.5 }}>
+                <div style={{ marginTop: 4, opacity: 0.75, fontSize: 12, lineHeight: 1.5 }}>
                   Tip: If saving fails, backend rejected <b>x-owner-key</b>.
                 </div>
               </div>
@@ -692,38 +696,34 @@ export default function Trading({ user }) {
         </div>
       )}
 
-      {/* ======= MAIN LAYOUT ======= */}
-      <div
-        className="tradeGrid"
-        style={{
-          gridTemplateColumns: wideChart ? "1fr" : showRightPanel ? "1.2fr 2.2fr 1.3fr" : "1.2fr 2.2fr",
-        }}
-      >
+      {/* ======= MAIN LAYOUT =======
+          ✅ Desktop: 3 columns
+          ✅ Mobile: stacks clean (CSS breakpoint)
+      */}
+      <div className={wideChart ? "tradeGridWide" : showAI ? "tradeGrid3" : "tradeGrid2"}>
         {/* LEFT SIDEBAR */}
         {!wideChart && (
-          <div className="card">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <div className="card tradeSide">
+            <div className="tradeSideTop">
               <b style={{ fontSize: 13 }}>Market</b>
               <span className="badge">{symbol}</span>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
               <div className="kpiBox">
-                <div className="kpiLbl" style={{ fontWeight: 800 }}>Last</div>
-                <div className="kpiVal">{fmtMoney(last, 2)}</div>
+                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Last</div>
+                <div style={{ marginTop: 6, fontWeight: 950, fontSize: 18 }}>{fmtMoney(last, 2)}</div>
               </div>
 
               <div className="kpiBox">
-                <div className="kpiLbl" style={{ fontWeight: 800 }}>Feed</div>
+                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Feed</div>
                 <div style={{ marginTop: 6, fontWeight: 900 }}>{feedStatus}</div>
-                <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                  Paper: {paper.running ? "ON" : "OFF"}
-                </div>
+                <div style={{ marginTop: 6, opacity: 0.75, fontSize: 12 }}>Paper: {paper.running ? "ON" : "OFF"}</div>
               </div>
 
               {showMoney && (
                 <div className="kpiBox">
-                  <div className="kpiLbl" style={{ fontWeight: 800 }}>Balances</div>
+                  <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Balances</div>
                   <div style={{ marginTop: 8, display: "grid", gap: 6, fontSize: 12, opacity: 0.9 }}>
                     <div>Cash: <b>{fmtMoneyCompact(cashBal, 2)}</b></div>
                     <div>Equity: <b>{fmtMoneyCompact(equity, 2)}</b></div>
@@ -736,22 +736,29 @@ export default function Trading({ user }) {
           </div>
         )}
 
-        {/* CENTER (Chart + KPIs) */}
-        <div className="tradeChart card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        {/* CENTER */}
+        <div className="card tradeMain">
+          <div className="tradeMainTop">
+            <div className="tradeMainTopLeft">
               <b style={{ fontSize: 14 }}>{symbol}</b>
-              <span className="badge">Decision: <b style={{ marginLeft: 6 }}>{decision}</b></span>
-              <span className="badge">Conf: <b style={{ marginLeft: 6 }}>{pct(conf, 0)}</b></span>
-              <span className="badge">Ticks: <b style={{ marginLeft: 6 }}>{fmtCompact(ticksSeen, 0)}</b></span>
+              <span className="badge">
+                Decision: <b style={{ marginLeft: 6 }}>{decision}</b>
+              </span>
+              <span className="badge">
+                Conf: <b style={{ marginLeft: 6 }}>{pct(conf, 0)}</b>
+              </span>
+              <span className="badge">
+                Ticks: <b style={{ marginLeft: 6 }}>{fmtCompact(ticksSeen, 0)}</b>
+              </span>
             </div>
-            <span className="badge" style={{ maxWidth: 520, overflow: "hidden", textOverflow: "ellipsis" }} title={reason}>
+
+            <span className="badge" title={reason} style={{ maxWidth: 520, overflow: "hidden", textOverflow: "ellipsis" }}>
               Reason: <b style={{ marginLeft: 6 }}>{reason}</b>
             </span>
           </div>
 
-          {/* KPI row */}
-          <div className="kpi" style={{ marginTop: 12 }}>
+          {/* KPIs */}
+          <div className="kpi kpiCompact">
             <div><b>{fmtCompact(wins, 0)}</b><span>Wins</span></div>
             <div><b>{fmtCompact(losses, 0)}</b><span>Losses</span></div>
             <div><b>{fmtMoneyCompact(grossProfit, 2)}</b><span>Total Gain</span></div>
@@ -763,9 +770,9 @@ export default function Trading({ user }) {
           </div>
 
           {paper.position && (
-            <div className="card" style={{ borderColor: "rgba(122,167,255,0.35)", marginTop: 12 }}>
+            <div className="card tradePosition">
               <b>Open Position</b>
-              <div className="muted" style={{ marginTop: 8, fontSize: 12, lineHeight: 1.6 }}>
+              <div style={{ marginTop: 8, opacity: 0.85, fontSize: 12, lineHeight: 1.6 }}>
                 <div>
                   <b>{paper.position.symbol}</b> • {paper.position.strategy || "—"} • Entry {fmtMoney(paper.position.entry, 2)}
                 </div>
@@ -781,15 +788,15 @@ export default function Trading({ user }) {
           )}
 
           {/* ✅ Chart */}
-          <div style={{ marginTop: 12 }}>
-            <TVChart candles={candles} height={wideChart ? 640 : 520} symbol={symbol} last={last} />
+          <div className="tradeChartArea">
+            <TVChart candles={candles} height={chartHeight} symbol={symbol} last={last} />
           </div>
 
           {/* Trade Log */}
           {showTradeLog && (
-            <div style={{ marginTop: 14 }}>
+            <div style={{ marginTop: 12 }}>
               <b>Trade Log</b>
-              <div className="tableWrap">
+              <div className="tableWrap" style={{ marginTop: 10 }}>
                 <table className="table">
                   <thead>
                     <tr>
@@ -830,14 +837,14 @@ export default function Trading({ user }) {
 
           {/* History */}
           {showHistory && (
-            <div style={{ marginTop: 14 }}>
+            <div style={{ marginTop: 12 }}>
               <b>History</b>
-              <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+              <div style={{ marginTop: 6, opacity: 0.75, fontSize: 12 }}>
                 Scroll to review how every trade happened (entry, size, strategy, hold time, exit reason, result).
               </div>
 
-              <div style={{ marginTop: 10, maxHeight: 340, overflow: "auto" }} className="card">
-                {historyItems.length === 0 && <div className="muted">No history yet.</div>}
+              <div className="card" style={{ marginTop: 10, maxHeight: 340, overflow: "auto" }}>
+                {historyItems.length === 0 && <div style={{ opacity: 0.75 }}>No history yet.</div>}
 
                 {historyItems.map((t, idx) => (
                   <div
@@ -859,26 +866,22 @@ export default function Trading({ user }) {
         </div>
 
         {/* RIGHT SIDEBAR */}
-        {showRightPanel && (
-          <div className="tradeAI card">
+        {!wideChart && showAI && (
+          <div className="card tradeRight">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <div>
                 <b style={{ fontSize: 13 }}>AI Assistant</b>
-                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                  Ask why it bought/sold • voice below
-                </div>
+                <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>Ask why it bought/sold • voice below</div>
               </div>
             </div>
 
-            <div ref={logRef} className="chatLog" style={{ marginTop: 12 }}>
+            <div ref={logRef} className="chatLog" style={{ height: 360, marginTop: 12 }}>
               {messages.map((m, idx) => (
                 <div key={idx} className={`chatMsg ${m.from === "you" ? "you" : "ai"}`}>
                   <b style={{ display: "block", marginBottom: 4, fontSize: 12 }}>
                     {m.from === "you" ? "You" : "AutoProtect"}
                   </b>
-                  <div style={{ fontSize: 12, opacity: 0.95, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>
-                    {m.text}
-                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.95, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.text}</div>
                 </div>
               ))}
             </div>
@@ -896,12 +899,12 @@ export default function Trading({ user }) {
                 }}
               />
               <button
+                style={{ width: "auto", minWidth: 110 }}
                 onClick={() => {
                   sendToAI(input);
                   setInput("");
                 }}
                 type="button"
-                style={{ width: 110 }}
               >
                 Send
               </button>
