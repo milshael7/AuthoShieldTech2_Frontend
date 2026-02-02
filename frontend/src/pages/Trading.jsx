@@ -1,487 +1,482 @@
 // frontend/src/pages/Trading.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import VoiceAI from "../components/VoiceAI";
+import React, { useMemo, useState } from "react";
 import TVChart from "../components/TVChart";
+import VoiceAI from "../components/VoiceAI"; // keep if you have it; otherwise comment this line out
 
-/* =========================================================
-   Helpers
-   ========================================================= */
-
-const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
-
-const fmtMoney = (n, d = 2) =>
+const fmt = (n, d = 5) =>
   Number.isFinite(+n)
-    ? "$" + (+n).toLocaleString(undefined, { maximumFractionDigits: d })
+    ? (+n).toLocaleString(undefined, { maximumFractionDigits: d })
     : "—";
 
-const fmtCompact = (n, d = 2) => {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "—";
-  const a = Math.abs(x);
-  if (a >= 1e12) return (x / 1e12).toFixed(d) + "t";
-  if (a >= 1e9) return (x / 1e9).toFixed(d) + "b";
-  if (a >= 1e6) return (x / 1e6).toFixed(d) + "m";
-  if (a >= 1e3) return (x / 1e3).toFixed(d) + "k";
-  return x.toFixed(d);
-};
-
-const pct = (n, d = 2) =>
-  Number.isFinite(+n) ? (+n * 100).toFixed(d) + "%" : "—";
-
-/* =========================================================
-   Mobile detection (real iPhone behavior)
-   ========================================================= */
-
-function useIsMobile(breakpoint = 980) {
-  const [w, setW] = useState(
-    typeof window !== "undefined" ? window.innerWidth : 1200
-  );
-
-  useEffect(() => {
-    const r = () => setW(window.innerWidth || 1200);
-    window.addEventListener("resize", r);
-    return () => window.removeEventListener("resize", r);
-  }, []);
-
-  const ua =
-    typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
-  const uaMobile = /iPhone|iPad|Android|Mobile|CriOS|FxiOS/i.test(ua);
-  return uaMobile || w <= breakpoint;
+function uid() {
+  return Math.random().toString(16).slice(2) + Date.now().toString(16);
 }
 
-/* =========================================================
-   MAIN COMPONENT
-   ========================================================= */
-
 export default function Trading() {
-  const isMobile = useIsMobile();
+  // ===== pair selector =====
+  const [symbol, setSymbol] = useState("EURUSD");
 
-  // ✅ DEFAULT TAB = CHART MARKET
-  const [tab, setTab] = useState("chart"); // chart | room | reports
+  // ===== ticket state =====
+  const [side, setSide] = useState("BUY"); // BUY | SELL
+  const [orderType, setOrderType] = useState("LIMIT"); // MARKET | LIMIT | STOP
+  const [price, setPrice] = useState(1.11088);
+  const [qty, setQty] = useState(1000);
 
-  const [symbol, setSymbol] = useState("BTCUSD");
-  const [last, setLast] = useState(65300);
-  const [feedStatus, setFeedStatus] = useState("Connecting…");
+  // “AI percent size” (your ask: AI uses % to go in/out)
+  const [aiRiskPct, setAiRiskPct] = useState(2); // % of equity
+  const [tpEnabled, setTpEnabled] = useState(false);
+  const [slEnabled, setSlEnabled] = useState(false);
+  const [tp, setTp] = useState(1.11837);
+  const [sl, setSl] = useState(1.10837);
 
-  // simple “demo” stats (UI only)
-  const [dayChange, setDayChange] = useState(0.0123); // 1.23%
-  const [volume, setVolume] = useState(1284300000); // demo
+  // ===== UI tabs =====
+  const [mainTab, setMainTab] = useState("terminal"); // terminal | ai | explain
+  const [dockTab, setDockTab] = useState("positions"); // positions | orders | history
 
-  const [candles, setCandles] = useState(() => {
+  // ===== Set Orders list =====
+  const [setOrders, setSetOrders] = useState(() => []);
+
+  // ===== demo candles (swap to real feed later) =====
+  const candles = useMemo(() => {
     const out = [];
-    let p = 65300;
-    const t = Math.floor(Date.now() / 1000);
-    for (let i = 140; i > 0; i--) {
-      const time = t - i * 5;
+    let p = 1.1108;
+    let t = Math.floor(Date.now() / 1000) - 5 * 240;
+    for (let i = 0; i < 240; i++) {
       const o = p;
-      const c = o + (Math.random() - 0.5) * 60;
-      out.push({
-        time,
-        open: o,
-        high: Math.max(o, c) + Math.random() * 20,
-        low: Math.min(o, c) - Math.random() * 20,
-        close: c,
-      });
+      const c = o + (Math.random() - 0.5) * 0.003;
+      const hi = Math.max(o, c) + Math.random() * 0.0015;
+      const lo = Math.min(o, c) - Math.random() * 0.0015;
+      out.push({ time: t, open: o, high: hi, low: lo, close: c });
       p = c;
+      t += 5;
     }
     return out;
-  });
-
-  // watchlist (UI symbols)
-  const watchlist = useMemo(
-    () => [
-      { ui: "BTCUSD", name: "Bitcoin" },
-      { ui: "ETHUSD", name: "Ethereum" },
-    ],
-    []
-  );
-
-  /* =========================================================
-     Fake feed (safe fallback)
-     ========================================================= */
-
-  useEffect(() => {
-    let price = last;
-    setFeedStatus("Connected (demo)");
-
-    const t = setInterval(() => {
-      const delta = (Math.random() - 0.5) * (symbol === "ETHUSD" ? 6 : 40);
-      price = Math.max(1, price + delta);
-
-      setLast(+price.toFixed(2));
-
-      // tiny “day change” drift
-      setDayChange((p) => clamp(p + (Math.random() - 0.5) * 0.0004, -0.12, 0.12));
-      setVolume((v) => Math.max(0, v + (Math.random() - 0.5) * 5000000));
-
-      setCandles((prev) => {
-        const next = [...prev];
-        const now = Math.floor(Date.now() / 1000);
-        const lastC = next[next.length - 1];
-
-        if (!lastC || now - lastC.time >= 5) {
-          next.push({
-            time: now,
-            open: lastC ? lastC.close : price,
-            high: price,
-            low: price,
-            close: price,
-          });
-          while (next.length > 220) next.shift();
-        } else {
-          lastC.high = Math.max(lastC.high, price);
-          lastC.low = Math.min(lastC.low, price);
-          lastC.close = price;
-        }
-        return next;
-      });
-    }, 900);
-
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
 
-  /* =========================================================
-     Layout
-     ========================================================= */
+  const last = candles?.length ? candles[candles.length - 1].close : 1.11082;
+  const bid = last - 0.00006;
+  const ask = last + 0.00006;
 
-  const chartHeight = isMobile ? 520 : 640;
+  // ===== “SET ORDER” action =====
+  const setOrder = async () => {
+    // Create a rule the AI can use later
+    const newOrder = {
+      id: uid(),
+      createdAt: new Date().toISOString(),
+      symbol,
+      side,
+      orderType,
+      qty,
+      level: orderType === "MARKET" ? null : Number(price),
+      tp: tpEnabled ? Number(tp) : null,
+      sl: slEnabled ? Number(sl) : null,
+      aiRiskPct: Number(aiRiskPct),
+      status: "ARMED", // ARMED | TRIGGERED | DONE | CANCELED
+    };
 
-  const pageWrapStyle = {
-    padding: isMobile ? 12 : 14,
-    maxWidth: 1280,
-    margin: "0 auto",
-    width: "100%",
+    setSetOrders((prev) => [newOrder, ...prev]);
+
+    // Optional: send to backend so AI can actually act on it
+    // If your backend route exists later, it can consume this config.
+    try {
+      const base =
+        (import.meta.env.VITE_API_BASE ||
+          import.meta.env.VITE_BACKEND_URL ||
+          "").trim();
+      if (base) {
+        await fetch(`${base}/api/ai/set-order`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(newOrder),
+        }).catch(() => {});
+      }
+    } catch {}
+
+    alert(
+      `SET ORDER saved ✅\n\n${side} ${symbol}\nType: ${orderType}\nLevel: ${
+        orderType === "MARKET" ? "(market)" : fmt(price, 5)
+      }\nQty: ${qty}\nAI Risk: ${aiRiskPct}%\nTP: ${
+        tpEnabled ? fmt(tp, 5) : "off"
+      }\nSL: ${slEnabled ? fmt(sl, 5) : "off"}`
+    );
   };
 
-  const topTabsStyle = {
-    display: "flex",
-    gap: 10,
-    marginBottom: 14,
-    flexWrap: "wrap",
+  const cancelSetOrder = (id) => {
+    setSetOrders((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, status: "CANCELED" } : o))
+    );
   };
-
-  const headerRow = {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    flexWrap: "wrap",
-    gap: 12,
-  };
-
-  // terminal grid: left | center | right
-  const terminalGrid = {
-    display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "260px minmax(0, 1fr) 340px",
-    gap: 12,
-    alignItems: "start",
-  };
-
-  const panelTitleRow = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    marginBottom: 10,
-  };
-
-  const mini = { opacity: 0.75, fontSize: 12, lineHeight: 1.4 };
-
-  const activeSymbol = watchlist.find((w) => w.ui === symbol) || watchlist[0];
 
   return (
-    <div style={pageWrapStyle}>
-      {/* ================== TOP NAV (FILE CABINET) ================== */}
-      <div style={topTabsStyle}>
+    <div className="termShell">
+      {/* ===== TOP NAV (like your “file cabinet”) ===== */}
+      <div className="termTopNav">
         <button
-          className={tab === "chart" ? "active" : ""}
-          onClick={() => setTab("chart")}
+          className={mainTab === "terminal" ? "active" : ""}
+          onClick={() => setMainTab("terminal")}
           type="button"
         >
-          Market (Chart)
+          Terminal
         </button>
         <button
-          className={tab === "room" ? "active" : ""}
-          onClick={() => setTab("room")}
+          className={mainTab === "ai" ? "active" : ""}
+          onClick={() => setMainTab("ai")}
           type="button"
         >
-          Trading Room
+          AI
         </button>
         <button
-          className={tab === "reports" ? "active" : ""}
-          onClick={() => setTab("reports")}
+          className={mainTab === "explain" ? "active" : ""}
+          onClick={() => setMainTab("explain")}
           type="button"
         >
-          Reports
+          Market Explain
         </button>
       </div>
 
-      {/* ================== HEADER ================== */}
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div style={headerRow}>
-          <div style={{ minWidth: 220 }}>
-            <h2 style={{ margin: 0, letterSpacing: 0.2 }}>
-              Trading Terminal
-            </h2>
-            <div style={mini}>
-              Exchange-style layout • clean spacing • mobile + desktop aligned
-            </div>
+      {/* ===== TOP BAR ===== */}
+      <div className="termTopBar">
+        <div className="termTopLeft">
+          <div className="termTitle">
+            <b>AutoShield Terminal</b>
+            <span>Paper Trading</span>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <span className="badge">
-              Feed: <b style={{ marginLeft: 6 }}>{feedStatus}</b>
-            </span>
-            <span className="badge">
-              Last: <b style={{ marginLeft: 6 }}>{fmtMoney(last)}</b>
-            </span>
-
-            <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
+          <div className="termPair">
+            <span className="chipLite">OANDA:</span>
+            <select
+              className="termSelect"
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value)}
+            >
+              <option value="EURUSD">EURUSD</option>
               <option value="BTCUSD">BTCUSD</option>
               <option value="ETHUSD">ETHUSD</option>
             </select>
           </div>
+
+          <div className="termStats">
+            <span className="badgeLite">
+              Bid <b>{fmt(bid, 5)}</b>
+            </span>
+            <span className="badgeLite">
+              Ask <b>{fmt(ask, 5)}</b>
+            </span>
+            <span className="badgeLite">
+              Last <b>{fmt(last, 5)}</b>
+            </span>
+          </div>
+        </div>
+
+        <div className="termTopRight">
+          <button className="btnLite" type="button">
+            Publish
+          </button>
+          <button className="btnLite" type="button">
+            ▶
+          </button>
         </div>
       </div>
 
-      {/* ================== PAGES ================== */}
-      {tab === "chart" && (
-        <div style={terminalGrid}>
-          {/* LEFT: Watchlist */}
-          <div className="card" style={{ minWidth: 0 }}>
-            <div style={panelTitleRow}>
-              <b style={{ fontSize: 13 }}>Watchlist</b>
-              <span className="badge" title="demo">
-                {watchlist.length} assets
-              </span>
+      {/* ================== TAB: TERMINAL ================== */}
+      {mainTab === "terminal" && (
+        <>
+          <div className="termMainGrid">
+            {/* CHART */}
+            <div className="termChartWrap">
+              <TVChart candles={candles} symbol={symbol} last={last} height={540} />
             </div>
 
-            <div style={{ display: "grid", gap: 10 }}>
-              {watchlist.map((w) => {
-                const isActive = w.ui === symbol;
-                return (
+            {/* ORDER TICKET */}
+            <div className="ticket">
+              <div className="ticketHead">
+                <div className="ticketPair">
+                  <b>OANDA:{symbol}</b>
+                  <span className="mutedSmall">PAPER TRADING</span>
+                </div>
+                <div className="ticketBtns">
                   <button
-                    key={w.ui}
+                    className={side === "SELL" ? "ticketSide activeSell" : "ticketSide"}
+                    onClick={() => setSide("SELL")}
                     type="button"
-                    onClick={() => setSymbol(w.ui)}
-                    className={isActive ? "active" : ""}
-                    style={{
-                      textAlign: "left",
-                      padding: 12,
-                      borderRadius: 14,
-                      border: "1px solid rgba(255,255,255,.10)",
-                      background: isActive
-                        ? "rgba(122,167,255,0.15)"
-                        : "rgba(0,0,0,0.20)",
-                    }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <div>
-                        <div style={{ fontWeight: 900 }}>{w.ui}</div>
-                        <div style={{ opacity: 0.75, fontSize: 12 }}>{w.name}</div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontWeight: 900 }}>{fmtMoney(last, w.ui === "ETHUSD" ? 2 : 2)}</div>
-                        <div style={{ fontSize: 12, opacity: 0.75 }}>
-                          24h:{" "}
-                          <span
-                            style={{
-                              fontWeight: 900,
-                              color:
-                                dayChange >= 0
-                                  ? "rgba(43,213,118,0.95)"
-                                  : "rgba(255,90,95,0.95)",
-                            }}
-                          >
-                            {pct(dayChange, 2)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    SELL
                   </button>
-                );
-              })}
-            </div>
-
-            <div style={{ marginTop: 12, ...mini }}>
-              Tip: click an asset to load it into the chart.
-            </div>
-          </div>
-
-          {/* CENTER: Chart */}
-          <div className="card" style={{ minWidth: 0 }}>
-            {/* Chart toolbar row */}
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
-                <b style={{ fontSize: 14 }}>{activeSymbol.ui}</b>
-                <span className="badge">
-                  Price: <b style={{ marginLeft: 6 }}>{fmtMoney(last)}</b>
-                </span>
-                <span className="badge">
-                  24h:{" "}
-                  <b
-                    style={{
-                      marginLeft: 6,
-                      color:
-                        dayChange >= 0
-                          ? "rgba(43,213,118,0.95)"
-                          : "rgba(255,90,95,0.95)",
-                    }}
+                  <button
+                    className={side === "BUY" ? "ticketSide activeBuy" : "ticketSide"}
+                    onClick={() => setSide("BUY")}
+                    type="button"
                   >
-                    {pct(dayChange, 2)}
-                  </b>
-                </span>
-                <span className="badge">
-                  Vol: <b style={{ marginLeft: 6 }}>{fmtCompact(volume, 2)}</b>
-                </span>
+                    BUY
+                  </button>
+                </div>
               </div>
 
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <span className="badge" title="demo interval">
-                  TF: <b style={{ marginLeft: 6 }}>5s</b>
-                </span>
-                <span className="badge" title="demo market">
-                  Type: <b style={{ marginLeft: 6 }}>Spot</b>
-                </span>
+              <div className="ticketPriceRow">
+                <div className="ticketPriceBox">
+                  <span className="mutedSmall">SELL</span>
+                  <b>{fmt(bid, 5)}</b>
+                </div>
+                <div className="ticketMid">1.1</div>
+                <div className="ticketPriceBox">
+                  <span className="mutedSmall">BUY</span>
+                  <b>{fmt(ask, 5)}</b>
+                </div>
               </div>
-            </div>
 
-            <div style={{ marginTop: 12 }}>
-              <TVChart candles={candles} height={chartHeight} symbol={symbol} last={last} />
-            </div>
+              <div className="ticketTabs">
+                <button
+                  className={orderType === "MARKET" ? "active" : ""}
+                  onClick={() => setOrderType("MARKET")}
+                  type="button"
+                >
+                  MARKET
+                </button>
+                <button
+                  className={orderType === "LIMIT" ? "active" : ""}
+                  onClick={() => setOrderType("LIMIT")}
+                  type="button"
+                >
+                  LIMIT
+                </button>
+                <button
+                  className={orderType === "STOP" ? "active" : ""}
+                  onClick={() => setOrderType("STOP")}
+                  type="button"
+                >
+                  STOP
+                </button>
+              </div>
 
-            <div style={{ marginTop: 10, ...mini }}>
-              Chart tools are on the left rail: crosshair, pan, trendline, horizontal line, zoom, reset.
+              <div className="ticketBody">
+                <div className="field">
+                  <label>Order Price</label>
+                  <div className="fieldRow">
+                    <input
+                      type="number"
+                      step="0.00001"
+                      value={price}
+                      onChange={(e) => setPrice(Number(e.target.value))}
+                      disabled={orderType === "MARKET"}
+                    />
+                    <select value="Ask" onChange={() => {}} disabled>
+                      <option>Ask</option>
+                    </select>
+                  </div>
+                  <div className="mutedSmall" style={{ marginTop: 6 }}>
+                    Absolute <span style={{ opacity: 0.55 }}>•</span> Ticks
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label>Quantity</label>
+                  <div className="fieldRow">
+                    <input
+                      type="number"
+                      step="1"
+                      value={qty}
+                      onChange={(e) => setQty(Number(e.target.value))}
+                    />
+                    <div className="ticketUnits">Units</div>
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label>AI Trade Size (%)</label>
+                  <input
+                    type="number"
+                    min="0.1"
+                    max="100"
+                    step="0.1"
+                    value={aiRiskPct}
+                    onChange={(e) => setAiRiskPct(Number(e.target.value))}
+                  />
+                  <div className="mutedSmall" style={{ marginTop: 6 }}>
+                    This is the % the AI can use for position sizing when it triggers.
+                  </div>
+                </div>
+
+                <div className="ticketSplit">
+                  <div className="field">
+                    <div className="fieldHead">
+                      <label>Take Profit</label>
+                      <input
+                        type="checkbox"
+                        checked={tpEnabled}
+                        onChange={(e) => setTpEnabled(e.target.checked)}
+                      />
+                    </div>
+                    <input
+                      type="number"
+                      step="0.00001"
+                      value={tp}
+                      onChange={(e) => setTp(Number(e.target.value))}
+                      disabled={!tpEnabled}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <div className="fieldHead">
+                      <label>Stop Loss</label>
+                      <input
+                        type="checkbox"
+                        checked={slEnabled}
+                        onChange={(e) => setSlEnabled(e.target.checked)}
+                      />
+                    </div>
+                    <input
+                      type="number"
+                      step="0.00001"
+                      value={sl}
+                      onChange={(e) => setSl(Number(e.target.value))}
+                      disabled={!slEnabled}
+                    />
+                  </div>
+                </div>
+
+                {/* ✅ YOUR WORDING */}
+                <button
+                  className={side === "BUY" ? "ticketCTA buy" : "ticketCTA sell"}
+                  onClick={setOrder}
+                  type="button"
+                >
+                  SET ORDER ({orderType}) • {side} {symbol}
+                </button>
+
+                <div className="orderInfo">
+                  <b>ORDER INFO</b>
+                  <div className="orderInfoRow">
+                    <span className="mutedSmall">Pip Value</span>
+                    <span>$ 0.1</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* RIGHT: Market details / Order panel (clean placeholders) */}
-          <div className="card" style={{ minWidth: 0 }}>
-            <div style={panelTitleRow}>
-              <b style={{ fontSize: 13 }}>Trade Panel</b>
-              <span className="badge" title="demo">
-                Paper
-              </span>
-            </div>
-
-            <div style={{ display: "grid", gap: 12 }}>
-              {/* order type */}
-              <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>
-                  Order Type
-                </div>
-                <select defaultValue="market">
-                  <option value="market">Market</option>
-                  <option value="limit">Limit</option>
-                  <option value="stop">Stop</option>
-                </select>
-              </div>
-
-              {/* buy / sell */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <button
-                  type="button"
-                  style={{
-                    background: "rgba(43,213,118,0.14)",
-                    border: "1px solid rgba(43,213,118,0.30)",
-                    fontWeight: 900,
-                  }}
-                >
-                  Buy
-                </button>
-                <button
-                  type="button"
-                  style={{
-                    background: "rgba(255,90,95,0.12)",
-                    border: "1px solid rgba(255,90,95,0.28)",
-                    fontWeight: 900,
-                  }}
-                >
-                  Sell
-                </button>
-              </div>
-
-              <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>
-                  Size (USD)
-                </div>
-                <input type="number" placeholder="100" />
-                <div style={{ fontSize: 12, opacity: 0.75 }}>
-                  Est. price: <b>{fmtMoney(last)}</b>
-                </div>
-              </div>
-
-              <button type="button" style={{ fontWeight: 900 }}>
-                Place Order (demo)
+          {/* ===== BOTTOM DOCK ===== */}
+          <div className="dock">
+            <div className="dockTabs">
+              <button
+                className={dockTab === "positions" ? "active" : ""}
+                onClick={() => setDockTab("positions")}
+                type="button"
+              >
+                Positions <span className="tabCount">0</span>
               </button>
+              <button
+                className={dockTab === "orders" ? "active" : ""}
+                onClick={() => setDockTab("orders")}
+                type="button"
+              >
+                Set Orders <span className="tabCount">{setOrders.length}</span>
+              </button>
+              <button
+                className={dockTab === "history" ? "active" : ""}
+                onClick={() => setDockTab("history")}
+                type="button"
+              >
+                History
+              </button>
+            </div>
 
-              <div style={{ borderTop: "1px solid rgba(255,255,255,0.10)", paddingTop: 12 }}>
-                <b style={{ fontSize: 13 }}>Market Info</b>
-                <div style={{ marginTop: 10, display: "grid", gap: 8, fontSize: 12, opacity: 0.9 }}>
-                  <div>
-                    Symbol: <b>{symbol}</b>
-                  </div>
-                  <div>
-                    Last: <b>{fmtMoney(last)}</b>
-                  </div>
-                  <div>
-                    24h Change:{" "}
-                    <b
-                      style={{
-                        color:
-                          dayChange >= 0
-                            ? "rgba(43,213,118,0.95)"
-                            : "rgba(255,90,95,0.95)",
-                      }}
-                    >
-                      {pct(dayChange, 2)}
-                    </b>
-                  </div>
-                  <div>
-                    Volume: <b>{fmtCompact(volume, 2)}</b>
-                  </div>
+            <div className="dockTableWrap">
+              {dockTab === "orders" ? (
+                <table className="dockTable">
+                  <thead>
+                    <tr>
+                      <th>Status</th>
+                      <th>Symbol</th>
+                      <th>Side</th>
+                      <th>Type</th>
+                      <th>Level</th>
+                      <th>Qty</th>
+                      <th>AI %</th>
+                      <th>TP</th>
+                      <th>SL</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {setOrders.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} style={{ padding: 12, opacity: 0.75 }}>
+                          No set orders yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      setOrders.map((o) => (
+                        <tr key={o.id}>
+                          <td>{o.status}</td>
+                          <td>{o.symbol}</td>
+                          <td>{o.side}</td>
+                          <td>{o.orderType}</td>
+                          <td>{o.level == null ? "(market)" : fmt(o.level, 5)}</td>
+                          <td>{o.qty.toLocaleString()}</td>
+                          <td>{o.aiRiskPct}%</td>
+                          <td>{o.tp == null ? "—" : fmt(o.tp, 5)}</td>
+                          <td>{o.sl == null ? "—" : fmt(o.sl, 5)}</td>
+                          <td>
+                            <button
+                              className="miniBtn"
+                              type="button"
+                              disabled={o.status !== "ARMED"}
+                              onClick={() => cancelSetOrder(o.id)}
+                            >
+                              Cancel
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ padding: 12, opacity: 0.75 }}>
+                  {dockTab === "positions"
+                    ? "Positions panel ready (hook to paper/live positions later)."
+                    : "History panel ready (hook to trade history later)."}
                 </div>
-              </div>
-
-              <div style={{ ...mini }}>
-                This panel is intentionally clean. Next step is to wire it to your paper trader backend (so it’s real, not fake).
-              </div>
+              )}
             </div>
           </div>
-        </div>
+        </>
       )}
 
-      {tab === "room" && (
-        <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <div>
-              <h3 style={{ marginTop: 0 }}>Trading Room</h3>
-              <div style={{ opacity: 0.75, fontSize: 13, lineHeight: 1.6 }}>
-                This space is for <b>AI</b>, <b>logs</b>, <b>controls</b>, and <b>positions</b> — separate from the chart
-                so the Market page stays clean like Kraken.
-              </div>
-            </div>
-            <span className="badge">Mode: <b style={{ marginLeft: 6 }}>Paper</b></span>
-          </div>
+      {/* ================== TAB: AI ================== */}
+      {mainTab === "ai" && (
+        <div className="cardLike">
+          <h3 style={{ marginTop: 0 }}>AI Control + Voice</h3>
+          <p style={{ opacity: 0.8, lineHeight: 1.6 }}>
+            This is where the AI talks + where it reads your Set Orders and executes them.
+            We keep it separate so the terminal layout never gets smushed.
+          </p>
 
+          {/* If you have VoiceAI working, keep it. If not, remove this block. */}
           <div style={{ marginTop: 14 }}>
             <VoiceAI title="AutoProtect Voice" endpoint="/api/ai/chat" />
           </div>
         </div>
       )}
 
-      {tab === "reports" && (
-        <div className="card">
-          <h3 style={{ marginTop: 0 }}>Reports</h3>
-          <div style={{ opacity: 0.75, fontSize: 13, lineHeight: 1.6 }}>
-            This is the clean reporting area (no chart smushing):
+      {/* ================== TAB: MARKET EXPLAIN ================== */}
+      {mainTab === "explain" && (
+        <div className="cardLike">
+          <h3 style={{ marginTop: 0 }}>Market Explain</h3>
+          <p style={{ opacity: 0.8, lineHeight: 1.6 }}>
+            This panel is dedicated to explaining what the market is doing (trend, volatility, key levels, AI reasoning).
+            If it gets too big, it lives here—separate from the terminal so nothing gets squeezed.
+          </p>
+
+          <div className="explainBox">
+            <b>{symbol}</b>
+            <div style={{ marginTop: 8, opacity: 0.85, lineHeight: 1.6 }}>
+              • Current price: <b>{fmt(last, 5)}</b>
+              <br />• Bid/Ask spread: <b>{fmt(ask - bid, 5)}</b>
+              <br />• Next step: connect AI reasoning + real market feed to replace demo.
+            </div>
           </div>
-          <ul style={{ opacity: 0.85, marginTop: 10, lineHeight: 1.8 }}>
-            <li>Win / Loss breakdown</li>
-            <li>Daily P&amp;L summary</li>
-            <li>Fees, spread, slippage totals</li>
-            <li>Export later (CSV)</li>
-          </ul>
         </div>
       )}
     </div>
