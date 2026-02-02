@@ -3,989 +3,192 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import VoiceAI from "../components/VoiceAI";
 import TVChart from "../components/TVChart";
 
-function clamp(n, a, b) {
-  return Math.max(a, Math.min(b, n));
-}
+/* =========================================================
+   Helpers
+   ========================================================= */
 
-function apiBase() {
-  return (import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || "").trim();
-}
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
-// ---- number formatting ----
-function fmtNum(n, digits = 2) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "—";
-  return x.toLocaleString(undefined, { maximumFractionDigits: digits });
-}
-function fmtMoney(n, digits = 2) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "—";
-  return "$" + x.toLocaleString(undefined, { maximumFractionDigits: digits });
-}
-function fmtCompact(n, digits = 2) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "—";
-  const ax = Math.abs(x);
-  if (ax >= 1e12) return (x / 1e12).toFixed(digits) + "t";
-  if (ax >= 1e9) return (x / 1e9).toFixed(digits) + "b";
-  if (ax >= 1e6) return (x / 1e6).toFixed(digits) + "m";
-  if (ax >= 1e3) return (x / 1e3).toFixed(digits) + "k";
-  return fmtNum(x, digits);
-}
-function fmtMoneyCompact(n, digits = 2) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "—";
-  const ax = Math.abs(x);
-  const sign = x < 0 ? "-" : "";
-  if (ax >= 1e12) return `${sign}$${(ax / 1e12).toFixed(digits)}t`;
-  if (ax >= 1e9) return `${sign}$${(ax / 1e9).toFixed(digits)}b`;
-  if (ax >= 1e6) return `${sign}$${(ax / 1e6).toFixed(digits)}m`;
-  if (ax >= 1e3) return `${sign}$${(ax / 1e3).toFixed(digits)}k`;
-  return fmtMoney(x, digits);
-}
-function pct(n, digits = 0) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "—";
-  return (x * 100).toFixed(digits) + "%";
-}
-function fmtDur(ms) {
-  const x = Number(ms);
-  if (!Number.isFinite(x) || x < 0) return "—";
-  if (x < 1000) return `${Math.round(x)}ms`;
-  const s = Math.floor(x / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rs = s % 60;
-  if (m < 60) return `${m}m ${rs}s`;
-  const h = Math.floor(m / 60);
-  const rm = m % 60;
-  return `${h}h ${rm}m`;
-}
-function niceReason(r) {
-  const x = String(r || "").toLowerCase();
-  if (!x) return "—";
-  if (x.includes("take_profit") || x === "tp_hit") return "Take Profit";
-  if (x.includes("stop_loss") || x === "sl_hit") return "Stop Loss";
-  if (x.includes("expiry") || x.includes("expired") || x.includes("time")) return "Time Expired";
-  return r;
-}
-function toInt(v, fallback = 0) {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.floor(n) : fallback;
-}
-function toNum(v, fallback = 0) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
+const apiBase = () =>
+  (import.meta.env.VITE_API_BASE ||
+    import.meta.env.VITE_BACKEND_URL ||
+    "").trim();
 
-/** ✅ Forces true mobile behavior even when Safari uses a “desktop viewport” */
+const fmtMoney = (n, d = 2) =>
+  Number.isFinite(+n) ? "$" + (+n).toLocaleString(undefined, { maximumFractionDigits: d }) : "—";
+
+const fmtCompact = (n, d = 2) => {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return "—";
+  const a = Math.abs(x);
+  if (a >= 1e9) return (x / 1e9).toFixed(d) + "b";
+  if (a >= 1e6) return (x / 1e6).toFixed(d) + "m";
+  if (a >= 1e3) return (x / 1e3).toFixed(d) + "k";
+  return x.toFixed(d);
+};
+
+const pct = (n, d = 0) =>
+  Number.isFinite(+n) ? (+n * 100).toFixed(d) + "%" : "—";
+
+/* =========================================================
+   Mobile detection (real iPhone behavior)
+   ========================================================= */
+
 function useIsMobile(breakpoint = 980) {
-  const [w, setW] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 1200));
+  const [w, setW] = useState(window.innerWidth);
 
   useEffect(() => {
-    const onResize = () => setW(window.innerWidth || 1200);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    const r = () => setW(window.innerWidth);
+    window.addEventListener("resize", r);
+    return () => window.removeEventListener("resize", r);
   }, []);
 
-  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-  const uaMobile = /iPhone|iPad|iPod|Android|Mobile|CriOS|FxiOS/i.test(ua) || false;
-
+  const ua = navigator.userAgent;
+  const uaMobile = /iPhone|iPad|Android|Mobile|CriOS/i.test(ua);
   return uaMobile || w <= breakpoint;
 }
 
-const OWNER_KEY_LS = "as_owner_key";
-const RESET_KEY_LS = "as_reset_key";
+/* =========================================================
+   MAIN COMPONENT
+   ========================================================= */
 
 export default function Trading() {
-  const UI_SYMBOLS = ["BTCUSD", "ETHUSD"];
-  const UI_TO_BACKEND = { BTCUSD: "BTCUSDT", ETHUSD: "ETHUSDT" };
+  const isMobile = useIsMobile();
 
-  const isMobile = useIsMobile(980);
-
-  // ✅ Sub-tabs inside Trading
-  const [tab, setTab] = useState("room"); // room | chart | reports
+  /* ✅ DEFAULT TAB = CHART MARKET */
+  const [tab, setTab] = useState("chart"); // chart | room | reports
 
   const [symbol, setSymbol] = useState("BTCUSD");
-  const [mode, setMode] = useState("Paper");
-  const [feedStatus, setFeedStatus] = useState("Connecting…");
   const [last, setLast] = useState(65300);
+  const [feedStatus, setFeedStatus] = useState("Connecting…");
 
-  const [showMoney, setShowMoney] = useState(true);
-  const [showTradeLog, setShowTradeLog] = useState(true);
-  const [showHistory, setShowHistory] = useState(true);
-  const [showAI, setShowAI] = useState(true);
-  const [wideChart, setWideChart] = useState(false);
-
-  // ✅ Trading Controls panel
-  const [showControls, setShowControls] = useState(true);
-  const [ownerKey, setOwnerKey] = useState(() => localStorage.getItem(OWNER_KEY_LS) || "");
-  const [resetKey, setResetKey] = useState(() => localStorage.getItem(RESET_KEY_LS) || "");
-  const [cfgStatus, setCfgStatus] = useState("—");
-  const [cfgBusy, setCfgBusy] = useState(false);
-
-  // Local editable config
-  const [cfgForm, setCfgForm] = useState({
-    baselinePct: 0.02,
-    maxPct: 0.05,
-    maxTradesPerDay: 12,
-  });
-
-  const [paper, setPaper] = useState({
-    running: false,
-    cashBalance: 0,
-    equity: 0,
-    pnl: 0,
-    unrealizedPnL: 0,
-    trades: [],
-    position: null,
-    learnStats: null,
-    realized: null,
-    costs: null,
-    limits: null,
-    config: null,
-  });
-  const [paperStatus, setPaperStatus] = useState("Loading…");
-
-  const [messages, setMessages] = useState(() => [
-    { from: "ai", text: "AutoProtect ready. Ask me about wins/losses, P&L, open position, and why I entered." },
-  ]);
-  const [input, setInput] = useState("");
-  const logRef = useRef(null);
-
-  // Candle data for the chart
   const [candles, setCandles] = useState(() => {
-    const base = 65300;
     const out = [];
-    let p = base;
+    let p = 65300;
     let t = Math.floor(Date.now() / 1000);
     for (let i = 80; i > 0; i--) {
       const time = t - i * 5;
       const o = p;
-      const move = (Math.random() - 0.5) * 60;
-      const c = o + move;
-      const hi = Math.max(o, c) + Math.random() * 30;
-      const lo = Math.min(o, c) - Math.random() * 30;
-      out.push({ time, open: o, high: hi, low: lo, close: c });
+      const c = o + (Math.random() - 0.5) * 60;
+      out.push({
+        time,
+        open: o,
+        high: Math.max(o, c) + Math.random() * 20,
+        low: Math.min(o, c) - Math.random() * 20,
+        close: c,
+      });
       p = c;
     }
     return out;
   });
 
+  /* =========================================================
+     Fake feed (safe fallback)
+     ========================================================= */
+
   useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [messages]);
+    let price = last;
+    setFeedStatus("Connected (demo)");
+    const t = setInterval(() => {
+      price += (Math.random() - 0.5) * 40;
+      setLast(+price.toFixed(2));
 
-  const applyTick = (price, nowMs) => {
-    setLast(Number(price.toFixed(2)));
-    setCandles((prev) => {
-      const bucketSec = 5;
-      const nowSec = Math.floor(nowMs / 1000);
-      const bucketTime = Math.floor(nowSec / bucketSec) * bucketSec;
-
-      const next = [...prev];
-      const lastC = next[next.length - 1];
-
-      if (!lastC || lastC.time !== bucketTime) {
-        const o = lastC ? lastC.close : price;
-        next.push({
-          time: bucketTime,
-          open: o,
-          high: Math.max(o, price),
-          low: Math.min(o, price),
-          close: price,
-        });
-        while (next.length > 180) next.shift();
+      setCandles((prev) => {
+        const next = [...prev];
+        const now = Math.floor(Date.now() / 1000);
+        const lastC = next[next.length - 1];
+        if (!lastC || now - lastC.time >= 5) {
+          next.push({
+            time: now,
+            open: lastC ? lastC.close : price,
+            high: price,
+            low: price,
+            close: price,
+          });
+          while (next.length > 160) next.shift();
+        } else {
+          lastC.high = Math.max(lastC.high, price);
+          lastC.low = Math.min(lastC.low, price);
+          lastC.close = price;
+        }
         return next;
-      }
+      });
+    }, 900);
 
-      lastC.high = Math.max(lastC.high, price);
-      lastC.low = Math.min(lastC.low, price);
-      lastC.close = price;
-      next[next.length - 1] = { ...lastC };
-      return next;
-    });
-  };
-
-  // ---- WebSocket feed ----
-  useEffect(() => {
-    let ws;
-    let fallbackTimer;
-
-    const base = apiBase();
-    const wsBase = base ? base.replace(/^https:\/\//i, "wss://").replace(/^http:\/\//i, “ws://”) : "";
-
-    const wantedBackendSymbol = UI_TO_BACKEND[symbol] || symbol;
-
-    const startFallback = () => {
-      setFeedStatus("Disconnected (demo fallback)");
-      let price = last || (symbol === "ETHUSD" ? 3500 : 65300);
-      fallbackTimer = setInterval(() => {
-        const delta = (Math.random() - 0.5) * (symbol === "ETHUSD" ? 6 : 40);
-        price = Math.max(1, price + delta);
-        applyTick(price, Date.now());
-      }, 900);
-    };
-
-    try {
-      if (!wsBase) {
-        startFallback();
-        return () => clearInterval(fallbackTimer);
-      }
-
-      setFeedStatus("Connecting…");
-      ws = new WebSocket(`${wsBase}/ws/market`);
-      ws.onopen = () => setFeedStatus("Connected");
-      ws.onclose = () => startFallback();
-      ws.onerror = () => startFallback();
-
-      ws.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data);
-          const isTick = msg?.type === "tick" || (msg && msg.symbol && msg.price);
-          if (isTick && msg.symbol === wantedBackendSymbol) {
-            applyTick(Number(msg.price), Number(msg.ts || Date.now()));
-          }
-        } catch {}
-      };
-    } catch {
-      startFallback();
-    }
-
-    return () => {
-      try {
-        if (ws) ws.close();
-      } catch {}
-      clearInterval(fallbackTimer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol]);
-
-  // ---- paper status polling ----
-  useEffect(() => {
-    let t;
-    const base = apiBase();
-    if (!base) {
-      setPaperStatus("Missing VITE_API_BASE");
-      return;
-    }
-
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch(`${base}/api/paper/status`, { credentials: "include" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setPaper(data);
-        setPaperStatus("OK");
-      } catch {
-        setPaperStatus("Error loading paper status");
-      }
-    };
-
-    fetchStatus();
-    t = setInterval(fetchStatus, 2000);
     return () => clearInterval(t);
   }, []);
 
-  // ✅ Load paper config once
-  useEffect(() => {
-    const base = apiBase();
-    if (!base) return;
+  /* =========================================================
+     Layout
+     ========================================================= */
 
-    let cancelled = false;
-
-    const loadCfg = async () => {
-      try {
-        const res = await fetch(`${base}/api/paper/config`, { credentials: "include" });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-
-        const cfg = data?.owner || data?.config || data || {};
-        if (cancelled) return;
-
-        setCfgForm((prev) => ({
-          baselinePct: Number.isFinite(Number(cfg.baselinePct)) ? Number(cfg.baselinePct) : prev.baselinePct,
-          maxPct: Number.isFinite(Number(cfg.maxPct)) ? Number(cfg.maxPct) : prev.maxPct,
-          maxTradesPerDay: Number.isFinite(Number(cfg.maxTradesPerDay)) ? Number(cfg.maxTradesPerDay) : prev.maxTradesPerDay,
-        }));
-
-        setCfgStatus("Loaded");
-      } catch (e) {
-        if (!cancelled) setCfgStatus(e?.message || "Failed to load");
-      }
-    };
-
-    loadCfg();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function sendToAI(text) {
-    const clean = (text || "").trim();
-    if (!clean) return;
-
-    setMessages((prev) => [...prev, { from: "you", text: clean }]);
-
-    const base = apiBase();
-    if (!base) {
-      setMessages((prev) => [...prev, { from: "ai", text: "Backend URL missing. Set VITE_API_BASE on Vercel." }]);
-      return;
-    }
-
-    try {
-      const context = {
-        symbol,
-        mode,
-        last,
-        paper: {
-          running: paper.running,
-          cashBalance: paper.cashBalance,
-          equity: paper.equity,
-          pnl: paper.pnl,
-          unrealizedPnL: paper.unrealizedPnL,
-          wins: paper.realized?.wins ?? 0,
-          losses: paper.realized?.losses ?? 0,
-          grossProfit: paper.realized?.grossProfit ?? 0,
-          grossLoss: paper.realized?.grossLoss ?? 0,
-          net: paper.realized?.net ?? paper.pnl ?? 0,
-          feePaid: paper.costs?.feePaid ?? 0,
-          slippageCost: paper.costs?.slippageCost ?? 0,
-          spreadCost: paper.costs?.spreadCost ?? 0,
-          ticksSeen: paper.learnStats?.ticksSeen ?? 0,
-          confidence: paper.learnStats?.confidence ?? 0,
-          decision: paper.learnStats?.decision ?? "WAIT",
-          decisionReason: paper.learnStats?.lastReason ?? "—",
-          position: paper.position || null,
-          config: paper.owner || paper.config || null,
-        },
-      };
-
-      const res = await fetch(`${base}/api/ai/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ message: clean, context }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = data?.error || data?.message || `HTTP ${res.status}`;
-        setMessages((prev) => [...prev, { from: "ai", text: "AI error: " + msg }]);
-        return;
-      }
-
-      const reply = data?.reply ?? "(No reply from AI)";
-      setMessages((prev) => [...prev, { from: "ai", text: reply }]);
-    } catch {
-      setMessages((prev) => [...prev, { from: "ai", text: "Network error talking to AI backend." }]);
-    }
-  }
-
-  const ticksSeen = paper.learnStats?.ticksSeen ?? 0;
-  const conf = paper.learnStats?.confidence ?? 0;
-  const decision = paper.learnStats?.decision ?? "WAIT";
-  const reason = paper.learnStats?.lastReason ?? "—";
-
-  const wins = paper.realized?.wins ?? 0;
-  const losses = paper.realized?.losses ?? 0;
-  const grossProfit = paper.realized?.grossProfit ?? 0;
-  const grossLoss = paper.realized?.grossLoss ?? 0;
-  const net = paper.realized?.net ?? paper.pnl ?? 0;
-
-  const feePaid = paper.costs?.feePaid ?? 0;
-  const slip = paper.costs?.slippageCost ?? 0;
-  const spr = paper.costs?.spreadCost ?? 0;
-
-  const cashBal = paper.cashBalance ?? 0;
-  const equity = paper.equity ?? cashBal;
-  const unreal = paper.unrealizedPnL ?? 0;
-
-  const historyItems = (paper.trades || []).slice().reverse().slice(0, 240);
-
-  const baselineUsd = useMemo(() => Math.max(0, equity * toNum(cfgForm.baselinePct, 0)), [cfgForm.baselinePct, equity]);
-  const maxUsd = useMemo(() => Math.max(0, equity * toNum(cfgForm.maxPct, 0)), [cfgForm.maxPct, equity]);
-
-  const savePaperConfig = async () => {
-    const base = apiBase();
-    if (!base) return alert("Missing VITE_API_BASE");
-
-    const baselinePct = clamp(toNum(cfgForm.baselinePct, 0.02), 0, 1);
-    const maxPct = clamp(toNum(cfgForm.maxPct, 0.05), 0, 1);
-    const maxTradesPerDay = clamp(toInt(cfgForm.maxTradesPerDay, 12), 1, 1000);
-
-    if (maxPct < baselinePct) return alert("Max % must be >= Baseline %");
-
-    setCfgBusy(true);
-    setCfgStatus("Saving…");
-    try {
-      localStorage.setItem(OWNER_KEY_LS, ownerKey || "");
-
-      const res = await fetch(`${base}/api/paper/config`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(ownerKey ? { "x-owner-key": String(ownerKey) } : {}),
-        },
-        credentials: "include",
-        body: JSON.stringify({ baselinePct, maxPct, maxTradesPerDay }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-
-      setCfgStatus("Saved ✅");
-      setPaper((prev) => ({
-        ...prev,
-        config: { ...(prev.config || {}), baselinePct, maxPct, maxTradesPerDay },
-      }));
-    } catch (e) {
-      setCfgStatus("Save failed");
-      alert(e?.message || "Failed to save config");
-    } finally {
-      setCfgBusy(false);
-      setTimeout(() => setCfgStatus((s) => (s === "Saved ✅" ? "OK" : s)), 800);
-    }
-  };
-
-  const resetPaper = async () => {
-    const base = apiBase();
-    if (!base) return alert("Missing VITE_API_BASE");
-    if (!resetKey) return alert("Enter reset key first.");
-
-    // eslint-disable-next-line no-restricted-globals
-    if (!confirm("Reset paper trading stats + trades?")) return;
-
-    setCfgBusy(true);
-    try {
-      localStorage.setItem(RESET_KEY_LS, resetKey || "");
-
-      const res = await fetch(`${base}/api/paper/reset`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-reset-key": String(resetKey) },
-        credentials: "include",
-        body: JSON.stringify({}),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-
-      alert("Paper reset ✅");
-    } catch (e) {
-      alert(e?.message || "Reset failed");
-    } finally {
-      setCfgBusy(false);
-    }
-  };
-
-  const winRate = useMemo(() => {
-    const w = Number(wins) || 0;
-    const l = Number(losses) || 0;
-    const total = w + l;
-    if (!total) return 0;
-    return w / total;
-  }, [wins, losses]);
-
-  const showRightPanel = showAI && !wideChart;
-
-  const chartHeight = isMobile ? 520 : wideChart ? 640 : 520;
-
-  function historyLine(t) {
-    const ts = t?.time ? new Date(t.time).toLocaleTimeString() : "—";
-    const sym = t?.symbol || "—";
-    const type = t?.type || "—";
-    const strat = t?.strategy ? String(t.strategy) : "—";
-    const pxv = Number(t?.price);
-    const usd = t?.usd;
-    const cost = t?.cost;
-    const profit = t?.profit;
-    const holdMs = t?.holdMs;
-    const exitReason = t?.exitReason || t?.note;
-
-    if (type === "BUY") {
-      const hold = t?.holdMs ? fmtDur(t.holdMs) : "—";
-      return `${ts} • BUY ${sym} • ${strat} • Notional ${fmtMoneyCompact(usd, 2)} • Entry ${fmtMoney(pxv, 2)} • Entry cost ${fmtMoneyCompact(cost, 2)} • Planned hold ${hold}`;
-    }
-
-    if (type === "SELL") {
-      const held = holdMs !== undefined ? fmtDur(holdMs) : "—";
-      const pr = profit !== undefined ? fmtMoneyCompact(profit, 2) : "—";
-      const rr = niceReason(exitReason);
-      return `${ts} • SELL ${sym} • ${strat} • Exit ${fmtMoney(pxv, 2)} • Held ${held} • Result ${pr} • Exit: ${rr}`;
-    }
-
-    return `${ts} • ${type} ${sym}`;
-  }
-
-  // Layout class selection (matches your CSS)
-  const gridClass = isMobile
-    ? "tradeGridWide"
-    : tab === "chart"
-    ? showRightPanel
-      ? "tradeGrid2"
-      : "tradeGridWide"
-    : wideChart
-    ? "tradeGridWide"
-    : showRightPanel
-    ? "tradeGrid3"
-    : "tradeGrid2";
+  const chartHeight = isMobile ? 520 : 640;
 
   return (
-    <div className="tradeWrap">
-      {/* Sub-tabs */}
-      <div className="tradeTabs" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-        <button className={tab === "room" ? "active" : ""} onClick={() => setTab("room")} type="button">
-          Trading Room
-        </button>
-        <button className={tab === "chart" ? "active" : ""} onClick={() => setTab("chart")} type="button">
+    <div style={{ padding: 14, maxWidth: 1200, margin: "0 auto" }}>
+      {/* ================== TOP NAV (FILE CABINET) ================== */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        <button className={tab === "chart" ? "active" : ""} onClick={() => setTab("chart")}>
           Market (Chart)
         </button>
-        <button className={tab === "reports" ? "active" : ""} onClick={() => setTab("reports")} type="button">
+        <button className={tab === "room" ? "active" : ""} onClick={() => setTab("room")}>
+          Trading Room
+        </button>
+        <button className={tab === "reports" ? "active" : ""} onClick={() => setTab("reports")}>
           Reports
         </button>
       </div>
 
-      {/* Header */}
-      <div className="card tradeHeader">
-        <div className="tradeHeaderTop">
+      {/* ================== HEADER ================== */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div className="tradeHeaderTitleRow">
-              <h2 className="tradeTitle">Trading</h2>
-              <span className="badge">Feed: <b>{feedStatus}</b></span>
-              <span className="badge">Last: <b>{fmtMoney(last, 2)}</b></span>
-              <span className="badge">Paper: <b>{paper.running ? "ON" : "OFF"}</b></span>
-            </div>
-            <div className="tradeSub">Split pages so nothing gets smushed.</div>
+            <h2 style={{ margin: 0 }}>Trading</h2>
+            <small>Clean layout • No smushing • Mobile + Desktop aligned</small>
           </div>
-
-          <div className="tradeHeaderRight">
-            <div className="pill">
-              <div className="pillLabel">Mode</div>
-              <div className="pillRow">
-                <button className={mode === "Live" ? "active" : ""} onClick={() => setMode("Live")} type="button" style={{ width: "auto" }}>
-                  Live
-                </button>
-                <button className={mode === "Paper" ? "active" : ""} onClick={() => setMode("Paper")} type="button" style={{ width: "auto" }}>
-                  Paper
-                </button>
-              </div>
-            </div>
-
-            <div className="pill">
-              <div className="pillLabel">Symbol</div>
-              <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-                {UI_SYMBOLS.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-
-            {tab === "room" && (
-              <div className="pill">
-                <div className="pillLabel">Panels</div>
-                <div className="pillRow">
-                  <button className={showMoney ? "active" : ""} onClick={() => setShowMoney((v) => !v)} type="button" style={{ width: "auto" }}>Money</button>
-                  <button className={showTradeLog ? "active" : ""} onClick={() => setShowTradeLog((v) => !v)} type="button" style={{ width: "auto" }}>Log</button>
-                  <button className={showHistory ? "active" : ""} onClick={() => setShowHistory((v) => !v)} type="button" style={{ width: "auto" }}>History</button>
-                  <button className={showControls ? "active" : ""} onClick={() => setShowControls((v) => !v)} type="button" style={{ width: "auto" }}>Controls</button>
-                  <button className={showAI ? "active" : ""} onClick={() => setShowAI((v) => !v)} type="button" style={{ width: "auto" }}>AI</button>
-                  <button className={wideChart ? "active" : ""} onClick={() => setWideChart((v) => !v)} type="button" style={{ width: "auto" }}>Wide</button>
-                </div>
-              </div>
-            )}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <span className="badge">Feed: <b>{feedStatus}</b></span>
+            <span className="badge">Last: <b>{fmtMoney(last)}</b></span>
+            <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
+              <option>BTCUSD</option>
+              <option>ETHUSD</option>
+            </select>
           </div>
         </div>
       </div>
 
-      {/* CONTENT */}
-      {tab === "chart" ? (
-        <div className={gridClass}>
-          <div className="card tradeMain">
-            <div className="tradeMainTop">
-              <div className="tradeMainTopLeft">
-                <b>{symbol}</b>
-                <span className="badge">Decision: <b>{decision}</b></span>
-                <span className="badge">Conf: <b>{pct(conf, 0)}</b></span>
-                <span className="badge">Ticks: <b>{fmtCompact(ticksSeen, 0)}</b></span>
-              </div>
-              <span className="badge" title={reason} style={{ maxWidth: 520, overflow: "hidden", textOverflow: "ellipsis" }}>
-                Reason: <b>{reason}</b>
-              </span>
-            </div>
-
-            <div className="tradeChartArea">
-              <TVChart candles={candles} height={chartHeight} symbol={symbol} last={last} />
-            </div>
-          </div>
-
-          {showRightPanel && (
-            <div className="card tradeRight">
-              <b>AI Assistant</b>
-              <small>Ask why it bought/sold • voice below</small>
-
-              <div
-                ref={logRef}
-                className="chatLog"
-                style={{ marginTop: 12, height: 360 }}
-              >
-                {messages.map((m, idx) => (
-                  <div key={idx} className={`chatMsg ${m.from === "you" ? "you" : "ai"}`}>
-                    <b style={{ display: "block", marginBottom: 4, fontSize: 12 }}>
-                      {m.from === "you" ? "You" : "AutoProtect"}
-                    </b>
-                    <div style={{ fontSize: 12, opacity: 0.95, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.text}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="chatBox">
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask: why did you enter? what strategy? what’s next?"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      sendToAI(input);
-                      setInput("");
-                    }
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    sendToAI(input);
-                    setInput("");
-                  }}
-                  type="button"
-                  style={{ width: "auto", minWidth: 110 }}
-                >
-                  Send
-                </button>
-              </div>
-
-              <div style={{ marginTop: 12 }}>
-                <VoiceAI title="AutoProtect Voice" endpoint="/api/ai/chat" getContext={() => ({ symbol, mode, last, paper })} />
-              </div>
-            </div>
-          )}
-        </div>
-      ) : tab === "reports" ? (
+      {/* ================== PAGES ================== */}
+      {tab === "chart" && (
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>Reports</h3>
-          <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
-            Clean reporting (no chart smushing):
-            <ul>
-              <li>Daily P&L summary</li>
-              <li>Win/Loss breakdown</li>
-              <li>Fees, spread, slippage totals</li>
-              <li>Export later (CSV)</li>
-            </ul>
-          </div>
-
-          <div className="grid" style={{ marginTop: 12 }}>
-            <div className="kpiBox"><b>{fmtMoneyCompact(net, 2)}</b><span className="muted">Net P&L</span></div>
-            <div className="kpiBox"><b>{fmtCompact(wins, 0)}</b><span className="muted">Wins</span></div>
-            <div className="kpiBox"><b>{fmtCompact(losses, 0)}</b><span className="muted">Losses</span></div>
-          </div>
-
-          <div style={{ marginTop: 14 }}>
-            <b>History</b>
-            <div className="card" style={{ marginTop: 10, padding: 10, maxHeight: 420, overflow: "auto" }}>
-              {historyItems.length === 0 && <div className="muted">No history yet.</div>}
-              {historyItems.map((t, idx) => (
-                <div key={idx} style={{ padding: "8px 8px", borderBottom: "1px solid rgba(255,255,255,0.06)", lineHeight: 1.5, fontSize: 12, opacity: 0.95 }}>
-                  {historyLine(t)}
-                </div>
-              ))}
-            </div>
-          </div>
+          <TVChart
+            candles={candles}
+            height={chartHeight}
+            symbol={symbol}
+            last={last}
+          />
         </div>
-      ) : (
-        <>
-          {/* Controls */}
-          {showControls && (
-            <div className="card tradeControls">
-              <div className="tradeControlsTop">
-                <div>
-                  <b>AI Trading Controls (Paper)</b>
-                  <div className="muted" style={{ marginTop: 6, fontSize: 12, lineHeight: 1.5 }}>
-                    Equity: <b>{fmtMoneyCompact(equity, 2)}</b> • Win rate: <b>{(winRate * 100).toFixed(0)}%</b> • Config: <b>{cfgStatus}</b>
-                  </div>
-                </div>
+      )}
 
-                <div className="tradeControlsBtns">
-                  <button onClick={savePaperConfig} disabled={cfgBusy} type="button" style={{ width: "auto" }}>
-                    {cfgBusy ? "Working…" : "Save Controls"}
-                  </button>
-                  <button onClick={resetPaper} disabled={cfgBusy} type="button" style={{ width: "auto" }}>
-                    Reset Paper (key)
-                  </button>
-                </div>
-              </div>
+      {tab === "room" && (
+        <div className="card">
+          <h3>Trading Room</h3>
+          <p style={{ opacity: 0.75 }}>
+            This page holds controls, AI, logs, and positions — separated from the chart so nothing breaks.
+          </p>
+          <VoiceAI title="AutoProtect Voice" endpoint="/api/ai/chat" />
+        </div>
+      )}
 
-              <div className="tradeControlsGrid">
-                <div className="card tradeInnerCard">
-                  <b>Trade Size</b>
-                  <div className="muted" style={{ marginTop: 6, fontSize: 12, lineHeight: 1.5 }}>
-                    Baseline % = normal size. Max % = ceiling size. Estimated USD uses current equity.
-                  </div>
-
-                  <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                    <div>
-                      <label>Baseline %</label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        min="0"
-                        max="1"
-                        value={cfgForm.baselinePct}
-                        onChange={(e) => setCfgForm((p) => ({ ...p, baselinePct: toNum(e.target.value, 0) }))}
-                        placeholder="0.02 = 2%"
-                      />
-                      <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                        Est. baseline amount: <b>{fmtMoneyCompact(baselineUsd, 2)}</b>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label>Max %</label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        min="0"
-                        max="1"
-                        value={cfgForm.maxPct}
-                        onChange={(e) => setCfgForm((p) => ({ ...p, maxPct: toNum(e.target.value, 0) }))}
-                        placeholder="0.05 = 5%"
-                      />
-                      <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                        Est. max amount: <b>{fmtMoneyCompact(maxUsd, 2)}</b>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label>Max trades/day</label>
-                      <input
-                        type="number"
-                        step="1"
-                        min="1"
-                        max="1000"
-                        value={cfgForm.maxTradesPerDay}
-                        onChange={(e) => setCfgForm((p) => ({ ...p, maxTradesPerDay: toInt(e.target.value, 1) }))}
-                        placeholder="12"
-                      />
-                      <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                        This prevents overtrading and helps reduce one-sided losing.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card tradeInnerCard">
-                  <b>Keys</b>
-                  <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                    <div>
-                      <label>Owner key</label>
-                      <input value={ownerKey} onChange={(e) => setOwnerKey(e.target.value)} placeholder="x-owner-key" />
-                    </div>
-                    <div>
-                      <label>Reset key</label>
-                      <input value={resetKey} onChange={(e) => setResetKey(e.target.value)} placeholder="x-reset-key" />
-                    </div>
-                    <div className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.5 }}>
-                      Tip: If saving fails, backend rejected <b>x-owner-key</b>.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Main Room Grid */}
-          <div className={gridClass}>
-            {/* Left sidebar (desktop only) */}
-            {!wideChart && !isMobile && (
-              <div className="card tradeSide">
-                <div className="tradeSideTop">
-                  <b>Market</b>
-                  <span className="badge">{symbol}</span>
-                </div>
-
-                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                  <div className="kpiBox">
-                    <small>Last</small>
-                    <b>{fmtMoney(last, 2)}</b>
-                  </div>
-
-                  <div className="kpiBox">
-                    <small>Feed</small>
-                    <b>{feedStatus}</b>
-                    <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>Paper: {paper.running ? "ON" : "OFF"}</div>
-                  </div>
-
-                  {showMoney && (
-                    <div className="kpiBox">
-                      <small>Balances</small>
-                      <div className="muted" style={{ marginTop: 8, display: "grid", gap: 6, fontSize: 12 }}>
-                        <div>Cash: <b>{fmtMoneyCompact(cashBal, 2)}</b></div>
-                        <div>Equity: <b>{fmtMoneyCompact(equity, 2)}</b></div>
-                        <div>Unrealized: <b>{fmtMoneyCompact(unreal, 2)}</b></div>
-                        <div>Status: <b>{paperStatus}</b></div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Center main */}
-            <div className="card tradeMain">
-              <div className="tradeMainTop">
-                <div className="tradeMainTopLeft">
-                  <b>{symbol}</b>
-                  <span className="badge">Decision: <b>{decision}</b></span>
-                  <span className="badge">Conf: <b>{pct(conf, 0)}</b></span>
-                  <span className="badge">Ticks: <b>{fmtCompact(ticksSeen, 0)}</b></span>
-                </div>
-                <span className="badge" title={reason} style={{ maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis" }}>
-                  Reason: <b>{reason}</b>
-                </span>
-              </div>
-
-              <div className="kpi kpiCompact">
-                <div><b>{fmtCompact(wins, 0)}</b><span>Wins</span></div>
-                <div><b>{fmtCompact(losses, 0)}</b><span>Losses</span></div>
-                <div><b>{fmtMoneyCompact(grossProfit, 2)}</b><span>Total Gain</span></div>
-                <div><b>{fmtMoneyCompact(grossLoss, 2)}</b><span>Total Loss</span></div>
-                <div><b>{fmtMoneyCompact(net, 2)}</b><span>Net P&L</span></div>
-                <div><b>{fmtMoneyCompact(feePaid, 2)}</b><span>Fees</span></div>
-                <div><b>{fmtMoneyCompact(slip, 2)}</b><span>Slippage</span></div>
-                <div><b>{fmtMoneyCompact(spr, 2)}</b><span>Spread</span></div>
-              </div>
-
-              {paper.position && (
-                <div className="card tradePosition" style={{ padding: 12 }}>
-                  <b>Open Position</b>
-                  <div className="muted" style={{ marginTop: 8, fontSize: 12, lineHeight: 1.6 }}>
-                    <div><b>{paper.position.symbol}</b> • {paper.position.strategy || "—"} • Entry {fmtMoney(paper.position.entry, 2)}</div>
-                    <div>Notional {fmtMoneyCompact(paper.position.usd ?? paper.position.entryNotionalUsd, 2)} • Qty {fmtNum(paper.position.qty, 6)}</div>
-                    <div>Age {fmtDur(paper.position.ageMs)} • Remaining {paper.position.remainingMs !== null ? fmtDur(paper.position.remainingMs) : "—"}</div>
-                  </div>
-                </div>
-              )}
-
-              <div className="tradeChartArea">
-                <TVChart candles={candles} height={chartHeight} symbol={symbol} last={last} />
-              </div>
-
-              {showTradeLog && (
-                <div style={{ marginTop: 12 }}>
-                  <b>Trade Log</b>
-                  <div className="tableWrap" style={{ marginTop: 10 }}>
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          {["Time", "Type", "Strategy", "Price", "USD", "Entry Cost", "Held", "Exit", "Net P/L"].map((h) => (
-                            <th key={h}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(paper.trades || [])
-                          .slice()
-                          .reverse()
-                          .slice(0, 24)
-                          .map((t, i) => (
-                            <tr key={i}>
-                              <td>{t.time ? new Date(t.time).toLocaleTimeString() : "—"}</td>
-                              <td>{t.type || "—"}</td>
-                              <td>{t.strategy || "—"}</td>
-                              <td>{fmtMoney(t.price, 2)}</td>
-                              <td>{t.usd !== undefined ? fmtMoneyCompact(t.usd, 2) : "—"}</td>
-                              <td>{t.cost !== undefined ? fmtMoneyCompact(t.cost, 2) : "—"}</td>
-                              <td>{t.holdMs !== undefined ? fmtDur(t.holdMs) : "—"}</td>
-                              <td>{t.exitReason ? niceReason(t.exitReason) : t.note ? niceReason(t.note) : "—"}</td>
-                              <td>{t.profit !== undefined ? fmtMoneyCompact(t.profit, 2) : "—"}</td>
-                            </tr>
-                          ))}
-
-                        {(!paper.trades || paper.trades.length === 0) && (
-                          <tr>
-                            <td colSpan={9}>No trades yet (it’s learning)</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {showHistory && (
-                <div style={{ marginTop: 12 }}>
-                  <b>History</b>
-                  <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                    Scroll to review how every trade happened (entry, size, strategy, hold time, exit reason, result).
-                  </div>
-
-                  <div className="card" style={{ marginTop: 10, padding: 10, maxHeight: 340, overflow: "auto" }}>
-                    {historyItems.length === 0 && <div className="muted">No history yet.</div>}
-                    {historyItems.map((t, idx) => (
-                      <div key={idx} style={{ padding: "8px 8px", borderBottom: "1px solid rgba(255,255,255,0.06)", lineHeight: 1.5, fontSize: 12, opacity: 0.95 }}>
-                        {historyLine(t)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Right sidebar (desktop only) */}
-            {showRightPanel && !isMobile && (
-              <div className="card tradeRight">
-                <b>AI Assistant</b>
-                <small>Ask why it bought/sold • voice below</small>
-
-                <div ref={logRef} className="chatLog" style={{ marginTop: 12, height: 360 }}>
-                  {messages.map((m, idx) => (
-                    <div key={idx} className={`chatMsg ${m.from === "you" ? "you" : "ai"}`}>
-                      <b style={{ display: "block", marginBottom: 4, fontSize: 12 }}>
-                        {m.from === "you" ? "You" : "AutoProtect"}
-                      </b>
-                      <div style={{ fontSize: 12, opacity: 0.95, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.text}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="chatBox">
-                  <input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Ask: why did you enter? what strategy? what’s next?"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        sendToAI(input);
-                        setInput("");
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      sendToAI(input);
-                      setInput("");
-                    }}
-                    type="button"
-                    style={{ width: "auto", minWidth: 110 }}
-                  >
-                    Send
-                  </button>
-                </div>
-
-                <div style={{ marginTop: 12 }}>
-                  <VoiceAI title="AutoProtect Voice" endpoint="/api/ai/chat" getContext={() => ({ symbol, mode, last, paper })} />
-                </div>
-              </div>
-            )}
-          </div>
-        </>
+      {tab === "reports" && (
+        <div className="card">
+          <h3>Reports</h3>
+          <ul style={{ opacity: 0.8 }}>
+            <li>Win / Loss</li>
+            <li>Daily P&amp;L</li>
+            <li>Fees & slippage</li>
+            <li>Exports later</li>
+          </ul>
+        </div>
       )}
     </div>
   );
