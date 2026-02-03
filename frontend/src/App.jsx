@@ -1,6 +1,8 @@
 import React from "react";
-import TradingLayout from "./pages/trading/TradingLayout.jsx";
+import Trading from "./pages/Trading.jsx";
 
 export default function App() {
-  return <TradingLayout />;
+  // IMPORTANT: no .container wrapper here,
+  // because it squeezes the trading terminal.
+  return <Trading />;
 }
