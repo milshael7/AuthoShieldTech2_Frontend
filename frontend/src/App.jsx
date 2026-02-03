@@ -14,7 +14,7 @@ export default function App() {
         fontWeight: 800,
       }}
     >
-      ✅ App Mounted (If you see this, React is working)
+      ✅ App Mounted (React is running)
     </div>
   );
 }
