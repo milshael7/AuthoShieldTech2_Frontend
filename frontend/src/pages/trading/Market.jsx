@@ -10,10 +10,10 @@ const SYMBOLS = [
   "BITSTAMP:BTCUSD",
   "BINANCE:BTCUSDT",
   "BINANCE:ETHUSDT",
+  "BINANCE:SOLUSDT",
 ];
 
 export default function Market() {
-  const [tab, setTab] = useState("market"); // market | room | reports
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
   const [tf, setTf] = useState("D");
 
@@ -29,13 +29,25 @@ export default function Market() {
 
   const [takeProfit, setTakeProfit] = useState(false);
   const [stopLoss, setStopLoss] = useState(false);
-  const [tp, setTp] = useState({ pips: "75", price: "1.11837", usd: "7.50", pct: "0.01" });
-  const [sl, setSl] = useState({ pips: "25", price: "1.10837", usd: "2.50", pct: "0.00" });
+  const [tp, setTp] = useState({
+    pips: "75",
+    price: "1.11837",
+    usd: "7.50",
+    pct: "0.01",
+  });
+  const [sl, setSl] = useState({
+    pips: "25",
+    price: "1.10837",
+    usd: "2.50",
+    pct: "0.00",
+  });
 
   const [bottomTab, setBottomTab] = useState("Positions");
+
+  // fullscreen for terminal
   const [full, setFull] = useState(false);
 
-  // ✅ FLOAT order panel (like pop-up style)
+  // float order panel like screenshot
   const [floatPanel, setFloatPanel] = useState(true);
 
   const tvSrc = useMemo(() => {
@@ -83,279 +95,234 @@ export default function Market() {
     );
   };
 
-  // ✅ Platform navigation hooks (adjust these to match your actual routes)
-  const go = (path) => (window.location.href = path);
-
   return (
-    <div className="platformShell">
-      {/* ======== PLATFORM TOP NAV (matches your site, not white standalone) ======== */}
-      <div className="platformTop">
-        <div className="platformBrand" onClick={() => go("/")}>
-          <div className="platformLogo" />
-          <div className="platformBrandTxt">
-            <b>AutoShield</b>
-            <span>SECURITY • TRADING</span>
-          </div>
-        </div>
-
-        <div className="platformTabs">
-          <button className={tab === "market" ? "ptab active" : "ptab"} onClick={() => setTab("market")}>
-            Market (Chart)
+    <div className={shellCls}>
+      {/* LEFT TOOLBAR */}
+      <aside className="tvLeftBar" aria-label="tools">
+        {["☰", "↖", "／", "⟂", "⌁", "T", "⟐", "＋", "⌖", "⤢", "⌫", "👁"].map((t, i) => (
+          <button key={i} className="tvToolBtn" type="button" title="Tool">
+            {t}
           </button>
-          <button className={tab === "room" ? "ptab active" : "ptab"} onClick={() => setTab("room")}>
-            Trading Room
-          </button>
-          <button className={tab === "reports" ? "ptab active" : "ptab"} onClick={() => setTab("reports")}>
-            Reports
-          </button>
-        </div>
+        ))}
+      </aside>
 
-        <div className="platformActions">
-          <button className="pbtn" onClick={() => go("/posture")}>Cybersecurity</button>
-          <button className="pbtn" onClick={() => go("/manager")}>Admin</button>
-          <button className="pbtn" onClick={() => go("/")}>Dashboard</button>
-        </div>
-      </div>
+      {/* TOP BAR (like screenshot area) */}
+      <header className="tvTopBar">
+        <div className="tvTopLeft">
+          <div className="tvTopSymbol">
+            <select className="tvSelect" value={symbol} onChange={(e) => setSymbol(e.target.value)}>
+              {SYMBOLS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
 
-      {/* ======== CONTENT AREA ======== */}
-      <div className="platformBody">
-        {tab !== "market" && (
-          <div className="platformCard">
-            {tab === "room" && (
-              <>
-                <h3 style={{ marginTop: 0 }}>Trading Room</h3>
-                <p style={{ opacity: 0.8 }}>
-                  This is where Voice AI + AI status + logs will live. (We wire it next.)
-                </p>
-              </>
-            )}
-
-            {tab === "reports" && (
-              <>
-                <h3 style={{ marginTop: 0 }}>Reports</h3>
-                <ul style={{ opacity: 0.85 }}>
-                  <li>P&L</li>
-                  <li>Win/Loss</li>
-                  <li>Risk</li>
-                  <li>AI Notes</li>
-                </ul>
-              </>
-            )}
-          </div>
-        )}
-
-        {tab === "market" && (
-          <div className={shellCls}>
-            {/* LEFT TOOLBAR */}
-            <aside className="tvLeftBar" aria-label="tools">
-              {["☰", "↖", "／", "⟂", "⌁", "T", "⟐", "＋", "⌖", "⤢", "⌫", "👁"].map((t, i) => (
-                <button key={i} className="tvToolBtn" type="button" title="Tool">
-                  {t}
+            <div className="tvTfRow">
+              {["1", "5", "15", "60", "D", "W", "M"].map((x) => (
+                <button
+                  key={x}
+                  type="button"
+                  className={tf === x ? "tvPill active" : "tvPill"}
+                  onClick={() => setTf(x)}
+                >
+                  {x}
                 </button>
               ))}
-            </aside>
+            </div>
+          </div>
+        </div>
 
-            {/* TOP BAR (your controls; TradingView embed still has its own too) */}
-            <header className="tvTopBar">
-              <div className="tvTopLeft">
-                <div className="tvBrand">
-                  <div className="tvBrandLogo" aria-label="AutoShield Logo" />
-                  <div className="tvBrandTxt">
-                    <b>AutoShield</b>
-                    <span>TRADING TERMINAL</span>
-                  </div>
+        <div className="tvTopRight">
+          {/* These are the “missing” top-right controls you called out */}
+          <button className="tvIconBtn" type="button" title="Zoom In">
+            ＋
+          </button>
+          <button className="tvIconBtn" type="button" title="Zoom Out">
+            －
+          </button>
+          <button className="tvIconBtn" type="button" title="Camera / Snapshot">
+            📷
+          </button>
+          <button className="tvPrimary" type="button" title="Publish">
+            Publish
+          </button>
+          <button className="tvIconBtn" type="button" onClick={tick} title="Play (Mock Tick)">
+            ▶
+          </button>
+          <button
+            className="tvIconBtn"
+            type="button"
+            title={floatPanel ? "Cloud (Hide floating order)" : "Cloud (Show floating order)"}
+            onClick={() => setFloatPanel((v) => !v)}
+          >
+            ☁
+          </button>
+          <button className="tvIconBtn" type="button" title="Settings">
+            ⚙
+          </button>
+          <button className="tvIconBtn" type="button" title="Fullscreen" onClick={() => setFull((v) => !v)}>
+            {full ? "🗗" : "🗖"}
+          </button>
+        </div>
+      </header>
+
+      {/* CENTER */}
+      <main className="tvChartArea">
+        <div className="tvChartFrame">
+          <iframe
+            title="TradingView Chart"
+            className="tvIframe"
+            src={tvSrc}
+            frameBorder="0"
+            allow="clipboard-write; fullscreen"
+          />
+
+          {/* FLOATING ORDER PANEL OVER CHART */}
+          {floatPanel && (
+            <div className="tvFloatWrap">
+              <div className="tvFloatTitle">
+                <div className="tvFloatTitleLeft">
+                  <b>{symbol}</b> <span>PAPER TRADING</span>
                 </div>
-
-                <div className="tvSymRow">
-                  <select className="tvSelect" value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-                    {SYMBOLS.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-
-                  <div className="tvTfRow">
-                    {["1", "5", "15", "60", "D", "W", "M"].map((x) => (
-                      <button
-                        key={x}
-                        type="button"
-                        className={tf === x ? "tvPill active" : "tvPill"}
-                        onClick={() => setTf(x)}
-                      >
-                        {x}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <button className="tvFloatClose" onClick={() => setFloatPanel(false)}>
+                  ✕
+                </button>
               </div>
 
-              <div className="tvTopRight">
-                <button className="tvPrimary" type="button">Publish</button>
-                <button className="tvIconBtn" type="button" onClick={tick} title="Mock Tick">
-                  ▶
-                </button>
-                <button
-                  className="tvIconBtn"
-                  type="button"
-                  title="FLOAT PANEL"
-                  onClick={() => setFloatPanel((v) => !v)}
-                >
-                  {floatPanel ? "☁" : "□"}
-                </button>
-                <button
-                  className="tvIconBtn"
-                  type="button"
-                  title="Fullscreen"
-                  onClick={() => setFull((v) => !v)}
-                >
-                  {full ? "🗗" : "🗖"}
-                </button>
-              </div>
-            </header>
-
-            {/* CENTER */}
-            <main className="tvChartArea">
-              <div className="tvChartFrame">
-                <iframe
-                  title="TradingView Chart"
-                  className="tvIframe"
-                  src={tvSrc}
-                  frameBorder="0"
-                  allow="clipboard-write; fullscreen"
+              <div className="tvFloatBody">
+                <OrderPanel
+                  symbol={symbol}
+                  rightTab={rightTab}
+                  setRightTab={setRightTab}
+                  side={side}
+                  setSide={setSide}
+                  bid={bid}
+                  ask={ask}
+                  orderPrice={orderPrice}
+                  setOrderPrice={setOrderPrice}
+                  qty={qty}
+                  setQty={setQty}
+                  takeProfit={takeProfit}
+                  setTakeProfit={setTakeProfit}
+                  stopLoss={stopLoss}
+                  setStopLoss={setStopLoss}
+                  tp={tp}
+                  setTp={setTp}
+                  sl={sl}
+                  setSl={setSl}
+                  placeOrder={placeOrder}
+                  syncOrderPrice={syncOrderPrice}
                 />
-                {/* FLOATING ORDER PANEL OVER CHART */}
-                {floatPanel && (
-                  <div className="tvFloatWrap">
-                    <div className="tvFloatTitle">
-                      <b>{symbol}</b> <span>PAPER TRADING</span>
-                      <button className="tvFloatClose" onClick={() => setFloatPanel(false)}>✕</button>
-                    </div>
-                    <div className="tvFloatBody">
-                      {renderOrderPanel({
-                        symbol,
-                        rightTab,
-                        setRightTab,
-                        side,
-                        setSide,
-                        bid,
-                        ask,
-                        orderPrice,
-                        setOrderPrice,
-                        qty,
-                        setQty,
-                        takeProfit,
-                        setTakeProfit,
-                        stopLoss,
-                        setStopLoss,
-                        tp,
-                        setTp,
-                        sl,
-                        setSl,
-                        placeOrder,
-                        syncOrderPrice,
-                      })}
-                    </div>
-                  </div>
-                )}
               </div>
+            </div>
+          )}
+        </div>
 
-              {/* BOTTOM PANEL */}
-              <section className="tvBottom">
-                <div className="tvBottomTabs">
-                  {["Positions", "Orders", "History", "Account Summary", "Trading Journal"].map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={bottomTab === t ? "tvTab active" : "tvTab"}
-                      onClick={() => setBottomTab(t)}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
+        {/* BOTTOM PANEL */}
+        <section className="tvBottom">
+          <div className="tvBottomTabs">
+            {["Positions", "Orders", "History", "Account Summary", "Trading Journal"].map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={bottomTab === t ? "tvTab active" : "tvTab"}
+                onClick={() => setBottomTab(t)}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
 
-                <div className="tvBottomBody">
-                  {bottomTab === "Positions" ? (
-                    <table className="tvTable">
-                      <thead>
-                        <tr>
-                          <th>Symbol</th>
-                          <th>Side</th>
-                          <th>Qty</th>
-                          <th>Avg Fill</th>
-                          <th>Take Profit</th>
-                          <th>Stop Loss</th>
-                          <th>Profit</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td>BITSTAMP:BTCUSD</td>
-                          <td className="buy">Buy</td>
-                          <td>1</td>
-                          <td>8,174.85</td>
-                          <td>—</td>
-                          <td>—</td>
-                          <td className="neg">-283.57</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div className="tvEmpty">{bottomTab} will be wired to backend later.</div>
-                  )}
-                </div>
-              </section>
-            </main>
-
-            {/* RIGHT ORDER PANEL (if not floating) */}
-            {!floatPanel && (
-              <aside className="tvRight">
-                {renderOrderPanel({
-                  symbol,
-                  rightTab,
-                  setRightTab,
-                  side,
-                  setSide,
-                  bid,
-                  ask,
-                  orderPrice,
-                  setOrderPrice,
-                  qty,
-                  setQty,
-                  takeProfit,
-                  setTakeProfit,
-                  stopLoss,
-                  setStopLoss,
-                  tp,
-                  setTp,
-                  sl,
-                  setSl,
-                  placeOrder,
-                  syncOrderPrice,
-                })}
-              </aside>
+          <div className="tvBottomBody">
+            {bottomTab === "Positions" ? (
+              <table className="tvTable">
+                <thead>
+                  <tr>
+                    <th>Symbol</th>
+                    <th>Side</th>
+                    <th>Qty</th>
+                    <th>Avg Fill</th>
+                    <th>Take Profit</th>
+                    <th>Stop Loss</th>
+                    <th>Profit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>BITSTAMP:BTCUSD</td>
+                    <td className="buy">Buy</td>
+                    <td>1</td>
+                    <td>8,174.85</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td className="neg">-283.57</td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : (
+              <div className="tvEmpty">{bottomTab} will be wired to backend later.</div>
             )}
           </div>
-        )}
-      </div>
+        </section>
+      </main>
+
+      {/* RIGHT ORDER PANEL (if not floating) */}
+      {!floatPanel && (
+        <aside className="tvRight">
+          <OrderPanel
+            symbol={symbol}
+            rightTab={rightTab}
+            setRightTab={setRightTab}
+            side={side}
+            setSide={setSide}
+            bid={bid}
+            ask={ask}
+            orderPrice={orderPrice}
+            setOrderPrice={setOrderPrice}
+            qty={qty}
+            setQty={setQty}
+            takeProfit={takeProfit}
+            setTakeProfit={setTakeProfit}
+            stopLoss={stopLoss}
+            setStopLoss={setStopLoss}
+            tp={tp}
+            setTp={setTp}
+            sl={sl}
+            setSl={setSl}
+            placeOrder={placeOrder}
+            syncOrderPrice={syncOrderPrice}
+          />
+        </aside>
+      )}
     </div>
   );
 }
 
-/* ===== helper render so we don’t duplicate the order panel ===== */
-function renderOrderPanel(props) {
-  const {
-    symbol, rightTab, setRightTab,
-    side, setSide, bid, ask,
-    orderPrice, setOrderPrice,
-    qty, setQty,
-    takeProfit, setTakeProfit,
-    stopLoss, setStopLoss,
-    tp, setTp, sl, setSl,
-    placeOrder, syncOrderPrice
-  } = props;
-
+/* ===== Order Panel Component (no duplicates) ===== */
+function OrderPanel({
+  symbol,
+  rightTab,
+  setRightTab,
+  side,
+  setSide,
+  bid,
+  ask,
+  orderPrice,
+  setOrderPrice,
+  qty,
+  setQty,
+  takeProfit,
+  setTakeProfit,
+  stopLoss,
+  setStopLoss,
+  tp,
+  setTp,
+  sl,
+  setSl,
+  placeOrder,
+  syncOrderPrice,
+}) {
   return (
     <>
       <div className="tvRightHead">
@@ -368,7 +335,10 @@ function renderOrderPanel(props) {
           <button
             type="button"
             className={side === "SELL" ? "tvSide sell active" : "tvSide sell"}
-            onClick={() => { setSide("SELL"); syncOrderPrice("SELL"); }}
+            onClick={() => {
+              setSide("SELL");
+              syncOrderPrice("SELL");
+            }}
           >
             <span className="tvSideLbl">SELL</span>
             <span className="tvSidePx">{bid}</span>
@@ -377,7 +347,10 @@ function renderOrderPanel(props) {
           <button
             type="button"
             className={side === "BUY" ? "tvSide buy active" : "tvSide buy"}
-            onClick={() => { setSide("BUY"); syncOrderPrice("BUY"); }}
+            onClick={() => {
+              setSide("BUY");
+              syncOrderPrice("BUY");
+            }}
           >
             <span className="tvSideLbl">BUY</span>
             <span className="tvSidePx">{ask}</span>
@@ -425,10 +398,22 @@ function renderOrderPanel(props) {
             </label>
 
             <div className={takeProfit ? "tvGrid2" : "tvGrid2 disabled"}>
-              <div><span>Pips</span><input value={tp.pips} onChange={(e) => setTp((p) => ({ ...p, pips: e.target.value }))} /></div>
-              <div><span>Price</span><input value={tp.price} onChange={(e) => setTp((p) => ({ ...p, price: e.target.value }))} /></div>
-              <div><span>$</span><input value={tp.usd} onChange={(e) => setTp((p) => ({ ...p, usd: e.target.value }))} /></div>
-              <div><span>%</span><input value={tp.pct} onChange={(e) => setTp((p) => ({ ...p, pct: e.target.value }))} /></div>
+              <div>
+                <span>Pips</span>
+                <input value={tp.pips} onChange={(e) => setTp((p) => ({ ...p, pips: e.target.value }))} />
+              </div>
+              <div>
+                <span>Price</span>
+                <input value={tp.price} onChange={(e) => setTp((p) => ({ ...p, price: e.target.value }))} />
+              </div>
+              <div>
+                <span>$</span>
+                <input value={tp.usd} onChange={(e) => setTp((p) => ({ ...p, usd: e.target.value }))} />
+              </div>
+              <div>
+                <span>%</span>
+                <input value={tp.pct} onChange={(e) => setTp((p) => ({ ...p, pct: e.target.value }))} />
+              </div>
             </div>
           </div>
 
@@ -439,10 +424,22 @@ function renderOrderPanel(props) {
             </label>
 
             <div className={stopLoss ? "tvGrid2" : "tvGrid2 disabled"}>
-              <div><span>Pips</span><input value={sl.pips} onChange={(e) => setSl((p) => ({ ...p, pips: e.target.value }))} /></div>
-              <div><span>Price</span><input value={sl.price} onChange={(e) => setSl((p) => ({ ...p, price: e.target.value }))} /></div>
-              <div><span>$</span><input value={sl.usd} onChange={(e) => setSl((p) => ({ ...p, usd: e.target.value }))} /></div>
-              <div><span>%</span><input value={sl.pct} onChange={(e) => setSl((p) => ({ ...p, pct: e.target.value }))} /></div>
+              <div>
+                <span>Pips</span>
+                <input value={sl.pips} onChange={(e) => setSl((p) => ({ ...p, pips: e.target.value }))} />
+              </div>
+              <div>
+                <span>Price</span>
+                <input value={sl.price} onChange={(e) => setSl((p) => ({ ...p, price: e.target.value }))} />
+              </div>
+              <div>
+                <span>$</span>
+                <input value={sl.usd} onChange={(e) => setSl((p) => ({ ...p, usd: e.target.value }))} />
+              </div>
+              <div>
+                <span>%</span>
+                <input value={sl.pct} onChange={(e) => setSl((p) => ({ ...p, pct: e.target.value }))} />
+              </div>
             </div>
           </div>
         </div>
