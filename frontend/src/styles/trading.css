@@ -1,49 +1,45 @@
-/* =========================================================
-   TRADING TERMINAL (SCOPED)
-   IMPORTANT:
-   - NO global body/html/#root styles in this file
-   - This file must NOT change the whole app theme
-   ========================================================= */
+/* frontend/src/styles/trading.css
+   TRADING TERMINAL LAYOUT ONLY (NO COLORS / NO :root / NO body/html rules)
+   Colors come from global theme variables in your main CSS.
+*/
 
-/* ===== Main layout (no squish) ===== */
-.tvShell{
+.tradingScope .tvShell{
   width:100%;
-  height: calc(100vh - 110px); /* header space */
+  height: calc(100vh - 110px);
   display:grid;
   grid-template-columns: 56px minmax(0,1fr) 380px;
   grid-template-rows: 56px minmax(0,1fr);
-  border-radius: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--panel), var(--panel2));
+  box-shadow: var(--shadow);
   overflow:hidden;
-
-  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.22));
-  border: 1px solid rgba(255,255,255,.10);
-  box-shadow: 0 10px 30px rgba(0,0,0,.35);
 }
 
-.tvShell.isFull{position:fixed; inset:0; z-index:9999; border-radius:0;}
-.tvShell.noOrder{grid-template-columns: 56px minmax(0,1fr);}
-.tvShell.noOrder .tvRight{display:none;}
-.tvShell.noBottom .tvBottom{display:none;}
+.tradingScope .tvShell.isFull{position:fixed; inset:0; z-index:9999;}
+.tradingScope .tvShell.noOrder{grid-template-columns: 56px minmax(0,1fr);}
+.tradingScope .tvShell.noOrder .tvRight{display:none;}
+.tradingScope .tvShell.noBottom .tvBottom{display:none;}
 
-.tvLeftBar{
+/* LEFT TOOLS */
+.tradingScope .tvLeftBar{
   grid-row: 1 / span 2;
   grid-column: 1;
   padding:10px 8px;
-  background: rgba(255,255,255,.06);
-  border-right: 1px solid rgba(255,255,255,.10);
-  display:flex;
-  flex-direction:column;
-  gap:8px;
+  border-right: 1px solid var(--line);
+  display:flex; flex-direction:column; gap:8px;
+  background: var(--panel2);
 }
-.tvToolBtn{
+.tradingScope .tvToolBtn{
   height:34px;
   border-radius:12px;
-  border:1px solid rgba(255,255,255,.12);
+  border:1px solid var(--line);
   background: rgba(0,0,0,.20);
-  color:#fff;
+  color: var(--text);
 }
 
-.tvTopBar{
+/* TOP BAR */
+.tradingScope .tvTopBar{
   grid-column: 2 / -1;
   grid-row: 1;
   display:flex;
@@ -51,86 +47,79 @@
   justify-content:space-between;
   gap:10px;
   padding:10px 12px;
-  background: rgba(255,255,255,.06);
-  border-bottom:1px solid rgba(255,255,255,.10);
+  border-bottom:1px solid var(--line);
+  background: var(--panel);
 }
 
-.tvTopLeft{display:flex; align-items:center; gap:10px; min-width:0;}
-.tvBrandLogo{
+.tradingScope .tvTopLeft{display:flex; align-items:center; gap:10px; min-width:0;}
+
+.tradingScope .tvBrandLogo{
   width:34px; height:34px;
   border-radius:12px;
-  border:1px solid rgba(255,255,255,.12);
+  border:1px solid var(--line);
   background: rgba(0,0,0,.25) url("/autoshield-logo.png") center/contain no-repeat;
 }
-.tvSelect{
+
+.tradingScope .tvSelect{
   width:auto;
   min-width:160px;
   padding:10px 12px;
   border-radius:14px;
-  border:1px solid rgba(255,255,255,.12);
+  border:1px solid var(--line);
   background: rgba(0,0,0,.25);
-  color:#fff;
+  color: var(--text);
 }
-.tvTfRow{display:flex; gap:8px; flex-wrap:wrap;}
-.tvPill{
+
+.tradingScope .tvTfRow{display:flex; gap:8px; flex-wrap:wrap;}
+
+.tradingScope .tvPill{
   width:auto;
   padding:8px 10px;
   border-radius:999px;
-  border:1px solid rgba(255,255,255,.12);
+  border:1px solid var(--line);
   background: rgba(0,0,0,.25);
-  color:#fff;
+  color: var(--text);
 }
-.tvPill.active{
-  border-color: rgba(122,167,255,.55);
-  background: rgba(122,167,255,.20);
-}
-.tvTopRight{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
-.tvPrimary{
-  width:auto;
-  padding:10px 12px;
-  border-radius:12px;
-  border:1px solid rgba(255,255,255,.12);
-  background: rgba(122,167,255,.20);
-  color:#fff;
-}
-.tvIconBtn{
-  width:auto;
-  padding:10px 12px;
-  border-radius:12px;
-  border:1px solid rgba(255,255,255,.12);
-  background: rgba(0,0,0,.25);
-  color:#fff;
+.tradingScope .tvPill.active{
+  border-color: var(--accent);
+  background: rgba(122,167,255,.15);
 }
 
-/* Chart area */
-.tvChartArea{grid-column:2; grid-row:2; min-width:0; min-height:0; position:relative;}
-.tvChartFrame{position:relative; height:100%; min-height:0;}
-.tvIframe{
+.tradingScope .tvTopRight{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+
+.tradingScope .tvPrimary,
+.tradingScope .tvIconBtn{
+  width:auto;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background: rgba(0,0,0,.25);
+  color: var(--text);
+}
+
+/* CHART */
+.tradingScope .tvChartArea{grid-column:2; grid-row:2; min-width:0; min-height:0; position:relative;}
+.tradingScope .tvChartFrame{position:relative; height:100%; min-height:0;}
+.tradingScope .tvIframe{
   width:100%;
   height:100%;
   border:0;
+  display:block;
   border-radius:14px;
-  overflow:hidden;
-  /* TradingView iframe is its own UI; don’t force global white themes here */
-  background: transparent;
 }
 
-/* Right panel */
-.tvRight{
-  grid-column:3;
-  grid-row:2;
-  min-width:0;
-  min-height:0;
+/* RIGHT PANEL (LAYOUT ONLY) */
+.tradingScope .tvRight{
+  grid-column:3; grid-row:2;
+  min-width:0; min-height:0;
   padding:10px;
-
-  /* light lilac glass */
-  background: rgba(160,120,255,.12);
-  border-left:1px solid rgba(160,120,255,.22);
+  border-left:1px solid var(--line);
+  background: var(--panel);
 }
 
-/* Floating panel (when undocked) */
-.tvShell.floatMode .tvRight{display:none;}
-.tvFloatWrap{
+/* FLOAT MODE (if used) */
+.tradingScope .tvShell.floatMode .tvRight{display:none;}
+.tradingScope .tvFloatWrap{
   position:fixed;
   top: 80px;
   right: 20px;
@@ -139,51 +128,61 @@
   z-index: 9998;
 }
 
-/* Bottom panel */
-.tvBottom{
+/* BOTTOM PANEL (LAYOUT ONLY) */
+.tradingScope .tvBottom{
   position:absolute;
   left: 10px;
   right: 10px;
   bottom: 10px;
-  height: 200px; /* smaller than before (less “glass blocking”) */
-
-  background: rgba(160,120,255,.10);
-  border:1px solid rgba(160,120,255,.22);
+  height: 240px;
+  border:1px solid var(--line);
   border-radius:14px;
   overflow:hidden;
   backdrop-filter: blur(10px);
+  background: var(--panel);
 }
-.tvBottomTabs{
-  display:flex;
-  gap:8px;
-  padding:10px;
-  border-bottom:1px solid rgba(255,255,255,.10);
+
+.tradingScope .tvBottomTabs{
+  display:flex; gap:8px; padding:10px;
+  border-bottom:1px solid var(--line);
   flex-wrap:wrap;
 }
-.tvTab{
+
+.tradingScope .tvTab{
   width:auto;
   padding:8px 10px;
   border-radius:999px;
-  border:1px solid rgba(160,120,255,.22);
-  background: rgba(160,120,255,.10);
-  color:#fff;
+  border:1px solid var(--line);
+  background: rgba(0,0,0,.25);
+  color: var(--text);
 }
-.tvTab.active{
-  border-color: rgba(122,167,255,.55);
-  background: rgba(122,167,255,.20);
+.tradingScope .tvTab.active{
+  border-color: var(--accent);
+  background: rgba(122,167,255,.15);
 }
-.tvBottomBody{padding:10px; color:#fff; overflow:auto; height: calc(200px - 56px);}
 
-/* Table */
-.tvTable{width:100%; border-collapse:collapse; color:#fff;}
-.tvTable th,.tvTable td{padding:8px; border-bottom:1px solid rgba(255,255,255,.10); font-size:12px; white-space:nowrap;}
-.buy{color:#2bd576;}
-.neg{color:#ff5a5f;}
-.tvEmpty{opacity:.8;}
+.tradingScope .tvBottomBody{
+  padding:10px;
+  overflow:auto;
+  height: calc(240px - 56px);
+  color: var(--text);
+}
 
-/* Mobile */
+/* TABLE */
+.tradingScope .tvTable{width:100%; border-collapse:collapse; color: var(--text);}
+.tradingScope .tvTable th,.tradingScope .tvTable td{
+  padding:8px;
+  border-bottom:1px solid var(--line);
+  font-size:12px;
+  white-space:nowrap;
+}
+.tradingScope .buy{color: var(--ok);}
+.tradingScope .neg{color: var(--danger);}
+.tradingScope .tvEmpty{opacity:.8;}
+
+/* MOBILE */
 @media (max-width: 980px){
-  .tvShell{grid-template-columns: 56px minmax(0,1fr); height: auto;}
-  .tvRight{display:none;}
-  .tvFloatWrap{right:10px;}
+  .tradingScope .tvShell{grid-template-columns: 56px minmax(0,1fr); height:auto;}
+  .tradingScope .tvRight{display:none;}
+  .tradingScope .tvFloatWrap{right:10px;}
 }
