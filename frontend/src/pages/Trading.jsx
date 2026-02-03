@@ -1,95 +1,107 @@
 // frontend/src/pages/Trading.jsx
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import Market from "./trading/Market.jsx";
 import TradingRoom from "./trading/TradingRoom.jsx";
-import "../styles/trading.css"; // ensures platformShell styles are loaded
+
+// existing pages you already have in /src/pages
+import Posture from "./Posture.jsx";
+import Manager from "./Manager.jsx";
+import Admin from "./Admin.jsx";
+
+import "../styles/trading.css";
 
 export default function Trading() {
+  // MAIN app section (prevents 404 because we render components, not routes)
+  const [section, setSection] = useState("trading"); // trading | security | admin | dashboard
+
+  // Trading sub-tabs
   const [tab, setTab] = useState("market"); // market | room | reports
 
-  // Where to go when you click the logo to return to Cybersecurity/Admin
-  // Change this path later if your admin route is different.
-  const cyberUrl = useMemo(() => {
-    return (import.meta.env.VITE_CYBER_URL || "/").trim() || "/";
-  }, []);
-
-  const goCyber = () => {
-    window.location.href = cyberUrl;
-  };
-
   return (
-    <div className="platformShell" style={{ minHeight: "100vh" }}>
-      {/* TOP PLATFORM BAR */}
+    <div className="platformShell">
+      {/* ===== Platform Top Header (ONLY place this exists) ===== */}
       <div className="platformTop">
-        <div className="platformBrand" onClick={goCyber} title="Back to Cybersecurity/Admin">
+        <div className="platformBrand" onClick={() => setSection("dashboard")}>
           <div className="platformLogo" />
           <div className="platformBrandTxt">
             <b>AutoShield</b>
-            <span>ADMIN</span>
+            <span>SECURITY • TRADING</span>
           </div>
         </div>
 
-        <div className="platformTabs">
-          <button
-            type="button"
-            className={tab === "market" ? "ptab active" : "ptab"}
-            onClick={() => setTab("market")}
-          >
-            Market (Chart)
-          </button>
-
-          <button
-            type="button"
-            className={tab === "room" ? "ptab active" : "ptab"}
-            onClick={() => setTab("room")}
-          >
-            Trading Room
-          </button>
-
-          <button
-            type="button"
-            className={tab === "reports" ? "ptab active" : "ptab"}
-            onClick={() => setTab("reports")}
-          >
-            Reports
-          </button>
-        </div>
+        {/* Trading tabs ONLY show while in trading section */}
+        {section === "trading" && (
+          <div className="platformTabs">
+            <button className={tab === "market" ? "ptab active" : "ptab"} onClick={() => setTab("market")}>
+              Market (Chart)
+            </button>
+            <button className={tab === "room" ? "ptab active" : "ptab"} onClick={() => setTab("room")}>
+              Trading Room
+            </button>
+            <button className={tab === "reports" ? "ptab active" : "ptab"} onClick={() => setTab("reports")}>
+              Reports
+            </button>
+          </div>
+        )}
 
         <div className="platformActions">
-          <button type="button" className="pbtn" onClick={() => setTab("market")}>
-            Open Market
-          </button>
-          <button type="button" className="pbtn" onClick={goCyber}>
-            Cybersecurity
-          </button>
+          <button className="pbtn" onClick={() => setSection("trading")}>Trading</button>
+          <button className="pbtn" onClick={() => setSection("security")}>Cybersecurity</button>
+          <button className="pbtn" onClick={() => setSection("admin")}>Admin</button>
         </div>
       </div>
 
-      {/* BODY */}
+      {/* ===== Main Body ===== */}
       <div className="platformBody">
-        {tab === "market" && (
-          <div className="platformCard" style={{ padding: 0 }}>
-            {/* Market already has its own terminal toolbars inside */}
-            <Market />
+        {section === "dashboard" && (
+          <div className="platformCard">
+            <h3 style={{ marginTop: 0 }}>Dashboard</h3>
+            <p style={{ opacity: 0.8 }}>
+              This is the private owner dashboard. Use the buttons above to jump into Trading / Security / Admin.
+            </p>
           </div>
         )}
 
-        {tab === "room" && (
+        {section === "security" && (
           <div className="platformCard">
-            <TradingRoom />
+            <Posture />
           </div>
         )}
 
-        {tab === "reports" && (
+        {section === "admin" && (
           <div className="platformCard">
-            <h3 style={{ marginTop: 0 }}>Reports</h3>
-            <ul style={{ opacity: 0.85, lineHeight: 1.6 }}>
-              <li>Win / Loss</li>
-              <li>Daily P&amp;L</li>
-              <li>Fees &amp; slippage</li>
-              <li>Exports later</li>
-            </ul>
+            {/* pick what you want here; you have both */}
+            <Admin />
+            <div style={{ height: 14 }} />
+            <Manager />
           </div>
+        )}
+
+        {section === "trading" && (
+          <>
+            {tab === "market" && (
+              // IMPORTANT: NO platformCard wrapper here. This is what fixes the “boxed squish”.
+              <Market />
+            )}
+
+            {tab === "room" && (
+              <div className="platformCard">
+                <TradingRoom />
+              </div>
+            )}
+
+            {tab === "reports" && (
+              <div className="platformCard">
+                <h3 style={{ marginTop: 0 }}>Reports</h3>
+                <ul style={{ opacity: 0.85 }}>
+                  <li>P&amp;L</li>
+                  <li>Win/Loss</li>
+                  <li>Risk</li>
+                  <li>AI Notes</li>
+                </ul>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
