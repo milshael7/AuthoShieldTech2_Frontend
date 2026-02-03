@@ -1,143 +1,206 @@
-/* frontend/src/styles/platform.css
-   Platform shell ONLY (header/tabs/cards)
-   ✅ No global resets
-   ✅ No body/html styling
-   ✅ Won’t leak into TradingView iframe or other pages
-*/
+/* frontend/src/styles/terminal.css */
+/* Scoped Trading Terminal ONLY — NO global selectors (no body/html/*). */
 
-.platformShell{
+:root{
+  --tradeLilac: rgba(160, 120, 255, .18);
+  --tradeLilac2: rgba(160, 120, 255, .10);
+  --tradeBorder: rgba(160, 120, 255, .22);
+}
+
+/* ===== Terminal grid ===== */
+.tvShell{
   width: 100%;
-  min-height: 100vh;
+  height: calc(100vh - 110px); /* space for platform header */
+  display: grid;
+  grid-template-columns: 56px minmax(0,1fr) 380px;
+  grid-template-rows: 56px minmax(0,1fr);
+  border-radius: 16px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.18));
+  border: 1px solid rgba(255,255,255,.10);
+  box-shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+
+.tvShell.isFull{ position: fixed; inset: 0; z-index: 9999; height: 100vh; border-radius: 0; }
+
+/* ===== Left tools ===== */
+.tvLeftBar{
+  grid-row: 1 / span 2;
+  grid-column: 1;
+  padding: 10px 8px;
+  background: rgba(0,0,0,.22);
+  border-right: 1px solid rgba(255,255,255,.12);
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 
-/* Top header bar */
-.platformTop{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, var(--panel), var(--panel2));
-  backdrop-filter: blur(10px);
-}
-
-/* Brand button (so it’s clickable and accessible) */
-.platformBrand{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  padding: 8px 10px;
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(0,0,0,.22);
-  color: var(--text);
-  cursor:pointer;
-}
-
-.platformBrand:active{ transform: translateY(1px); }
-
-.platformLogo{
-  width: 36px;
-  height: 36px;
+.tvToolBtn{
+  height: 34px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,.12);
-  background-color: rgba(0,0,0,.25);
-  background-image:url("https://github.com/user-attachments/assets/0895f9e4-83c4-4088-8658-7a6aeb728af2");
-  background-position:center;
-  background-repeat:no-repeat;
-  background-size:contain;
+  background: rgba(0,0,0,.25);
+  color: rgba(255,255,255,.92);
+  cursor: pointer;
 }
+.tvToolBtn:hover{ background: rgba(255,255,255,.10); }
 
-.platformBrandTxt{
-  display:flex;
-  flex-direction:column;
-  line-height: 1.05;
-  text-align:left;
-}
-
-.platformBrandTxt b{
-  font-size: 15px;
-  letter-spacing: .2px;
-}
-
-.platformBrandTxt span{
-  font-size: 11px;
-  color: var(--muted);
-  letter-spacing: 2px;
-}
-
-/* Tabs row (Market/Room/Reports) */
-.platformTabs{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  flex-wrap:wrap;
-}
-
-.ptab{
-  width:auto;
+/* ===== Top bar ===== */
+.tvTopBar{
+  grid-column: 2 / -1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   padding: 10px 12px;
-  border-radius: 999px;
+  background: linear-gradient(180deg, var(--tradeLilac2), rgba(0,0,0,.22));
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+
+.tvTopLeft{ display:flex; align-items:center; gap:10px; min-width:0; }
+.tvBrand{ display:flex; align-items:center; gap:10px; min-width:0; }
+.tvBrandTxt b{ display:block; font-size:14px; }
+.tvBrandTxt span{ display:block; font-size:11px; opacity:.7; letter-spacing:2px; }
+
+.tvBrandLogo{
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
   border: 1px solid rgba(255,255,255,.12);
-  background: rgba(0,0,0,.22);
-  color: var(--text);
+  background: rgba(0,0,0,.25) url("/autoshield-logo.png") center/contain no-repeat;
+}
+
+.tvSymRow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; min-width:0; }
+
+.tvSelect{
+  width: auto;
+  min-width: 160px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.25);
+  color: rgba(255,255,255,.92);
+}
+
+.tvTfRow{ display:flex; gap:8px; flex-wrap:wrap; }
+.tvPill{
+  width:auto;
+  padding:8px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.25);
+  color: rgba(255,255,255,.92);
   cursor:pointer;
 }
-
-.ptab.active{
+.tvPill.active{
   border-color: rgba(122,167,255,.55);
   background: rgba(122,167,255,.15);
 }
 
-/* Right actions (Trading/Cybersecurity/Admin) */
-.platformActions{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  flex-wrap:wrap;
-  justify-content:flex-end;
-}
-
-.pbtn{
+.tvTopRight{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.tvPrimary,.tvIconBtn{
   width:auto;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(0,0,0,.22);
-  color: var(--text);
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.12);
+  color: rgba(255,255,255,.92);
   cursor:pointer;
 }
+.tvPrimary{ background: rgba(122,167,255,.20); }
+.tvIconBtn{ background: rgba(0,0,0,.25); }
 
-.pbtn:hover{ background: rgba(255,255,255,.10); }
-
-/* Main content area */
-.platformBody{
-  flex: 1;
-  width: 100%;
-  padding: 14px;
+/* ===== Center chart ===== */
+.tvChartArea{ grid-column:2; grid-row:2; min-width:0; min-height:0; position:relative; }
+.tvChartFrame{ position:relative; height:100%; min-height:0; }
+.tvIframe{
+  width:100%;
+  height:100%;
+  border:0;
+  display:block;
+  border-radius:14px;
+  background:#fff; /* TradingView iframe itself */
 }
 
-/* Generic card wrapper (safe for Posture/Admin/Room/Reports) */
-.platformCard{
-  border-radius: var(--radius);
-  border: 1px solid rgba(255,255,255,.10);
-  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.18));
-  box-shadow: var(--shadowSoft);
-  padding: 16px;
+/* ===== Right docked panel (always docked) ===== */
+.tvRight{
+  grid-column:3;
+  grid-row:2;
+  min-width:0;
+  min-height:0;
+  padding:10px;
+  background: linear-gradient(180deg, var(--tradeLilac2), rgba(0,0,0,.20));
+  border-left: 1px solid rgba(255,255,255,.12);
+  overflow:auto;
+}
+
+/* ===== Bottom panel (smaller + not blocking) ===== */
+.tvBottom{
+  position:absolute;
+  left:10px;
+  right:10px;
+  bottom:10px;
+  height: 180px; /* smaller than before */
+  background: linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,.28));
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 14px;
+  overflow:hidden;
   backdrop-filter: blur(10px);
 }
 
-/* Mobile */
-@media (max-width: 720px){
-  .platformTop{
-    align-items:flex-start;
-    flex-direction: column;
+.tvBottomTabs{
+  display:flex;
+  gap:8px;
+  padding:10px;
+  border-bottom:1px solid rgba(255,255,255,.12);
+  flex-wrap:wrap;
+}
+
+.tvTab{
+  width:auto;
+  padding:8px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.25);
+  color: rgba(255,255,255,.92);
+  cursor:pointer;
+}
+.tvTab.active{
+  border-color: rgba(122,167,255,.55);
+  background: rgba(122,167,255,.15);
+}
+
+.tvBottomBody{
+  padding:10px;
+  color: rgba(255,255,255,.92);
+  overflow:auto;
+  height: calc(180px - 56px);
+}
+
+/* Table */
+.tvTable{ width:100%; border-collapse:collapse; color: rgba(255,255,255,.92); }
+.tvTable th,.tvTable td{
+  padding:8px;
+  border-bottom:1px solid rgba(255,255,255,.12);
+  font-size:12px;
+  white-space:nowrap;
+}
+.buy{ color:#2bd576; }
+.neg{ color:#ff5a5f; }
+.tvEmpty{ opacity:.8; }
+
+/* ===== Mobile ===== */
+@media (max-width: 980px){
+  .tvShell{
+    grid-template-columns: 56px minmax(0,1fr);
+    grid-template-rows: 56px minmax(0,1fr) auto;
+    height: auto;
   }
-  .platformActions{
-    width:100%;
-    justify-content:flex-start;
+  .tvRight{
+    grid-column: 1 / -1;
+    grid-row: 3;
+    border-left:none;
+    border-top:1px solid rgba(255,255,255,.12);
   }
+  .tvBottom{ position:relative; left:auto; right:auto; bottom:auto; margin:10px; }
 }
