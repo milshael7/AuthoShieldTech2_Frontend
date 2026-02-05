@@ -21,6 +21,7 @@ export default function Market() {
   // ---------------- PANEL STATE ----------------
   // closed | docked | floating
   const [panelState, setPanelState] = useState("closed");
+  const [overlay, setOverlay] = useState(false);
 
   // ---------------- FLOATING POSITION ----------------
   const panelRef = useRef(null);
@@ -72,10 +73,16 @@ export default function Market() {
 
   function toggleDock() {
     setPanelState((p) => (p === "closed" ? "docked" : "closed"));
+    setOverlay(false);
   }
 
   function floatPanel() {
     setPanelState("floating");
+    setOverlay(false);
+  }
+
+  function toggleOverlay() {
+    setOverlay((v) => !v);
   }
 
   function placeOrder() {
@@ -115,7 +122,13 @@ export default function Market() {
   // ---------------- RENDER ----------------
   return (
     <div className="terminalRoot">
-      <div className="tvShell">
+      <div
+        className={`tvShell
+          ${panelState === "closed" ? "isPanelHidden" : ""}
+          ${panelState === "floating" ? "isPanelFloating" : ""}
+          ${overlay ? "isOverlay" : ""}
+        `}
+      >
         {/* LEFT TOOLBAR */}
         <aside className="tvLeftBar">
           {["☰","↖","／","⟂","⌁","T","⟐","＋","⌖","⤢","⌫","👁"].map((t,i)=>(
@@ -159,7 +172,12 @@ export default function Market() {
             </button>
             <button className="tvIconBtn" onClick={mockTick}>▶</button>
             {panelState !== "closed" && (
-              <button className="tvIconBtn" onClick={floatPanel}>⤢</button>
+              <>
+                <button className="tvIconBtn" onClick={floatPanel}>⤢</button>
+                <button className="tvIconBtn" onClick={toggleOverlay}>
+                  {overlay ? "⤡" : "⤢"}
+                </button>
+              </>
             )}
           </div>
         </header>
@@ -197,11 +215,18 @@ export default function Market() {
         {panelState !== "closed" && (
           <aside
             ref={panelRef}
-            className={`tvRight ${panelState==="floating"?"floating":""}`}
-            style={panelState==="floating"?{left:pos.x, top:pos.y, position:"absolute"}:{}}
+            className="tvRight"
+            style={panelState==="floating"
+              ? { left: pos.x, top: pos.y, position: "absolute" }
+              : undefined
+            }
           >
             {panelState === "floating" && (
-              <div className="panelDragHandle" onMouseDown={onDragStart}>
+              <div
+                className="panelDragHandle"
+                onMouseDown={onDragStart}
+                style={{ cursor: "move", marginBottom: 8 }}
+              >
                 Drag
               </div>
             )}
@@ -219,7 +244,11 @@ export default function Market() {
 
             <div className="orderTypes">
               {["MARKET","LIMIT","STOP"].map(t=>(
-                <button key={t} onClick={()=>setOrderType(t)}>
+                <button
+                  key={t}
+                  onClick={()=>setOrderType(t)}
+                  className={orderType===t?"active":""}
+                >
                   {t}
                 </button>
               ))}
