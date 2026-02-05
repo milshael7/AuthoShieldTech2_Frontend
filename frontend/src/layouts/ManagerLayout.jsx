@@ -1,8 +1,12 @@
-// frontend/src/layouts/ManagerLayout.jsx
 import React from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearToken, clearUser } from "../lib/api";
-import "../styles/layout.css";
+
+// ❌ REMOVED (file does not exist)
+// import "../styles/layout.css";
+
+// ✅ USE EXISTING PLATFORM STYLES
+import "../styles/platform.css";
 
 export default function ManagerLayout() {
   const navigate = useNavigate();
@@ -14,7 +18,7 @@ export default function ManagerLayout() {
   }
 
   return (
-    <div className="layout-root">
+    <div className="platformShell">
       {/* Sidebar */}
       <aside className="layout-sidebar manager">
         <div className="layout-brand">
