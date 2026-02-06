@@ -6,43 +6,56 @@ export default function TradingRoom() {
     { t: new Date().toLocaleTimeString(), m: "AI online. Awaiting strategy input." },
   ]);
 
-  const pushLog = (m) =>
-    setLog((p) => [{ t: new Date().toLocaleTimeString(), m }, ...p].slice(0, 50));
+  const [mode, setMode] = useState("PAPER"); // PAPER | LIVE
+  const [shortTrades, setShortTrades] = useState(true);
+  const [maxTrades, setMaxTrades] = useState(3);
+  const [riskPct, setRiskPct] = useState(1);
 
-  const status = useMemo(
-    () => [
-      { k: "Mode", v: "Paper" },
-      { k: "Mindset", v: "Risk-Controlled" },
-      { k: "Max Losses", v: "3" },
-    ],
+  const stats = useMemo(
+    () => ({
+      tradesToday: 1,
+      wins: 1,
+      losses: 0,
+      lastAction: "BUY BTCUSDT",
+    }),
     []
   );
+
+  const pushLog = (m) =>
+    setLog((p) => [{ t: new Date().toLocaleTimeString(), m }, ...p].slice(0, 60));
 
   return (
     <div className="trading-room">
       {/* ===== HEADER ===== */}
       <header className="tr-header">
-        <div className="tr-title">
+        <div>
           <h2>Trading Room</h2>
-          <small>AI strategy, control & execution</small>
+          <small>AI control, risk & execution</small>
         </div>
 
-        <div className="tr-status">
-          {status.map((x) => (
-            <span key={x.k} className="tr-badge">
-              {x.k}: <b>{x.v}</b>
-            </span>
-          ))}
+        <div className="tr-mode">
+          <button
+            className={mode === "PAPER" ? "modeBtn active" : "modeBtn"}
+            onClick={() => setMode("PAPER")}
+          >
+            Paper
+          </button>
+          <button
+            className={mode === "LIVE" ? "modeBtn active warn" : "modeBtn warn"}
+            onClick={() => setMode("LIVE")}
+          >
+            Live
+          </button>
         </div>
       </header>
 
       {/* ===== BODY ===== */}
       <div className="tr-body">
-        {/* ===== AI COMMAND PANEL ===== */}
+        {/* ===== LEFT: AI CONTROL ===== */}
         <section className="tr-panel">
           <h3>AI Command</h3>
-          <p className="tr-muted">
-            Give rules, ask reasoning, adjust risk behavior.
+          <p className="muted">
+            Talk to the AI. Set rules, behavior, mindset.
           </p>
 
           <VoiceAI
@@ -52,29 +65,80 @@ export default function TradingRoom() {
           />
         </section>
 
-        {/* ===== ACTIVITY LOG ===== */}
+        {/* ===== RIGHT: CONTROL + STATS ===== */}
         <section className="tr-panel">
+          <h3>Trading Controls</h3>
+
+          <div className="ctrl">
+            <label>
+              Trades / Day
+              <input
+                type="number"
+                min="1"
+                max="10"
+                value={maxTrades}
+                onChange={(e) => setMaxTrades(e.target.value)}
+              />
+            </label>
+
+            <label>
+              Risk %
+              <input
+                type="number"
+                min="0.1"
+                step="0.1"
+                value={riskPct}
+                onChange={(e) => setRiskPct(e.target.value)}
+              />
+            </label>
+          </div>
+
+          <div className="ctrlRow">
+            <button
+              className={shortTrades ? "pill active" : "pill"}
+              onClick={() => setShortTrades(true)}
+            >
+              Short Trades
+            </button>
+            <button
+              className={!shortTrades ? "pill active" : "pill"}
+              onClick={() => setShortTrades(false)}
+            >
+              Session Trades
+            </button>
+          </div>
+
+          <div className="stats">
+            <div><b>Trades Today:</b> {stats.tradesToday}</div>
+            <div><b>Wins:</b> {stats.wins}</div>
+            <div><b>Losses:</b> {stats.losses}</div>
+            <div><b>Last Action:</b> {stats.lastAction}</div>
+          </div>
+        </section>
+
+        {/* ===== FULL WIDTH LOG ===== */}
+        <section className="tr-panel full">
           <h3>AI Activity</h3>
 
           <div className="tr-log">
             {log.map((x, i) => (
               <div key={i} className="tr-msg">
-                <span className="tr-time">{x.t}</span>
+                <span className="time">{x.t}</span>
                 <div>{x.m}</div>
               </div>
             ))}
           </div>
 
-          <div className="tr-actions">
+          <div className="actions">
             <button
-              className="tr-btn warn"
-              onClick={() => pushLog("Operator: Trading paused")}
+              className="btn warn"
+              onClick={() => pushLog("Operator: AI paused")}
             >
               Pause AI
             </button>
             <button
-              className="tr-btn ok"
-              onClick={() => pushLog("Operator: Trading resumed")}
+              className="btn ok"
+              onClick={() => pushLog("Operator: AI resumed")}
             >
               Resume AI
             </button>
@@ -82,7 +146,7 @@ export default function TradingRoom() {
         </section>
       </div>
 
-      {/* ===== STYLES (SCOPED) ===== */}
+      {/* ===== STYLES ===== */}
       <style>{`
         .trading-room{
           display:flex;
@@ -98,22 +162,27 @@ export default function TradingRoom() {
           align-items:flex-end;
         }
 
-        .tr-title small{
-          opacity:.7;
-        }
-
-        .tr-status{
+        .tr-mode{
           display:flex;
           gap:8px;
-          flex-wrap:wrap;
         }
 
-        .tr-badge{
-          padding:6px 10px;
+        .modeBtn{
+          padding:8px 14px;
           border-radius:999px;
-          font-size:12px;
-          border:1px solid rgba(255,255,255,.15);
-          background:rgba(0,0,0,.25);
+          border:1px solid rgba(255,255,255,.2);
+          background:rgba(255,255,255,.08);
+          font-weight:600;
+        }
+
+        .modeBtn.active{
+          background:#2bd576;
+          color:#000;
+        }
+
+        .modeBtn.warn.active{
+          background:#ff5a5f;
+          color:#fff;
         }
 
         .tr-body{
@@ -129,13 +198,60 @@ export default function TradingRoom() {
           padding:16px;
           display:flex;
           flex-direction:column;
-          min-height:320px;
         }
 
-        .tr-muted{
+        .tr-panel.full{
+          grid-column:1 / -1;
+        }
+
+        .muted{
           opacity:.7;
           font-size:13px;
+        }
+
+        .ctrl{
+          display:grid;
+          grid-template-columns:1fr 1fr;
+          gap:10px;
           margin-bottom:10px;
+        }
+
+        .ctrl label{
+          display:flex;
+          flex-direction:column;
+          font-size:12px;
+          gap:4px;
+        }
+
+        .ctrl input{
+          padding:8px;
+          border-radius:8px;
+          border:1px solid #ccc;
+        }
+
+        .ctrlRow{
+          display:flex;
+          gap:8px;
+          margin-bottom:10px;
+        }
+
+        .pill{
+          flex:1;
+          padding:10px;
+          border-radius:999px;
+          border:1px solid rgba(255,255,255,.2);
+        }
+
+        .pill.active{
+          background:#7aa2ff;
+          color:#000;
+        }
+
+        .stats{
+          font-size:14px;
+          display:flex;
+          flex-direction:column;
+          gap:4px;
         }
 
         .tr-log{
@@ -143,57 +259,40 @@ export default function TradingRoom() {
           overflow:auto;
           display:flex;
           flex-direction:column;
-          gap:10px;
-          margin-top:6px;
+          gap:8px;
+          margin-top:8px;
         }
 
         .tr-msg{
           background:rgba(255,255,255,.06);
-          border-radius:12px;
+          border-radius:10px;
           padding:10px;
-          font-size:14px;
         }
 
-        .tr-time{
-          display:block;
+        .time{
           font-size:11px;
           opacity:.6;
-          margin-bottom:4px;
         }
 
-        .tr-actions{
+        .actions{
           display:flex;
           gap:10px;
-          margin-top:12px;
+          margin-top:10px;
         }
 
-        .tr-btn{
+        .btn{
           flex:1;
           padding:12px;
           border-radius:12px;
           font-weight:600;
-          cursor:pointer;
-          border:1px solid rgba(255,255,255,.12);
         }
 
-        .tr-btn.ok{
-          background:#2bd576;
-          color:#000;
-        }
+        .btn.ok{ background:#2bd576; }
+        .btn.warn{ background:#ffd166; }
 
-        .tr-btn.warn{
-          background:#ffd166;
-          color:#000;
-        }
-
-        /* 📱 MOBILE */
-        @media (max-width: 768px){
+        @media (max-width:768px){
           .tr-body{
             grid-template-columns:1fr;
-          }
-
-          .tr-panel{
-            min-height:auto;
           }
         }
       `}</style>
