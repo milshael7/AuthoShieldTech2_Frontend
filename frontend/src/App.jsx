@@ -1,7 +1,7 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-// Session (✅ FIXED PATH)
+// Session
 import { getSavedUser } from "./lib/api.js";
 
 // Layouts
@@ -79,7 +79,7 @@ export default function App() {
 
         {/* ---------- INDIVIDUAL USER ---------- */}
         <Route
-          path="/app/*"
+          path="/user/*"
           element={
             <RequireRole allow={["Individual"]}>
               <UserLayout />
@@ -94,7 +94,7 @@ export default function App() {
         <Route path="/404" element={<NotFound />} />
         <Route
           path="*"
-          element={<Navigate to={user ? "/app" : "/login"} replace />}
+          element={<Navigate to={user ? "/user" : "/login"} replace />}
         />
       </Routes>
     </BrowserRouter>
