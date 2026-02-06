@@ -1,42 +1,33 @@
 import React from "react";
 import { NavLink, Outlet } from "react-router-dom";
+import "../styles/layout.css";
 
 export default function AdminLayout() {
   return (
-    <div className="admin-shell">
-      {/* ---------- Top Bar ---------- */}
-      <header className="admin-top">
-        <div className="brand">
+    <div className="layout-root">
+      <aside className="layout-sidebar">
+        <div className="layout-brand">
           <strong>AutoShield</strong>
           <span>Admin Console</span>
         </div>
 
-        <nav className="admin-nav">
-          <NavLink to="/admin" end>
-            Global Security
-          </NavLink>
-
-          <NavLink to="/admin/trading">
-            Trading
-          </NavLink>
-
-          <NavLink to="/manager">
-            Manager View
-          </NavLink>
-
-          <NavLink to="/company">
-            Company View
-          </NavLink>
-
-          <NavLink to="/admin/notifications">
-            Notifications
-          </NavLink>
+        <nav className="layout-nav">
+          <NavLink to="/admin" end>Global Security</NavLink>
+          <NavLink to="/admin/trading">Trading</NavLink>
+          <NavLink to="/manager">Manager View</NavLink>
+          <NavLink to="/company">Company View</NavLink>
+          <NavLink to="/admin/notifications">Notifications</NavLink>
         </nav>
-      </header>
+      </aside>
 
-      {/* ---------- Main Body ---------- */}
-      <main className="admin-body">
-        <Outlet />
+      <main className="layout-main">
+        <header className="layout-topbar">
+          <h1>Admin Dashboard</h1>
+        </header>
+
+        <section className="layout-content">
+          <Outlet />
+        </section>
       </main>
     </div>
   );
