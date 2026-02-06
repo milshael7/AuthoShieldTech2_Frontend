@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { api } from "../lib/api.js";
+import { api, setToken, saveUser } from "../lib/api.js";
 
 function extractToken(result) {
   if (!result) return "";
@@ -13,30 +13,36 @@ function extractToken(result) {
   );
 }
 
-export default function Login({ onLogin }) {
+export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState("login");
   const [resetEmail, setResetEmail] = useState("");
   const [resetPass, setResetPass] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+
     try {
-      const result = await onLogin(email, password);
+      const result = await api.login(email, password);
 
-      // ✅ store JWT for backend authRequired middleware
       const token = extractToken(result);
-      if (token) {
-        localStorage.setItem("token", token);
+      if (!token) throw new Error("No token returned from server");
+
+      // ✅ store token + user using the SAME keys your app expects
+      setToken(token);
+      if (result?.user) {
+        saveUser(result.user);
       }
 
-      // optional: if backend also returns user info
-      if (result?.user) {
-        localStorage.setItem("user", JSON.stringify(result.user));
-      }
+      // hard redirect so router re-evaluates auth cleanly
+      window.location.href = "/";
     } catch (err) {
       alert(err?.message || "Login failed");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -74,7 +80,9 @@ export default function Login({ onLogin }) {
               />
               <div style={{ height: 12 }} />
 
-              <button type="submit">Sign in</button>
+              <button type="submit" disabled={loading}>
+                {loading ? "Signing in…" : "Sign in"}
+              </button>
               <div style={{ height: 10 }} />
 
               <small>
@@ -86,8 +94,7 @@ export default function Login({ onLogin }) {
                   }}
                 >
                   Reset password
-                </a>{" "}
-                (only if forced)
+                </a>
               </small>
             </form>
           ) : (
