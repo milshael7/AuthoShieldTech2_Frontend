@@ -1,9 +1,9 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, setToken, saveUser } from "../lib/api.js";
 
 function extractToken(result) {
   if (!result) return "";
-  if (typeof result === "string") return result;
   return (
     result.token ||
     result.jwt ||
@@ -14,6 +14,8 @@ function extractToken(result) {
 }
 
 export default function Login() {
+  const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState("login");
@@ -29,16 +31,23 @@ export default function Login() {
       const result = await api.login(email, password);
 
       const token = extractToken(result);
-      if (!token) throw new Error("No token returned from server");
+      if (!token) throw new Error("No token returned");
 
-      // ✅ store token + user using the SAME keys your app expects
+      // ✅ STORE USING CORRECT KEYS
       setToken(token);
-      if (result?.user) {
+
+      if (result.user) {
         saveUser(result.user);
       }
 
-      // hard redirect so router re-evaluates auth cleanly
-      window.location.href = "/";
+      // ✅ ROUTE BY ROLE
+      const role = result.user?.role;
+
+      if (role === "Admin") navigate("/admin");
+      else if (role === "Manager") navigate("/manager");
+      else if (role === "Company") navigate("/company");
+      else navigate("/user");
+
     } catch (err) {
       alert(err?.message || "Login failed");
     } finally {
@@ -83,6 +92,7 @@ export default function Login() {
               <button type="submit" disabled={loading}>
                 {loading ? "Signing in…" : "Sign in"}
               </button>
+
               <div style={{ height: 10 }} />
 
               <small>
@@ -115,6 +125,7 @@ export default function Login() {
               <div style={{ height: 12 }} />
 
               <button type="submit">Set new password</button>
+
               <div style={{ height: 10 }} />
 
               <small>
@@ -138,7 +149,6 @@ export default function Login() {
           <h3>Trial ($19.99 / 30 days)</h3>
           <small>
             Text-only experience with Read Aloud. AutoProtect add-on is separate.
-            No “AI” branding shown publicly.
           </small>
         </div>
       </div>
