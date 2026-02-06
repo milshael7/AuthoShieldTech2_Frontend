@@ -11,41 +11,38 @@ export default function TradingRoom() {
 
   const tools = useMemo(
     () => [
-      { k: "Paper Mode", v: "ON" },
-      { k: "Real Mode", v: "OFF" },
-      { k: "Risk Cap", v: "Safe Base (coming)" },
-      { k: "Max Losses", v: "3 (coming)" },
+      { k: "Mode", v: "Paper" },
+      { k: "Risk", v: "Safe Base" },
+      { k: "Max Losses", v: "3" },
     ],
     []
   );
 
   return (
-    <div className="card tradingRoomCard">
-      {/* ---------- Header ---------- */}
-      <div className="tradingRoomHeader">
+    <div className="trading-room">
+      {/* ===== HEADER ===== */}
+      <header className="tr-header">
         <div>
-          <h2 style={{ margin: 0 }}>Trading Room</h2>
-          <small>
-            AI voice + control room (kept separate so Market panel never gets squished)
-          </small>
+          <h2>Trading Room</h2>
+          <small>AI control & decision room</small>
         </div>
 
-        <div className="tradingRoomBadges">
+        <div className="tr-badges">
           {tools.map((x) => (
             <span key={x.k} className="badge">
               {x.k}: <b>{x.v}</b>
             </span>
           ))}
         </div>
-      </div>
+      </header>
 
-      {/* ---------- Content ---------- */}
-      <div className="grid tradingRoomGrid">
+      {/* ===== CONTENT ===== */}
+      <div className="tr-body">
         {/* Voice AI */}
-        <div className="card tradingRoomPanel">
-          <h3 style={{ marginTop: 0 }}>Voice AI</h3>
-          <p style={{ opacity: 0.75 }}>
-            Talk to the AI and give it rules like “set order”, “safe base”, etc.
+        <section className="tr-panel">
+          <h3>Voice AI</h3>
+          <p className="muted">
+            Speak rules, ask reasoning, pause or resume trading.
           </p>
 
           <VoiceAI
@@ -53,86 +50,108 @@ export default function TradingRoom() {
             endpoint="/api/ai/chat"
             onActivity={(msg) => pushLog(msg)}
           />
-        </div>
+        </section>
 
         {/* Activity */}
-        <div className="card tradingRoomPanel">
-          <h3 style={{ marginTop: 0 }}>AI Activity</h3>
-          <p style={{ opacity: 0.75 }}>
-            Real notifications will appear here (wins / losses / decisions).
-          </p>
+        <section className="tr-panel">
+          <h3>AI Activity</h3>
 
-          <div className="chatLog tradingRoomLog">
+          <div className="tr-log">
             {log.map((x, i) => (
-              <div key={i} className="chatMsg ai">
-                <b style={{ opacity: 0.8 }}>{x.t}</b>
-                <div style={{ marginTop: 6 }}>{x.m}</div>
+              <div key={i} className="tr-msg">
+                <span className="time">{x.t}</span>
+                <div>{x.m}</div>
               </div>
             ))}
           </div>
 
-          <div className="tradingRoomActions">
-            <button type="button" onClick={() => pushLog("Manual: Pause trading (demo)")}>
+          <div className="tr-actions">
+            <button onClick={() => pushLog("Manual: Pause trading")}>
               Pause
             </button>
-            <button type="button" onClick={() => pushLog("Manual: Resume trading (demo)")}>
+            <button onClick={() => pushLog("Manual: Resume trading")}>
               Resume
             </button>
           </div>
-        </div>
+        </section>
       </div>
 
-      {/* ---------- Mobile Fixes ---------- */}
+      {/* ===== STYLES ===== */}
       <style>{`
-        .tradingRoomCard {
-          padding: 14px;
+        .trading-room{
+          display:flex;
+          flex-direction:column;
+          gap:14px;
         }
 
-        .tradingRoomHeader {
-          display: flex;
-          justify-content: space-between;
-          gap: 12px;
-          flex-wrap: wrap;
+        .tr-header{
+          display:flex;
+          flex-wrap:wrap;
+          justify-content:space-between;
+          gap:10px;
         }
 
-        .tradingRoomBadges {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          justify-content: flex-end;
+        .tr-badges{
+          display:flex;
+          gap:8px;
+          flex-wrap:wrap;
         }
 
-        .tradingRoomPanel {
-          background: rgba(0,0,0,.18);
+        .tr-body{
+          display:grid;
+          grid-template-columns:1fr 1fr;
+          gap:14px;
         }
 
-        .tradingRoomLog {
-          max-height: 360px;
-          overflow: auto;
+        .tr-panel{
+          background:rgba(0,0,0,.18);
+          border:1px solid rgba(255,255,255,.12);
+          border-radius:16px;
+          padding:14px;
+          display:flex;
+          flex-direction:column;
         }
 
-        .tradingRoomActions {
-          display: flex;
-          gap: 10px;
-          margin-top: 12px;
+        .muted{
+          opacity:.7;
+          font-size:13px;
         }
 
-        @media (max-width: 768px) {
-          .tradingRoomHeader {
-            flex-direction: column;
-            align-items: flex-start;
+        .tr-log{
+          margin-top:8px;
+          flex:1;
+          overflow:auto;
+          display:flex;
+          flex-direction:column;
+          gap:10px;
+        }
+
+        .tr-msg{
+          background:rgba(255,255,255,.06);
+          border-radius:12px;
+          padding:10px;
+          font-size:14px;
+        }
+
+        .tr-msg .time{
+          font-size:11px;
+          opacity:.6;
+        }
+
+        .tr-actions{
+          display:flex;
+          gap:10px;
+          margin-top:10px;
+        }
+
+        /* 📱 MOBILE */
+        @media (max-width: 768px){
+          .tr-body{
+            grid-template-columns:1fr;
           }
 
-          .tradingRoomBadges {
-            justify-content: flex-start;
-          }
-
-          .tradingRoomLog {
-            max-height: 260px;
-          }
-
-          .tradingRoomActions {
-            flex-direction: column;
+          .tr-actions button{
+            flex:1;
           }
         }
       `}</style>
