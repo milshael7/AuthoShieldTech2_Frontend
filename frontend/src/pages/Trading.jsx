@@ -1,152 +1,124 @@
 import React, { useState } from "react";
-
 import Market from "./trading/Market.jsx";
 import TradingRoom from "./trading/TradingRoom.jsx";
-
-import Posture from "./Posture.jsx";
-import Manager from "./Manager.jsx";
-import Admin from "./Admin.jsx";
-
 import "../styles/platform.css";
 
 export default function Trading() {
-  const [section, setSection] = useState("trading");
   const [tab, setTab] = useState("market");
 
   return (
-    <div className="platformShell tradingShell">
-      {/* ===== TOP PLATFORM BAR ===== */}
-      <div className="platformTop tradingTop">
-        {/* Brand */}
-        <button
-          type="button"
-          className="platformBrand"
-          onClick={() => setSection("dashboard")}
-        >
-          <div className="platformLogo" />
-          <div className="platformBrandTxt">
-            <b>AutoShield</b>
-            <span>SECURITY • TRADING</span>
-          </div>
-        </button>
-
-        {/* Tabs */}
-        {section === "trading" && (
-          <div className="platformTabs tradingTabs">
-            <button
-              type="button"
-              className={tab === "market" ? "ptab active" : "ptab"}
-              onClick={() => setTab("market")}
-            >
-              Market
-            </button>
-            <button
-              type="button"
-              className={tab === "room" ? "ptab active" : "ptab"}
-              onClick={() => setTab("room")}
-            >
-              Room
-            </button>
-            <button
-              type="button"
-              className={tab === "reports" ? "ptab active" : "ptab"}
-              onClick={() => setTab("reports")}
-            >
-              Reports
-            </button>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="platformActions tradingActions">
-          <button className="pbtn" onClick={() => setSection("trading")}>
-            Trading
-          </button>
-          <button className="pbtn" onClick={() => setSection("security")}>
-            Security
-          </button>
-          <button className="pbtn" onClick={() => setSection("admin")}>
-            Admin
-          </button>
+    <div className="trading-root">
+      {/* ===== TOP BAR ===== */}
+      <header className="trading-header">
+        <div className="trading-brand">
+          <strong>AutoShield</strong>
+          <span>Trading</span>
         </div>
-      </div>
 
-      {/* ===== BODY ===== */}
-      <div className="platformBody tradingBody">
-        {section === "dashboard" && (
-          <div className="platformCard">
-            <h3>Dashboard</h3>
-            <p>Owner overview.</p>
+        <nav className="trading-tabs">
+          <button
+            className={tab === "market" ? "ttab active" : "ttab"}
+            onClick={() => setTab("market")}
+          >
+            Market
+          </button>
+          <button
+            className={tab === "room" ? "ttab active" : "ttab"}
+            onClick={() => setTab("room")}
+          >
+            Trading Room
+          </button>
+          <button
+            className={tab === "reports" ? "ttab active" : "ttab"}
+            onClick={() => setTab("reports")}
+          >
+            Reports
+          </button>
+        </nav>
+      </header>
+
+      {/* ===== CONTENT ===== */}
+      <main className="trading-content">
+        {tab === "market" && <Market />}
+
+        {tab === "room" && <TradingRoom />}
+
+        {tab === "reports" && (
+          <div className="card">
+            <h3>Reports</h3>
+            <ul>
+              <li>P&amp;L</li>
+              <li>Win / Loss</li>
+              <li>Risk</li>
+              <li>AI Notes</li>
+            </ul>
           </div>
         )}
+      </main>
 
-        {section === "security" && (
-          <div className="platformCard">
-            <Posture />
-          </div>
-        )}
-
-        {section === "admin" && (
-          <div className="platformCard">
-            <Admin />
-            <div style={{ height: 16 }} />
-            <Manager />
-          </div>
-        )}
-
-        {section === "trading" && (
-          <div className="tradingContent">
-            {tab === "market" && (
-              <div className="platformCard tradingPanel">
-                <Market />
-              </div>
-            )}
-
-            {tab === "room" && (
-              <div className="platformCard tradingPanel">
-                <TradingRoom />
-              </div>
-            )}
-
-            {tab === "reports" && (
-              <div className="platformCard tradingPanel">
-                <ul>
-                  <li>P&amp;L</li>
-                  <li>Win / Loss</li>
-                  <li>Risk</li>
-                  <li>AI Notes</li>
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ===== MOBILE FIXES ===== */}
+      {/* ===== MOBILE-FIRST STYLES ===== */}
       <style>{`
-        @media (max-width: 768px){
-          .tradingTop{
-            flex-direction: column;
-            align-items: stretch;
-            gap: 10px;
+        .trading-root{
+          display:flex;
+          flex-direction:column;
+          height:100%;
+          min-height:100svh;
+        }
+
+        .trading-header{
+          position:sticky;
+          top:0;
+          z-index:20;
+          background:rgba(10,15,30,.95);
+          border-bottom:1px solid rgba(255,255,255,.1);
+          padding:12px;
+          display:flex;
+          flex-direction:column;
+          gap:10px;
+        }
+
+        .trading-brand{
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          font-weight:700;
+        }
+
+        .trading-tabs{
+          display:flex;
+          gap:8px;
+        }
+
+        .ttab{
+          flex:1;
+          padding:10px;
+          border-radius:10px;
+          border:1px solid rgba(255,255,255,.15);
+          background:rgba(255,255,255,.08);
+          color:#fff;
+          font-weight:600;
+        }
+
+        .ttab.active{
+          background:rgba(120,160,255,.35);
+          border-color:rgba(120,160,255,.6);
+        }
+
+        .trading-content{
+          flex:1;
+          overflow:auto;
+          padding:12px;
+        }
+
+        @media (min-width: 769px){
+          .trading-header{
+            flex-direction:row;
+            align-items:center;
+            justify-content:space-between;
           }
 
-          .tradingTabs{
-            justify-content: space-between;
-          }
-
-          .tradingActions{
-            display: flex;
-            justify-content: space-between;
-            gap: 8px;
-          }
-
-          .tradingBody{
-            padding: 10px;
-          }
-
-          .tradingPanel{
-            padding: 12px;
+          .trading-tabs{
+            max-width:420px;
           }
         }
       `}</style>
