@@ -2,7 +2,6 @@
 import React from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearToken, clearUser } from "../lib/api";
-import "../styles/layout.css";
 
 export default function UserLayout() {
   const navigate = useNavigate();
@@ -52,3 +51,6 @@ export default function UserLayout() {
           <Outlet />
         </section>
       </main>
+    </div>
+  );
+}
