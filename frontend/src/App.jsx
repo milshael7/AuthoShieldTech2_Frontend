@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 
 // Session
 import { getSavedUser } from "./lib/api.js";
@@ -31,7 +31,7 @@ export default function App() {
   const user = getSavedUser();
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         {/* ---------- PUBLIC ---------- */}
         <Route path="/login" element={<Login />} />
@@ -97,6 +97,6 @@ export default function App() {
           element={<Navigate to={user ? "/user" : "/login"} replace />}
         />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
