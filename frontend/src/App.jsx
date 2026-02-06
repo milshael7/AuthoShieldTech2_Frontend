@@ -1,7 +1,5 @@
 import React from "react";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
-
-// Session
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getSavedUser } from "./lib/api.js";
 
 // Layouts
@@ -17,21 +15,30 @@ import Posture from "./pages/Posture.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
-// ---------------- Role Guard ----------------
+// ---------------- Role Guard (FIXED) ----------------
 function RequireRole({ allow, children }) {
   const user = getSavedUser();
 
   if (!user) return <Navigate to="/login" replace />;
-  if (!allow.includes(user.role)) return <Navigate to="/404" replace />;
+
+  // 🔒 Normalize role safely
+  const role = String(user.role || "").toLowerCase();
+  const allowed = allow.map(r => r.toLowerCase());
+
+  if (!allowed.includes(role)) {
+    console.warn("Blocked role:", role);
+    return <Navigate to="/404" replace />;
+  }
 
   return children;
 }
 
 export default function App() {
   const user = getSavedUser();
+  const role = String(user?.role || "").toLowerCase();
 
   return (
-    <HashRouter>
+    <BrowserRouter>
       <Routes>
         {/* ---------- PUBLIC ---------- */}
         <Route path="/login" element={<Login />} />
@@ -40,7 +47,7 @@ export default function App() {
         <Route
           path="/admin/*"
           element={
-            <RequireRole allow={["Admin"]}>
+            <RequireRole allow={["admin"]}>
               <AdminLayout />
             </RequireRole>
           }
@@ -54,13 +61,12 @@ export default function App() {
         <Route
           path="/manager/*"
           element={
-            <RequireRole allow={["Admin", "Manager"]}>
+            <RequireRole allow={["admin", "manager"]}>
               <ManagerLayout />
             </RequireRole>
           }
         >
           <Route index element={<Posture scope="manager" />} />
-          <Route path="trading" element={<Trading mode="watch" />} />
           <Route path="notifications" element={<Notifications />} />
         </Route>
 
@@ -68,7 +74,7 @@ export default function App() {
         <Route
           path="/company/*"
           element={
-            <RequireRole allow={["Admin", "Company"]}>
+            <RequireRole allow={["admin", "company"]}>
               <CompanyLayout />
             </RequireRole>
           }
@@ -77,11 +83,11 @@ export default function App() {
           <Route path="notifications" element={<Notifications />} />
         </Route>
 
-        {/* ---------- INDIVIDUAL USER ---------- */}
+        {/* ---------- USER ---------- */}
         <Route
           path="/user/*"
           element={
-            <RequireRole allow={["Individual"]}>
+            <RequireRole allow={["individual", "user"]}>
               <UserLayout />
             </RequireRole>
           }
@@ -94,9 +100,24 @@ export default function App() {
         <Route path="/404" element={<NotFound />} />
         <Route
           path="*"
-          element={<Navigate to={user ? "/user" : "/login"} replace />}
+          element={
+            <Navigate
+              to={
+                !user
+                  ? "/login"
+                  : role === "admin"
+                  ? "/admin"
+                  : role === "manager"
+                  ? "/manager"
+                  : role === "company"
+                  ? "/company"
+                  : "/user"
+              }
+              replace
+            />
+          }
         />
       </Routes>
-    </HashRouter>
+    </BrowserRouter>
   );
 }
