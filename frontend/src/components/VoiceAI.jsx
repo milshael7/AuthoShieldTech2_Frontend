@@ -1,7 +1,10 @@
 // frontend/src/components/VoiceAI.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// AutoShield Voice — Step 3
+// Human cadence, interruption-safe, brand-consistent speech
 
-/* ================= BRAND + STATE ================= */
+import React, { useEffect, useRef, useState, useMemo } from "react";
+
+/* ================= BRAND STATES ================= */
 
 const AI_STATE = {
   IDLE: "Idle",
@@ -12,32 +15,25 @@ const AI_STATE = {
 
 /* ================= HELPERS ================= */
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+
+function cleanForSpeech(text) {
+  return String(text || "")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/\n+/g, ". ")
+    .replace(/\s+/g, " ")
+    .replace(/([.!?])\s+/g, "$1 … ")
+    .trim();
+}
+
 function getApiBase() {
   return String(import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || "").trim();
 }
 
-function isAbsoluteUrl(s) {
-  return /^https?:\/\//i.test(String(s || "")) || /^wss?:\/\//i.test(String(s || ""));
-}
-
 function joinUrl(base, path) {
-  if (!path) return base || "";
-  if (isAbsoluteUrl(path)) return path;
   if (!base) return path;
   return base.replace(/\/+$/, "") + "/" + path.replace(/^\/+/, "");
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
-const safeStr = (v, max = 6000) => String(v ?? "").slice(0, max);
-
-/* Make speech more human */
-function cleanTextForSpeech(t) {
-  return safeStr(t)
-    .replace(/```[\s\S]*?```/g, "Code omitted.")
-    .replace(/([.!?])\s+/g, "$1 … ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 /* ================= COMPONENT ================= */
@@ -48,47 +44,46 @@ export default function VoiceAI({
   getContext,
 }) {
   const API_BASE = useMemo(() => getApiBase(), []);
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
 
   const [aiState, setAiState] = useState(AI_STATE.IDLE);
   const [listening, setListening] = useState(false);
   const [youSaid, setYouSaid] = useState("");
   const [aiSays, setAiSays] = useState("");
 
-  const [conversationMode, setConversationMode] = useState(false);
-  const [voiceReply, setVoiceReply] = useState(true);
-
   const recRef = useRef(null);
   const speakingRef = useRef(false);
+  const silenceTimer = useRef(null);
   const busyRef = useRef(false);
-  const silenceTimerRef = useRef(null);
 
-  /* ================= SPEECH ================= */
+  /* ================= SPEAK ================= */
 
   const speak = async (text) => {
-    if (!voiceReply || !("speechSynthesis" in window)) return;
+    if (!("speechSynthesis" in window)) return;
 
-    const say = cleanTextForSpeech(text);
+    const say = cleanForSpeech(text);
     if (!say) return;
 
-    const shouldResume = conversationMode && listening;
-    if (shouldResume) stopListening();
+    // stop mic while speaking
+    if (listening) stopListening();
 
     try {
       const synth = window.speechSynthesis;
       synth.cancel();
 
       const u = new SpeechSynthesisUtterance(say);
-      u.rate = 1.0;
-      u.pitch = 1.0;
+      u.rate = 0.96;   // calmer cadence
+      u.pitch = 0.98;  // confident tone
+      u.volume = 1.0;
 
       speakingRef.current = true;
       setAiState(AI_STATE.SPEAKING);
 
-      u.onend = () => {
+      u.onend = async () => {
         speakingRef.current = false;
-        setAiState(conversationMode ? AI_STATE.LISTENING : AI_STATE.IDLE);
-        if (shouldResume) setTimeout(() => startListening(false), 300);
+        setAiState(AI_STATE.IDLE);
+        await sleep(250);
       };
 
       synth.speak(u);
@@ -100,13 +95,11 @@ export default function VoiceAI({
 
   /* ================= MIC ================= */
 
-  const startListening = (reset = true) => {
-    if (!recRef.current) return;
-    if (reset) {
-      setYouSaid("");
-      setAiSays("");
-    }
-    recRef.current.start();
+  const startListening = () => {
+    if (!recRef.current || speakingRef.current) return;
+    try {
+      recRef.current.start();
+    } catch {}
   };
 
   const stopListening = () => {
@@ -121,6 +114,7 @@ export default function VoiceAI({
     const rec = new SpeechRecognition();
     rec.continuous = true;
     rec.interimResults = true;
+    rec.lang = "en-US";
 
     rec.onstart = () => {
       setListening(true);
@@ -129,7 +123,7 @@ export default function VoiceAI({
 
     rec.onend = () => {
       setListening(false);
-      if (!conversationMode) setAiState(AI_STATE.IDLE);
+      if (!speakingRef.current) setAiState(AI_STATE.IDLE);
     };
 
     rec.onresult = (e) => {
@@ -142,29 +136,27 @@ export default function VoiceAI({
 
       setYouSaid(text);
 
-      if (conversationMode) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = setTimeout(() => {
-          sendToAI(text);
-        }, 900);
-      }
+      clearTimeout(silenceTimer.current);
+      silenceTimer.current = setTimeout(() => {
+        sendToAI(text);
+      }, 900); // natural pause
     };
 
     recRef.current = rec;
     return () => rec.stop();
-  }, [conversationMode]);
+  }, []);
 
   /* ================= AI ================= */
 
   async function sendToAI(message) {
-    const clean = safeStr(message).trim();
-    if (!clean || busyRef.current) return;
+    if (!message || busyRef.current) return;
 
     busyRef.current = true;
     setAiState(AI_STATE.THINKING);
+    setAiSays("");
 
     const payload = {
-      message: clean,
+      message,
       context: typeof getContext === "function" ? getContext() : {},
     };
 
@@ -177,16 +169,16 @@ export default function VoiceAI({
       });
 
       const data = await res.json();
-      const text = data?.reply || "";
+      const reply = data?.reply || "";
 
-      setAiSays(text);
-      setAiState(AI_STATE.IDLE);
-      await speak(data?.speakText || text);
+      setAiSays(reply);
+      await speak(data?.speakText || reply);
     } catch {
-      setAiSays("Network error.");
-      setAiState(AI_STATE.IDLE);
+      setAiSays("Network issue. Try again.");
+      await speak("Network issue. Try again.");
     } finally {
       busyRef.current = false;
+      setAiState(AI_STATE.IDLE);
     }
   }
 
@@ -194,36 +186,19 @@ export default function VoiceAI({
 
   return (
     <div style={card}>
-      <div style={rowTop}>
+      <div style={header}>
         <div style={titleStyle}>
           {title}
-          <span
-            style={{
-              marginLeft: 8,
-              width: 10,
-              height: 10,
-              borderRadius: "50%",
-              display: "inline-block",
-              background:
-                aiState === AI_STATE.SPEAKING
-                  ? "#2bd576"
-                  : aiState === AI_STATE.THINKING
-                  ? "#ffd166"
-                  : aiState === AI_STATE.LISTENING
-                  ? "#7aa2ff"
-                  : "#666",
-              animation: aiState !== AI_STATE.IDLE ? "pulse 1.2s infinite" : "none",
-            }}
-          />
+          <span style={{ ...dot, background: stateColor(aiState) }} />
         </div>
-        <div style={{ fontSize: 12, opacity: 0.8 }}>{aiState}</div>
+        <div style={stateText}>{aiState}</div>
       </div>
 
       <button
-        style={btnPrimary}
+        style={btn}
         onClick={() => (listening ? stopListening() : startListening())}
       >
-        {listening ? "Stop" : conversationMode ? "Start Conversation" : "Push to Talk"}
+        {listening ? "Stop Listening" : "Talk to AutoShield"}
       </button>
 
       <div style={box}>
@@ -235,6 +210,10 @@ export default function VoiceAI({
         <b>AutoShield says</b>
         <div>{aiSays || "…"}</div>
       </div>
+
+      <div style={hint}>
+        Speak naturally. Pause when finished. AutoShield waits, then responds.
+      </div>
     </div>
   );
 }
@@ -243,23 +222,39 @@ export default function VoiceAI({
 
 const card = {
   padding: 14,
-  borderRadius: 14,
-  background: "rgba(0,0,0,.35)",
-  border: "1px solid rgba(255,255,255,.1)",
+  borderRadius: 16,
+  background: "rgba(0,0,0,0.35)",
+  border: "1px solid rgba(255,255,255,0.12)",
 };
 
-const rowTop = {
+const header = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
 };
 
-const titleStyle = { fontWeight: 800 };
+const titleStyle = {
+  fontWeight: 800,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
 
-const btnPrimary = {
+const dot = {
+  width: 10,
+  height: 10,
+  borderRadius: "50%",
+};
+
+const stateText = {
+  fontSize: 12,
+  opacity: 0.75,
+};
+
+const btn = {
   marginTop: 10,
-  padding: "10px 12px",
-  borderRadius: 10,
+  padding: "12px",
+  borderRadius: 12,
   border: "1px solid rgba(255,255,255,.18)",
   background: "rgba(255,255,255,.08)",
   color: "#fff",
@@ -269,6 +264,19 @@ const btnPrimary = {
 const box = {
   marginTop: 10,
   padding: 10,
-  borderRadius: 10,
+  borderRadius: 12,
   background: "rgba(0,0,0,.25)",
 };
+
+const hint = {
+  marginTop: 8,
+  fontSize: 12,
+  opacity: 0.7,
+};
+
+function stateColor(state) {
+  if (state === AI_STATE.SPEAKING) return "#2bd576";
+  if (state === AI_STATE.THINKING) return "#ffd166";
+  if (state === AI_STATE.LISTENING) return "#7aa2ff";
+  return "#666";
+}
