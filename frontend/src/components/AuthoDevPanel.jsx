@@ -1,23 +1,12 @@
 // frontend/src/components/AuthoDevPanel.jsx
 // AuthoDev 6.5 — Universal AI Text Panel
 // Professional, long-form, readable, shareable, speaker-enabled
+// Uses unified ReadAloud engine (single voice across platform)
 
 import React, { useState, useRef } from "react";
+import { readAloud } from "./ReadAloud";
 
 /* ================= HELPERS ================= */
-
-function speakText(text) {
-  if (!("speechSynthesis" in window)) return;
-  const synth = window.speechSynthesis;
-  synth.cancel();
-
-  const u = new SpeechSynthesisUtterance(text);
-  u.rate = 0.95;
-  u.pitch = 1.0;
-  u.volume = 1.0;
-
-  synth.speak(u);
-}
 
 async function copyText(text) {
   try {
@@ -83,7 +72,10 @@ export default function AuthoDevPanel({
       ]);
     } finally {
       setLoading(false);
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      setTimeout(
+        () => bottomRef.current?.scrollIntoView({ behavior: "smooth" }),
+        50
+      );
     }
   }
 
@@ -103,7 +95,7 @@ export default function AuthoDevPanel({
 
             {m.role === "ai" && (
               <div className="ad-actions">
-                <button onClick={() => speakText(m.speakText)}>🔊</button>
+                <button onClick={() => readAloud(m.speakText)}>🔊</button>
                 <button onClick={() => copyText(m.text)}>📋</button>
                 <button title="Helpful">👍</button>
                 <button title="Not helpful">👎</button>
