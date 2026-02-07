@@ -1,7 +1,7 @@
 // frontend/src/components/VoiceAI.jsx
-// AutoShield Voice — Step 12 FINAL
+// AutoShield Voice — Step 12 FINAL (CORRECTED)
 // Persistent-brain aware • Human cadence • History-capable
-// FULL DROP-IN REPLACEMENT
+// SAFE: No internal AI state leakage
 
 import React, { useEffect, useRef, useState, useMemo } from "react";
 
@@ -165,7 +165,6 @@ export default function VoiceAI({
         ...(typeof getContext === "function" ? getContext() : {}),
         voice: {
           enabled: true,
-          state: aiState,
           lastHeard: clean,
         },
       },
