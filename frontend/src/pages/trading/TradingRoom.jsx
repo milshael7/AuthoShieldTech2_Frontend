@@ -1,5 +1,12 @@
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import VoiceAI from "../../components/VoiceAI";
+
+/**
+ * TradingRoom.jsx
+ * ✅ Injects live context into VoiceAI
+ * ✅ Teaches the AI what AutoShield is (once per session)
+ * ✅ No backend changes required
+ */
 
 export default function TradingRoom() {
   /* ===================== STATE ===================== */
@@ -12,7 +19,7 @@ export default function TradingRoom() {
   const [maxTrades, setMaxTrades] = useState(3);
   const [riskPct, setRiskPct] = useState(1);
 
-  /* ===== MOCK STATS (later wire backend) ===== */
+  /* ===== MOCK STATS (wire backend later) ===== */
   const stats = useMemo(
     () => ({
       tradesToday: 1,
@@ -28,9 +35,8 @@ export default function TradingRoom() {
     setLog((p) => [{ t: new Date().toLocaleTimeString(), m }, ...p].slice(0, 60));
 
   /**
-   * 🔑 THIS IS THE KEY ADDITION
-   * This context is injected into VoiceAI
-   * so the AI knows EXACTLY what’s happening.
+   * 🔑 Live context for VoiceAI
+   * This is what the AI sees every time you speak.
    */
   const getAiContext = useCallback(() => {
     return {
@@ -58,6 +64,43 @@ export default function TradingRoom() {
       },
     };
   }, [mode, shortTrades, maxTrades, riskPct, stats]);
+
+  /* ===================== AI LEARNING (ONCE) ===================== */
+  const learnedRef = useRef(false);
+
+  useEffect(() => {
+    if (learnedRef.current) return;
+    learnedRef.current = true;
+
+    const teachAI = async () => {
+      try {
+        await fetch("/api/ai/learn", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            type: "site",
+            text: `
+AutoShield is an AI-driven trading platform.
+
+Trading Room rules:
+- PAPER mode = simulated trades, no real money.
+- LIVE mode = real capital, higher risk.
+- Default strategy favors short trades (quick entries/exits).
+- Operator can limit risk using percentage-based sizing.
+- AI should explain trades in plain English:
+  what happened, why it happened, risk involved, and what to watch next.
+- AI should speak naturally, not like a robot.
+`,
+          }),
+        });
+      } catch {
+        // silent fail – never block UI
+      }
+    };
+
+    teachAI();
+  }, []);
 
   /* ===================== UI ===================== */
   return (
