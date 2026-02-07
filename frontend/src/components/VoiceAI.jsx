@@ -1,6 +1,7 @@
 // frontend/src/components/VoiceAI.jsx
-// AutoShield Voice — Step 3
-// Human cadence, interruption-safe, brand-consistent speech
+// AutoShield Voice — Step 12 FINAL
+// Persistent-brain aware • Human cadence • History-capable
+// FULL DROP-IN REPLACEMENT
 
 import React, { useEffect, useRef, useState, useMemo } from "react";
 
@@ -16,7 +17,6 @@ const AI_STATE = {
 /* ================= HELPERS ================= */
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
 function cleanForSpeech(text) {
   return String(text || "")
@@ -28,7 +28,11 @@ function cleanForSpeech(text) {
 }
 
 function getApiBase() {
-  return String(import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || "").trim();
+  return String(
+    import.meta.env.VITE_API_BASE ||
+      import.meta.env.VITE_BACKEND_URL ||
+      ""
+  ).trim();
 }
 
 function joinUrl(base, path) {
@@ -65,7 +69,6 @@ export default function VoiceAI({
     const say = cleanForSpeech(text);
     if (!say) return;
 
-    // stop mic while speaking
     if (listening) stopListening();
 
     try {
@@ -73,8 +76,8 @@ export default function VoiceAI({
       synth.cancel();
 
       const u = new SpeechSynthesisUtterance(say);
-      u.rate = 0.96;   // calmer cadence
-      u.pitch = 0.98;  // confident tone
+      u.rate = 0.95;
+      u.pitch = 0.98;
       u.volume = 1.0;
 
       speakingRef.current = true;
@@ -139,7 +142,7 @@ export default function VoiceAI({
       clearTimeout(silenceTimer.current);
       silenceTimer.current = setTimeout(() => {
         sendToAI(text);
-      }, 900); // natural pause
+      }, 900);
     };
 
     recRef.current = rec;
@@ -149,15 +152,23 @@ export default function VoiceAI({
   /* ================= AI ================= */
 
   async function sendToAI(message) {
-    if (!message || busyRef.current) return;
+    const clean = String(message || "").trim();
+    if (!clean || busyRef.current) return;
 
     busyRef.current = true;
     setAiState(AI_STATE.THINKING);
     setAiSays("");
 
     const payload = {
-      message,
-      context: typeof getContext === "function" ? getContext() : {},
+      message: clean,
+      context: {
+        ...(typeof getContext === "function" ? getContext() : {}),
+        voice: {
+          enabled: true,
+          state: aiState,
+          lastHeard: clean,
+        },
+      },
     };
 
     try {
@@ -174,8 +185,8 @@ export default function VoiceAI({
       setAiSays(reply);
       await speak(data?.speakText || reply);
     } catch {
-      setAiSays("Network issue. Try again.");
-      await speak("Network issue. Try again.");
+      setAiSays("I’m having trouble reaching the system.");
+      await speak("I’m having trouble reaching the system.");
     } finally {
       busyRef.current = false;
       setAiState(AI_STATE.IDLE);
@@ -212,7 +223,8 @@ export default function VoiceAI({
       </div>
 
       <div style={hint}>
-        Speak naturally. Pause when finished. AutoShield waits, then responds.
+        Speak naturally. AutoShield remembers past context and explains in real
+        time.
       </div>
     </div>
   );
