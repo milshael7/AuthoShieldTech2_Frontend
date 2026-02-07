@@ -1,27 +1,51 @@
-import React from 'react';
+/**
+ * AuthoDev 6.5 — Unified Read Aloud Engine
+ * Single voice, consistent across the platform
+ *
+ * Rules:
+ * - One voice
+ * - One cadence
+ * - One speaker at a time
+ * - No overlap
+ */
 
-export default function ReadAloud({ text = '' }) {
-  const speak = () => {
-    if (!text) return;
+let synth = null;
+let currentUtterance = null;
 
-    if (!('speechSynthesis' in window)) {
-      alert('Read aloud is not supported in this browser.');
-      return;
-    }
+function getSynth() {
+  if (typeof window === "undefined") return null;
+  if (!synth) synth = window.speechSynthesis;
+  return synth;
+}
 
-    const utterance = new SpeechSynthesisUtterance(String(text));
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
+export function stopReadAloud() {
+  const s = getSynth();
+  if (!s) return;
+  s.cancel();
+  currentUtterance = null;
+}
 
-    // stop any current speech before starting new
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-  };
+export function readAloud(text) {
+  if (!text) return;
 
-  return (
-    <button onClick={speak} title="Read aloud">
-      🔊 Read aloud
-    </button>
+  const s = getSynth();
+  if (!s) return;
+
+  // stop anything currently speaking
+  s.cancel();
+
+  const utter = new SpeechSynthesisUtterance(
+    String(text)
+      .replace(/\n+/g, ". ")
+      .replace(/\s+/g, " ")
+      .trim()
   );
+
+  // 🔊 AuthoDev voice tuning
+  utter.rate = 0.95;     // calm, human pace
+  utter.pitch = 1.0;     // neutral, professional
+  utter.volume = 1.0;
+
+  currentUtterance = utter;
+  s.speak(utter);
 }
