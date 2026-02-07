@@ -1,6 +1,7 @@
 // frontend/src/components/AuthoDevPanel.jsx
 // AuthoDev 6.5 — Universal AI Text Panel
 // Professional, long-form, readable, shareable, speaker-enabled
+// Step 29: Dock / Undock + Minimize / Expand
 // Uses unified ReadAloud engine (single voice across platform)
 
 import React, { useState, useRef } from "react";
@@ -24,6 +25,11 @@ export default function AuthoDevPanel({
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // STEP 29 STATE
+  const [minimized, setMinimized] = useState(false);
+  const [docked, setDocked] = useState(false);
+
   const bottomRef = useRef(null);
 
   async function sendMessage() {
@@ -82,57 +88,76 @@ export default function AuthoDevPanel({
   /* ================= UI ================= */
 
   return (
-    <div className="authodev-panel">
+    <div
+      className={`authodev-panel ${docked ? "docked" : ""} ${
+        minimized ? "minimized" : ""
+      }`}
+    >
       <header className="ad-header">
-        <h3>{title}</h3>
-        <span className="ad-sub">Professional AI Assistant</span>
+        <div>
+          <h3>{title}</h3>
+          <span className="ad-sub">Professional AI Assistant</span>
+        </div>
+
+        <div className="ad-controls">
+          <button onClick={() => setMinimized((v) => !v)}>
+            {minimized ? "⬆️" : "⬇️"}
+          </button>
+          <button onClick={() => setDocked((v) => !v)}>
+            {docked ? "📍" : "📌"}
+          </button>
+        </div>
       </header>
 
-      <div className="ad-messages">
-        {messages.map((m, i) => (
-          <div key={i} className={`ad-msg ${m.role}`}>
-            <div className="ad-text">{m.text}</div>
+      {!minimized && (
+        <>
+          <div className="ad-messages">
+            {messages.map((m, i) => (
+              <div key={i} className={`ad-msg ${m.role}`}>
+                <div className="ad-text">{m.text}</div>
 
-            {m.role === "ai" && (
-              <div className="ad-actions">
-                <button onClick={() => readAloud(m.speakText)}>🔊</button>
-                <button onClick={() => copyText(m.text)}>📋</button>
-                <button title="Helpful">👍</button>
-                <button title="Not helpful">👎</button>
-                <button
-                  onClick={() =>
-                    navigator.share?.({ text: m.text }) ||
-                    copyText(m.text)
-                  }
-                >
-                  🔗
-                </button>
+                {m.role === "ai" && (
+                  <div className="ad-actions">
+                    <button onClick={() => readAloud(m.speakText)}>🔊</button>
+                    <button onClick={() => copyText(m.text)}>📋</button>
+                    <button title="Helpful">👍</button>
+                    <button title="Not helpful">👎</button>
+                    <button
+                      onClick={() =>
+                        navigator.share?.({ text: m.text }) ||
+                        copyText(m.text)
+                      }
+                    >
+                      🔗
+                    </button>
+                  </div>
+                )}
+
+                <div className="ad-time">{m.ts}</div>
               </div>
-            )}
-
-            <div className="ad-time">{m.ts}</div>
+            ))}
+            <div ref={bottomRef} />
           </div>
-        ))}
-        <div ref={bottomRef} />
-      </div>
 
-      <div className="ad-input">
-        <textarea
-          placeholder="Ask AuthoDev 6.5 anything about this room, security, or the situation…"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          rows={3}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              sendMessage();
-            }
-          }}
-        />
-        <button onClick={sendMessage} disabled={loading}>
-          {loading ? "Thinking…" : "Send"}
-        </button>
-      </div>
+          <div className="ad-input">
+            <textarea
+              placeholder="Ask AuthoDev 6.5 anything about this room, security, or the situation…"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              rows={3}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
+            />
+            <button onClick={sendMessage} disabled={loading}>
+              {loading ? "Thinking…" : "Send"}
+            </button>
+          </div>
+        </>
+      )}
 
       {/* ================= STYLES ================= */}
       <style>{`
@@ -145,9 +170,25 @@ export default function AuthoDevPanel({
           border-radius: 16px;
         }
 
+        .authodev-panel.docked {
+          position: fixed;
+          bottom: 20px;
+          right: 20px;
+          width: 380px;
+          height: 520px;
+          z-index: 9999;
+        }
+
+        .authodev-panel.minimized {
+          height: auto;
+        }
+
         .ad-header {
           padding: 14px 16px;
           border-bottom: 1px solid rgba(255,255,255,.08);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
         }
 
         .ad-header h3 {
@@ -158,6 +199,19 @@ export default function AuthoDevPanel({
         .ad-sub {
           font-size: 12px;
           opacity: .7;
+        }
+
+        .ad-controls {
+          display: flex;
+          gap: 6px;
+        }
+
+        .ad-controls button {
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-size: 14px;
+          opacity: .8;
         }
 
         .ad-messages {
