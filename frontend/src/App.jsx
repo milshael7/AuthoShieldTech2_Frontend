@@ -1,3 +1,4 @@
+// frontend/src/App.jsx
 import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getSavedUser } from "./lib/api.js";
@@ -7,9 +8,6 @@ import AdminLayout from "./layouts/AdminLayout.jsx";
 import ManagerLayout from "./layouts/ManagerLayout.jsx";
 import CompanyLayout from "./layouts/CompanyLayout.jsx";
 import UserLayout from "./layouts/UserLayout.jsx";
-
-// ✅ AuthoDev AI Panel (GLOBAL)
-import AuthoDevPanel from "./components/AuthoDevPanel.jsx";
 
 // Pages
 import Login from "./pages/Login.jsx";
@@ -51,29 +49,6 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {/* ================= GLOBAL AUTHODEV PANEL ================= */}
-      {user && (
-        <div
-          style={{
-            position: "fixed",
-            right: 20,
-            bottom: 20,
-            width: 420,
-            height: 520,
-            zIndex: 9999,
-          }}
-        >
-          <AuthoDevPanel
-            title="AuthoDev 6.5"
-            getContext={() => ({
-              role,
-              location: window.location.pathname,
-            })}
-          />
-        </div>
-      )}
-
-      {/* ================= ROUTES ================= */}
       <Routes>
         {/* PUBLIC */}
         <Route path="/login" element={<Login />} />
