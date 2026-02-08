@@ -1,10 +1,11 @@
 // frontend/src/layouts/ManagerLayout.jsx
-// Manager Layout — Locked
-// ✅ Sidebar + topbar fixed
-// ✅ Page scrolls independently
-// ✅ ONE bottom AI assistant drawer
-// ❌ No floating AI
-// ❌ No inline AI styles
+// SOC Command Layout — MANAGER BASELINE
+//
+// - Structural parity with AdminLayout
+// - Oversight / governance role
+// - Read-only posture
+// - Bottom-drawer AI advisor only
+// - No floating AI, no page-level AI
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -14,7 +15,7 @@ import "../styles/layout.css";
 
 export default function ManagerLayout() {
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
 
   function logout() {
@@ -24,39 +25,47 @@ export default function ManagerLayout() {
   }
 
   return (
-    <div className={`layout-root ${sidebarOpen ? "sidebar-open" : ""}`}>
-      {/* ---------- Mobile Overlay ---------- */}
-      {sidebarOpen && (
+    <div className={`layout-root ${menuOpen ? "sidebar-open" : ""}`}>
+      {/* ================= MOBILE OVERLAY ================= */}
+      {menuOpen && (
         <div
           className="sidebar-overlay"
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => setMenuOpen(false)}
         />
       )}
 
-      {/* ---------- Sidebar ---------- */}
+      {/* ================= SIDEBAR ================= */}
       <aside className="layout-sidebar manager">
         <div className="layout-brand">
-          <span className="brand-logo">🛡️</span>
-          <span className="brand-text">Manager View</span>
+          <strong>AutoShield</strong>
+          <span>Manager Oversight</span>
         </div>
 
         <nav className="layout-nav">
-          <NavLink to="/manager" end onClick={() => setSidebarOpen(false)}>
-            Overview
+          <NavLink to="/manager" end onClick={() => setMenuOpen(false)}>
+            Security Overview
           </NavLink>
-          <NavLink to="/manager/companies" onClick={() => setSidebarOpen(false)}>
+
+          <NavLink to="/manager/companies" onClick={() => setMenuOpen(false)}>
             Companies
           </NavLink>
-          <NavLink to="/manager/users" onClick={() => setSidebarOpen(false)}>
+
+          <NavLink to="/manager/users" onClick={() => setMenuOpen(false)}>
             Users
           </NavLink>
-          <NavLink to="/manager/posture" onClick={() => setSidebarOpen(false)}>
+
+          <NavLink to="/manager/posture" onClick={() => setMenuOpen(false)}>
             Security Posture
           </NavLink>
-          <NavLink to="/manager/audit" onClick={() => setSidebarOpen(false)}>
+
+          <NavLink to="/manager/audit" onClick={() => setMenuOpen(false)}>
             Audit Logs
           </NavLink>
-          <NavLink to="/manager/notifications" onClick={() => setSidebarOpen(false)}>
+
+          <NavLink
+            to="/manager/notifications"
+            onClick={() => setMenuOpen(false)}
+          >
             Notifications
           </NavLink>
         </nav>
@@ -66,19 +75,20 @@ export default function ManagerLayout() {
         </button>
       </aside>
 
-      {/* ---------- Main ---------- */}
+      {/* ================= MAIN ================= */}
       <main className="layout-main">
-        {/* ---------- Topbar ---------- */}
+        {/* ================= TOP BAR ================= */}
         <header className="layout-topbar">
           <div className="topbar-left">
             <button
               className="btn btn-icon mobile-menu-btn"
-              onClick={() => setSidebarOpen(true)}
+              onClick={() => setMenuOpen(true)}
               aria-label="Open menu"
             >
               ☰
             </button>
-            <h1 style={{ margin: 0 }}>Manager Oversight Room</h1>
+
+            <h1 style={{ margin: 0 }}>Oversight Dashboard</h1>
           </div>
 
           <div className="topbar-right">
@@ -87,18 +97,19 @@ export default function ManagerLayout() {
               onClick={() => setAiOpen((v) => !v)}
               title="Toggle AI Assistant"
             >
-              🤖 AI
+              🤖 Assistant
             </button>
+
             <span className="badge">Read-only</span>
           </div>
         </header>
 
-        {/* ---------- Page Content ---------- */}
+        {/* ================= PAGE CONTENT ================= */}
         <section className="layout-content">
           <Outlet />
         </section>
 
-        {/* ---------- AI Assistant Drawer (ONLY ONE) ---------- */}
+        {/* ================= AI ASSISTANT (BOTTOM ONLY) ================= */}
         <section
           className={`ai-drawer ${aiOpen ? "open" : ""}`}
           aria-hidden={!aiOpen}
@@ -114,11 +125,12 @@ export default function ManagerLayout() {
 
           <div className="ai-drawer-body">
             <AuthoDevPanel
-              title="AuthoDev 6.5 — Manager Assistant"
+              title="AuthoDev 6.5 — Oversight Advisor"
               getContext={() => ({
                 role: "manager",
-                room: "manager",
+                scope: "oversight",
                 permissions: "read-only",
+                location: window.location.pathname,
               })}
             />
           </div>
