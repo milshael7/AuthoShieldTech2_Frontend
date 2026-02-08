@@ -1,18 +1,11 @@
+// frontend/src/layouts/UserLayout.jsx
+// STEP 32 — Sliding AI Panel Shell (User)
+
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearToken, clearUser } from "../lib/api";
 import AuthoDevPanel from "../components/AuthoDevPanel";
 import "../styles/layout.css";
-
-/**
- * UserLayout.jsx
- * STEP 35 — Sliding AI Panel Shell (Individual User)
- *
- * ✅ Same sliding assistant behavior
- * ✅ User-only scope (no company-wide data)
- * ✅ Fixed background, movable panel
- * ❌ No backend changes
- */
 
 export default function UserLayout() {
   const navigate = useNavigate();
@@ -109,7 +102,6 @@ export default function UserLayout() {
               getContext={() => ({
                 role: "user",
                 room: "user",
-                scope: "individual",
               })}
             />
           </div>
