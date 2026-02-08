@@ -24,7 +24,6 @@ function scoreFrom(checks = []) {
 export default function Posture() {
   const [summary, setSummary] = useState(null);
   const [checks, setChecks] = useState([]);
-  const [recent, setRecent] = useState({ audit: [], notifications: [] });
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -32,19 +31,14 @@ export default function Posture() {
     setLoading(true);
     setErr("");
     try {
-      const [s, c, r] = await Promise.all([
+      const [s, c] = await Promise.all([
         api.postureSummary(),
         api.postureChecks(),
-        api.postureRecent(50),
       ]);
       setSummary(s);
       setChecks(c?.checks || []);
-      setRecent({
-        audit: r?.audit || [],
-        notifications: r?.notifications || [],
-      });
     } catch (e) {
-      setErr(e?.message || "Failed to load posture");
+      setErr(e?.message || "Failed to load security posture");
     } finally {
       setLoading(false);
     }
@@ -56,10 +50,10 @@ export default function Posture() {
 
   const score = useMemo(() => scoreFrom(checks), [checks]);
 
-  const cover = useMemo(() => {
+  const coverage = useMemo(() => {
     const base = [
-      { name: "Endpoint Security", val: 72 },
-      { name: "Identity Protection", val: 64 },
+      { name: "Endpoint Protection", val: 72 },
+      { name: "Identity Security", val: 64 },
       { name: "Email Security", val: 58 },
       { name: "Cloud Security", val: 61 },
     ];
@@ -72,79 +66,111 @@ export default function Posture() {
   /* ================= UI ================= */
 
   return (
-    <div className="posture-page">
-      {/* ===== TOP SUMMARY ===== */}
-      <section className="posture-summary">
-        <div>
-          <h2>Security Posture</h2>
-          <small>
-            {summary?.scope?.type
-              ? `Scope: ${summary.scope.type}`
-              : "Scope: —"}{" "}
-            • Last update: {new Date().toLocaleTimeString()}
-          </small>
-        </div>
+    <div className="postureWrap">
+      {/* ================= LEFT: SOC DASHBOARD ================= */}
+      <section className="postureCard">
+        {/* ===== HEADER ===== */}
+        <div className="postureTop">
+          <div className="postureTitle">
+            <h2>Security Posture</h2>
+            <small>
+              {summary?.scope?.type
+                ? `Scope: ${summary.scope.type}`
+                : "Scope: —"}{" "}
+              • Last scan: {new Date().toLocaleTimeString()}
+            </small>
+          </div>
 
-        <div className="score-card">
-          <div className="score-ring">{pct(score)}</div>
-          <div>
-            <b>Overall Score</b>
-            <div className="muted">
-              {loading ? "Loading…" : err ? "Error" : "Live estimate"}
+          <div className="postureScore">
+            <div
+              className="scoreRing"
+              style={{ "--val": pct(score) }}
+            >
+              {pct(score)}
+            </div>
+            <div className="scoreMeta">
+              <b>Overall Score</b>
+              <span>{loading ? "Analyzing…" : err ? "Error" : "Operational"}</span>
             </div>
           </div>
         </div>
-      </section>
 
-      {/* ===== SCORE BAR ===== */}
-      <div className="meter">
-        <div style={{ width: `${pct(score)}%` }} />
-      </div>
+        {/* ===== SCORE BAR ===== */}
+        <div className="meter">
+          <div style={{ width: `${pct(score)}%` }} />
+        </div>
 
-      {err && <p className="error">{err}</p>}
+        {err && <p className="error">{err}</p>}
 
-      {/* ===== COVERAGE ===== */}
-      <section className="coverage-grid">
-        {cover.map((x) => (
-          <div key={x.name} className="coverage-card">
-            <div className="coverage-top">
-              <b>{x.name}</b>
-              <small>{pct(x.val)}%</small>
+        {/* ===== COVERAGE ===== */}
+        <div className="coverGrid">
+          {coverage.map((x) => (
+            <div key={x.name}>
+              <div className="coverItemTop">
+                <b>{x.name}</b>
+                <small>{pct(x.val)}%</small>
+              </div>
+              <div className="coverBar">
+                <div style={{ width: `${pct(x.val)}%` }} />
+              </div>
             </div>
-            <div className="coverBar">
-              <div style={{ width: `${pct(x.val)}%` }} />
-            </div>
-          </div>
-        ))}
-      </section>
+          ))}
+        </div>
 
-      {/* ===== RECOMMENDATIONS ===== */}
-      <section className="card">
-        <h3>Recommended Actions</h3>
-        {checks.length === 0 && (
-          <p className="muted">
-            {loading ? "Loading…" : "No actions available."}
-          </p>
-        )}
+        {/* ===== RECOMMENDED ACTIONS ===== */}
+        <div className="card" style={{ marginTop: 18 }}>
+          <h3>Recommended Actions</h3>
 
-        <ul className="list">
-          {checks.slice(0, 6).map((c) => (
-            <li key={c.id}>
-              <span className={`dot ${c.status || "info"}`} />
-              <div>
-                <b>{c.title}</b>
+          {checks.length === 0 && (
+            <p className="muted">
+              {loading ? "Loading…" : "No critical actions detected."}
+            </p>
+          )}
+
+          <ul className="list">
+            {checks.slice(0, 6).map((c) => (
+              <li key={c.id}>
+                <span className={`dot ${c.status || "info"}`} />
                 <div>
+                  <b>{c.title}</b>
                   <small>{c.message}</small>
                 </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
 
-        <button onClick={load} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
+          <button onClick={load} disabled={loading}>
+            {loading ? "Refreshing…" : "Refresh Scan"}
+          </button>
+        </div>
       </section>
+
+      {/* ================= RIGHT: RESERVED (ASSISTANT LIVES IN LAYOUT) ================= */}
+      <aside className="postureCard">
+        <h3>Security Overview</h3>
+        <p className="muted">
+          This dashboard provides a real-time overview of your organization’s
+          cybersecurity posture. Use the assistant at the bottom of the page
+          to ask questions or get guidance on remediation.
+        </p>
+
+        <ul className="list">
+          <li>
+            <span className="dot ok" />
+            <div>
+              <b>Monitoring Active</b>
+              <small>Threat telemetry operational</small>
+            </div>
+          </li>
+          <li>
+            <span className="dot warn" />
+            <div>
+              <b>Policy Review Suggested</b>
+              <small>Some controls need attention</small>
+            </div>
+          </li>
+        </ul>
+      </aside>
     </div>
   );
 }
