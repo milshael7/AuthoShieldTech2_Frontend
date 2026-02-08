@@ -1,5 +1,10 @@
 // frontend/src/layouts/ManagerLayout.jsx
-// STEP 32 — Sliding AI Panel Shell (Manager)
+// Manager Layout — Locked
+// ✅ Sidebar + topbar fixed
+// ✅ Page scrolls independently
+// ✅ ONE bottom AI assistant drawer
+// ❌ No floating AI
+// ❌ No inline AI styles
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -9,7 +14,7 @@ import "../styles/layout.css";
 
 export default function ManagerLayout() {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
 
   function logout() {
@@ -19,12 +24,12 @@ export default function ManagerLayout() {
   }
 
   return (
-    <div className={`layout-root ${open ? "sidebar-open" : ""}`}>
+    <div className={`layout-root ${sidebarOpen ? "sidebar-open" : ""}`}>
       {/* ---------- Mobile Overlay ---------- */}
-      {open && (
+      {sidebarOpen && (
         <div
           className="sidebar-overlay"
-          onClick={() => setOpen(false)}
+          onClick={() => setSidebarOpen(false)}
         />
       )}
 
@@ -36,22 +41,22 @@ export default function ManagerLayout() {
         </div>
 
         <nav className="layout-nav">
-          <NavLink to="/manager" end onClick={() => setOpen(false)}>
+          <NavLink to="/manager" end onClick={() => setSidebarOpen(false)}>
             Overview
           </NavLink>
-          <NavLink to="/manager/companies" onClick={() => setOpen(false)}>
+          <NavLink to="/manager/companies" onClick={() => setSidebarOpen(false)}>
             Companies
           </NavLink>
-          <NavLink to="/manager/users" onClick={() => setOpen(false)}>
+          <NavLink to="/manager/users" onClick={() => setSidebarOpen(false)}>
             Users
           </NavLink>
-          <NavLink to="/manager/posture" onClick={() => setOpen(false)}>
+          <NavLink to="/manager/posture" onClick={() => setSidebarOpen(false)}>
             Security Posture
           </NavLink>
-          <NavLink to="/manager/audit" onClick={() => setOpen(false)}>
+          <NavLink to="/manager/audit" onClick={() => setSidebarOpen(false)}>
             Audit Logs
           </NavLink>
-          <NavLink to="/manager/notifications" onClick={() => setOpen(false)}>
+          <NavLink to="/manager/notifications" onClick={() => setSidebarOpen(false)}>
             Notifications
           </NavLink>
         </nav>
@@ -68,12 +73,11 @@ export default function ManagerLayout() {
           <div className="topbar-left">
             <button
               className="btn btn-icon mobile-menu-btn"
-              onClick={() => setOpen(true)}
+              onClick={() => setSidebarOpen(true)}
               aria-label="Open menu"
             >
               ☰
             </button>
-
             <h1 style={{ margin: 0 }}>Manager Oversight Room</h1>
           </div>
 
@@ -94,7 +98,7 @@ export default function ManagerLayout() {
           <Outlet />
         </section>
 
-        {/* ---------- Sliding AI Panel ---------- */}
+        {/* ---------- AI Assistant Drawer (ONLY ONE) ---------- */}
         <section
           className={`ai-drawer ${aiOpen ? "open" : ""}`}
           aria-hidden={!aiOpen}
@@ -114,57 +118,12 @@ export default function ManagerLayout() {
               getContext={() => ({
                 role: "manager",
                 room: "manager",
+                permissions: "read-only",
               })}
             />
           </div>
         </section>
       </main>
-
-      {/* ---------- Local Styles ---------- */}
-      <style>{`
-        .ai-drawer {
-          position: sticky;
-          bottom: 0;
-          width: 100%;
-          background: rgba(10, 14, 22, 0.98);
-          border-top: 1px solid rgba(255,255,255,.12);
-          transition: transform .35s ease;
-          transform: translateY(calc(100% - 48px));
-          z-index: 20;
-        }
-
-        .ai-drawer.open {
-          transform: translateY(0);
-        }
-
-        .ai-drawer-handle {
-          height: 48px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-bottom: 1px solid rgba(255,255,255,.08);
-        }
-
-        .ai-toggle {
-          background: none;
-          border: none;
-          font-weight: 700;
-          color: #7aa2ff;
-          cursor: pointer;
-        }
-
-        .ai-drawer-body {
-          height: min(70vh, 520px);
-          padding: 12px;
-          overflow: hidden;
-        }
-
-        @media (min-width: 900px) {
-          .ai-drawer-body {
-            height: 420px;
-          }
-        }
-      `}</style>
     </div>
   );
 }
