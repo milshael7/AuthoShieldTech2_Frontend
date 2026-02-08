@@ -1,5 +1,5 @@
 // frontend/src/layouts/CompanyLayout.jsx
-// Company Layout — SOC-aligned, assistant-only AI
+// Company Layout — SOC Baseline (Assistant is secondary, bottom-only)
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -9,7 +9,7 @@ import "../styles/layout.css";
 
 export default function CompanyLayout() {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
 
   function logout() {
@@ -19,16 +19,16 @@ export default function CompanyLayout() {
   }
 
   return (
-    <div className={`layout-root ${open ? "sidebar-open" : ""}`}>
-      {/* ---------- Mobile Overlay ---------- */}
-      {open && (
+    <div className={`layout-root ${menuOpen ? "sidebar-open" : ""}`}>
+      {/* ================= MOBILE OVERLAY ================= */}
+      {menuOpen && (
         <div
           className="sidebar-overlay"
-          onClick={() => setOpen(false)}
+          onClick={() => setMenuOpen(false)}
         />
       )}
 
-      {/* ---------- Sidebar ---------- */}
+      {/* ================= SIDEBAR ================= */}
       <aside className="layout-sidebar company">
         <div className="layout-brand">
           <span className="brand-logo">🏢</span>
@@ -36,12 +36,13 @@ export default function CompanyLayout() {
         </div>
 
         <nav className="layout-nav">
-          <NavLink to="/company" end onClick={() => setOpen(false)}>
-            Overview
+          <NavLink to="/company" end onClick={() => setMenuOpen(false)}>
+            Security Overview
           </NavLink>
+
           <NavLink
             to="/company/notifications"
-            onClick={() => setOpen(false)}
+            onClick={() => setMenuOpen(false)}
           >
             Notifications
           </NavLink>
@@ -52,20 +53,20 @@ export default function CompanyLayout() {
         </button>
       </aside>
 
-      {/* ---------- Main ---------- */}
+      {/* ================= MAIN ================= */}
       <main className="layout-main">
-        {/* ---------- Topbar ---------- */}
+        {/* ================= TOP BAR ================= */}
         <header className="layout-topbar">
           <div className="topbar-left">
             <button
               className="btn btn-icon mobile-menu-btn"
-              onClick={() => setOpen(true)}
+              onClick={() => setMenuOpen(true)}
               aria-label="Open menu"
             >
               ☰
             </button>
 
-            <h1 style={{ margin: 0 }}>Company Dashboard</h1>
+            <h1 style={{ margin: 0 }}>Company Security Dashboard</h1>
           </div>
 
           <div className="topbar-right">
@@ -76,16 +77,17 @@ export default function CompanyLayout() {
             >
               🤖 Assistant
             </button>
+
             <span className="badge">Company</span>
           </div>
         </header>
 
-        {/* ---------- Page Content ---------- */}
+        {/* ================= PAGE CONTENT ================= */}
         <section className="layout-content">
           <Outlet />
         </section>
 
-        {/* ---------- Bottom AI Assistant (NOT main content) ---------- */}
+        {/* ================= AI ASSISTANT (BOTTOM ONLY) ================= */}
         <section
           className={`ai-drawer ${aiOpen ? "open" : ""}`}
           aria-hidden={!aiOpen}
@@ -101,10 +103,11 @@ export default function CompanyLayout() {
 
           <div className="ai-drawer-body">
             <AuthoDevPanel
-              title="AuthoDev 6.5 — Company Security Assistant"
+              title="AuthoDev 6.5 — Company Security Advisor"
               getContext={() => ({
                 role: "company",
                 scope: "company",
+                location: window.location.pathname,
               })}
             />
           </div>
