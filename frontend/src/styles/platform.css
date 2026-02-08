@@ -15,14 +15,14 @@
   --p-bg-soft: rgba(0,0,0,.22);
   --p-border: rgba(255,255,255,.14);
 
-  --p-accent: rgba(122,167,255,.85);
-  --p-accent-soft: rgba(122,167,255,.22);
+  --p-accent: rgba(122,167,255,.9);
+  --p-accent-soft: rgba(122,167,255,.24);
 
   --p-ok: #2bd576;
   --p-warn: #ffd166;
   --p-bad: #ff5a5f;
 
-  --p-text: rgba(255,255,255,.92);
+  --p-text: rgba(255,255,255,.94);
   --p-muted: rgba(255,255,255,.65);
 
   --p-radius: 16px;
@@ -47,11 +47,11 @@
   align-items:center;
   justify-content:space-between;
   gap:12px;
-  padding:12px 16px;
+  padding:14px 18px;
   background: linear-gradient(
     180deg,
     rgba(255,255,255,.08),
-    rgba(0,0,0,.25)
+    rgba(0,0,0,.28)
   );
   border-bottom:1px solid var(--p-border);
   flex-wrap:wrap;
@@ -63,13 +63,13 @@
 .platformTabs,
 .platformActions{
   display:flex;
-  gap:8px;
+  gap:10px;
   flex-wrap:wrap;
 }
 
 .ptab,
 .pbtn{
-  padding:12px 16px;
+  padding:12px 18px;
   border-radius:999px;
   border:1px solid var(--p-border);
   background: var(--p-bg-soft);
@@ -77,6 +77,12 @@
   cursor:pointer;
   font-size:14px;
   min-height:44px;
+  transition:background .15s ease, border-color .15s ease;
+}
+
+.ptab:hover,
+.pbtn:hover{
+  background: rgba(255,255,255,.12);
 }
 
 .ptab.active,
@@ -91,7 +97,7 @@
 .postureWrap{
   display:grid;
   grid-template-columns: 1fr 420px;
-  gap:20px;
+  gap:22px;
 }
 
 @media (max-width: 1100px){
@@ -108,11 +114,11 @@
   background: linear-gradient(
     180deg,
     rgba(255,255,255,.06),
-    rgba(0,0,0,.20)
+    rgba(0,0,0,.22)
   );
   border:1px solid var(--p-border);
   border-radius:var(--p-radius);
-  padding:18px;
+  padding:20px;
 }
 
 /* =============================
@@ -121,13 +127,18 @@
 .postureTop{
   display:flex;
   justify-content:space-between;
-  gap:16px;
+  gap:18px;
   align-items:center;
   flex-wrap:wrap;
 }
 
+.postureTitle h2{
+  margin:0;
+}
+
 .postureTitle small{
   display:block;
+  margin-top:2px;
   font-size:12px;
   color:var(--p-muted);
 }
@@ -137,13 +148,13 @@
    ============================= */
 .postureScore{
   display:flex;
-  gap:12px;
+  gap:14px;
   align-items:center;
 }
 
 .scoreRing{
-  width:64px;
-  height:64px;
+  width:68px;
+  height:68px;
   border-radius:50%;
   background:
     radial-gradient(circle at center, #0b0e14 55%, transparent 56%),
@@ -155,6 +166,7 @@
   align-items:center;
   justify-content:center;
   font-weight:800;
+  font-size:15px;
 }
 
 .scoreMeta span{
@@ -172,7 +184,7 @@
   border-radius:999px;
   background:rgba(255,255,255,.08);
   overflow:hidden;
-  margin:10px 0;
+  margin:12px 0;
 }
 
 .meter > div,
@@ -191,14 +203,15 @@
 .coverGrid{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:16px;
-  margin-top:16px;
+  gap:18px;
+  margin-top:18px;
 }
 
 .coverItemTop{
   display:flex;
   justify-content:space-between;
   font-size:13px;
+  margin-bottom:6px;
 }
 
 /* =============================
@@ -210,12 +223,12 @@
   margin:0;
   display:flex;
   flex-direction:column;
-  gap:12px;
+  gap:14px;
 }
 
 .list li{
   display:flex;
-  gap:10px;
+  gap:12px;
   align-items:flex-start;
 }
 
@@ -245,5 +258,11 @@
 @media (max-width: 768px){
   .postureWrap{
     grid-template-columns:1fr;
+    gap:16px;
+  }
+
+  .postureCard,
+  .card{
+    padding:16px;
   }
 }
