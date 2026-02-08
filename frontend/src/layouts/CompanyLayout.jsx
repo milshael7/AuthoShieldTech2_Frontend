@@ -1,5 +1,5 @@
 // frontend/src/layouts/CompanyLayout.jsx
-// STEP 32 — Sliding AI Panel Shell (Company)
+// Company Layout — SOC-aligned, assistant-only AI
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -32,14 +32,17 @@ export default function CompanyLayout() {
       <aside className="layout-sidebar company">
         <div className="layout-brand">
           <span className="brand-logo">🏢</span>
-          <span className="brand-text">Company View</span>
+          <span className="brand-text">Company</span>
         </div>
 
         <nav className="layout-nav">
           <NavLink to="/company" end onClick={() => setOpen(false)}>
             Overview
           </NavLink>
-          <NavLink to="/company/notifications" onClick={() => setOpen(false)}>
+          <NavLink
+            to="/company/notifications"
+            onClick={() => setOpen(false)}
+          >
             Notifications
           </NavLink>
         </nav>
@@ -69,9 +72,9 @@ export default function CompanyLayout() {
             <button
               className="btn"
               onClick={() => setAiOpen((v) => !v)}
-              title="Toggle AI Assistant"
+              title="Ask the security assistant"
             >
-              🤖 AI
+              🤖 Assistant
             </button>
             <span className="badge">Company</span>
           </div>
@@ -82,7 +85,7 @@ export default function CompanyLayout() {
           <Outlet />
         </section>
 
-        {/* ---------- Sliding AI Panel ---------- */}
+        {/* ---------- Bottom AI Assistant (NOT main content) ---------- */}
         <section
           className={`ai-drawer ${aiOpen ? "open" : ""}`}
           aria-hidden={!aiOpen}
@@ -92,67 +95,21 @@ export default function CompanyLayout() {
               className="ai-toggle"
               onClick={() => setAiOpen((v) => !v)}
             >
-              {aiOpen ? "▼ Hide Assistant" : "▲ Show Assistant"}
+              {aiOpen ? "▼ Hide Assistant" : "▲ Ask Security Assistant"}
             </button>
           </div>
 
           <div className="ai-drawer-body">
             <AuthoDevPanel
-              title="AuthoDev 6.5 — Company Assistant"
+              title="AuthoDev 6.5 — Company Security Assistant"
               getContext={() => ({
                 role: "company",
-                room: "company",
+                scope: "company",
               })}
             />
           </div>
         </section>
       </main>
-
-      {/* ---------- Local Styles ---------- */}
-      <style>{`
-        .ai-drawer {
-          position: sticky;
-          bottom: 0;
-          width: 100%;
-          background: rgba(10, 14, 22, 0.98);
-          border-top: 1px solid rgba(255,255,255,.12);
-          transition: transform .35s ease;
-          transform: translateY(calc(100% - 48px));
-          z-index: 20;
-        }
-
-        .ai-drawer.open {
-          transform: translateY(0);
-        }
-
-        .ai-drawer-handle {
-          height: 48px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-bottom: 1px solid rgba(255,255,255,.08);
-        }
-
-        .ai-toggle {
-          background: none;
-          border: none;
-          font-weight: 700;
-          color: #7aa2ff;
-          cursor: pointer;
-        }
-
-        .ai-drawer-body {
-          height: min(70vh, 520px);
-          padding: 12px;
-          overflow: hidden;
-        }
-
-        @media (min-width: 900px) {
-          .ai-drawer-body {
-            height: 420px;
-          }
-        }
-      `}</style>
     </div>
   );
 }
