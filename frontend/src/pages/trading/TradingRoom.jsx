@@ -1,17 +1,16 @@
 import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
-import VoiceAI from "../../components/VoiceAI";
 
 /**
  * TradingRoom.jsx
- * ✅ Injects live context into VoiceAI
- * ✅ Teaches the AI what AutoShield is (once per session)
- * ✅ No backend changes required
+ * ✅ Trading controls & telemetry only
+ * ❌ NO AI panel mounted here
+ * ✅ AI is provided by the layout-level sliding panel
  */
 
 export default function TradingRoom() {
   /* ===================== STATE ===================== */
   const [log, setLog] = useState([
-    { t: new Date().toLocaleTimeString(), m: "AI online. Awaiting strategy input." },
+    { t: new Date().toLocaleTimeString(), m: "Trading room ready." },
   ]);
 
   const [mode, setMode] = useState("PAPER"); // PAPER | LIVE
@@ -35,37 +34,9 @@ export default function TradingRoom() {
     setLog((p) => [{ t: new Date().toLocaleTimeString(), m }, ...p].slice(0, 60));
 
   /**
-   * 🔑 Live context for VoiceAI
-   * This is what the AI sees every time you speak.
+   * Optional: teach AI once per session
+   * Layout AI will still receive context via layout
    */
-  const getAiContext = useCallback(() => {
-    return {
-      platform: "AutoShield",
-      room: "TradingRoom",
-
-      trading_mode: mode,
-      trade_style: shortTrades ? "short" : "session",
-
-      risk: {
-        risk_pct: Number(riskPct),
-        max_trades_per_day: Number(maxTrades),
-      },
-
-      stats: {
-        trades_today: stats.tradesToday,
-        wins: stats.wins,
-        losses: stats.losses,
-        last_action: stats.lastAction,
-      },
-
-      operator_controls: {
-        can_pause: true,
-        can_resume: true,
-      },
-    };
-  }, [mode, shortTrades, maxTrades, riskPct, stats]);
-
-  /* ===================== AI LEARNING (ONCE) ===================== */
   const learnedRef = useRef(false);
 
   useEffect(() => {
@@ -81,21 +52,18 @@ export default function TradingRoom() {
           body: JSON.stringify({
             type: "site",
             text: `
-AutoShield is an AI-driven trading platform.
+AutoShield Trading Room context:
 
-Trading Room rules:
-- PAPER mode = simulated trades, no real money.
-- LIVE mode = real capital, higher risk.
-- Default strategy favors short trades (quick entries/exits).
-- Operator can limit risk using percentage-based sizing.
-- AI should explain trades in plain English:
-  what happened, why it happened, risk involved, and what to watch next.
-- AI should speak naturally, not like a robot.
+- PAPER mode = simulated trades
+- LIVE mode = real capital
+- Strategy favors short trades by default
+- Risk is percentage-based
+- AI should explain trades in clear, professional language
 `,
           }),
         });
       } catch {
-        // silent fail – never block UI
+        // silent fail
       }
     };
 
@@ -109,7 +77,7 @@ Trading Room rules:
       <header className="tr-header">
         <div>
           <h2>Trading Room</h2>
-          <small>AI control, risk & execution</small>
+          <small>Execution, risk & monitoring</small>
         </div>
 
         <div className="tr-mode">
@@ -130,22 +98,7 @@ Trading Room rules:
 
       {/* ===== BODY ===== */}
       <div className="tr-body">
-        {/* ===== LEFT: AI CONTROL ===== */}
-        <section className="tr-panel">
-          <h3>AI Command</h3>
-          <p className="muted">
-            Talk to AutoShield. Ask why trades happened, adjust risk, or set rules.
-          </p>
-
-          <VoiceAI
-            title="AutoShield AI"
-            endpoint="/api/ai/chat"
-            getContext={getAiContext}
-            onActivity={(msg) => pushLog(msg)}
-          />
-        </section>
-
-        {/* ===== RIGHT: CONTROLS + STATS ===== */}
+        {/* ===== LEFT: CONTROLS ===== */}
         <section className="tr-panel">
           <h3>Trading Controls</h3>
 
@@ -197,9 +150,9 @@ Trading Room rules:
           </div>
         </section>
 
-        {/* ===== FULL WIDTH LOG ===== */}
-        <section className="tr-panel full">
-          <h3>AI Activity</h3>
+        {/* ===== RIGHT: ACTIVITY LOG ===== */}
+        <section className="tr-panel">
+          <h3>Activity</h3>
 
           <div className="tr-log">
             {log.map((x, i) => (
@@ -279,15 +232,6 @@ Trading Room rules:
           padding:16px;
           display:flex;
           flex-direction:column;
-        }
-
-        .tr-panel.full{
-          grid-column:1 / -1;
-        }
-
-        .muted{
-          opacity:.7;
-          font-size:13px;
         }
 
         .ctrl{
