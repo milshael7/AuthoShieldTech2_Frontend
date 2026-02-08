@@ -2,10 +2,9 @@
    AUTOSHIELD PLATFORM UI
    File: frontend/src/styles/platform.css
    Purpose:
-   - Global buttons
-   - Tabs
-   - Platform top bars
-   - Mobile-safe interactions
+   - Global buttons, tabs, bars
+   - SOC / Cybersecurity dashboards
+   - Posture, coverage, activity panels
    ========================================================= */
 
 /* =============================
@@ -19,11 +18,15 @@
   --p-accent: rgba(122,167,255,.85);
   --p-accent-soft: rgba(122,167,255,.22);
 
+  --p-ok: #2bd576;
+  --p-warn: #ffd166;
+  --p-bad: #ff5a5f;
+
   --p-text: rgba(255,255,255,.92);
   --p-muted: rgba(255,255,255,.65);
 
-  --p-radius: 14px;
-  --p-radius-sm: 10px;
+  --p-radius: 16px;
+  --p-radius-sm: 12px;
 }
 
 /* =============================
@@ -54,146 +57,193 @@
   flex-wrap:wrap;
 }
 
-/* Brand */
-.platformBrand{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  background:none;
-  border:none;
-  color:var(--p-text);
-  cursor:pointer;
-}
-
-.platformLogo{
-  width:34px;
-  height:34px;
-  border-radius:10px;
-  background: rgba(0,0,0,.25)
-    url("/autoshield-logo.png")
-    center/contain no-repeat;
-  border:1px solid var(--p-border);
-}
-
-.platformBrandTxt b{
-  display:block;
-  font-size:14px;
-}
-
-.platformBrandTxt span{
-  display:block;
-  font-size:11px;
-  letter-spacing:2px;
-  color:var(--p-muted);
-}
-
 /* =============================
-   Platform Tabs
+   Tabs & Buttons
    ============================= */
-.platformTabs{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-}
-
-.ptab{
-  padding:10px 14px;
-  border-radius:999px;
-  border:1px solid var(--p-border);
-  background: var(--p-bg-soft);
-  color:var(--p-text);
-  cursor:pointer;
-  font-size:14px;
-}
-
-.ptab.active{
-  background: var(--p-accent-soft);
-  border-color: var(--p-accent);
-}
-
-/* =============================
-   Platform Actions (Buttons)
-   ============================= */
+.platformTabs,
 .platformActions{
   display:flex;
   gap:8px;
   flex-wrap:wrap;
 }
 
+.ptab,
 .pbtn{
   padding:12px 16px;
-  border-radius:var(--p-radius);
+  border-radius:999px;
   border:1px solid var(--p-border);
   background: var(--p-bg-soft);
   color:var(--p-text);
   cursor:pointer;
   font-size:14px;
-  min-height:44px; /* iOS tap target */
+  min-height:44px;
 }
 
-.pbtn:hover{
-  background: rgba(255,255,255,.14);
-}
-
-/* Primary action */
+.ptab.active,
 .pbtn.primary{
   background: var(--p-accent-soft);
   border-color: var(--p-accent);
 }
 
 /* =============================
-   Platform Body
+   Dashboard Layout (SOC)
    ============================= */
-.platformBody{
-  flex:1;
-  padding:16px;
+.postureWrap{
+  display:grid;
+  grid-template-columns: 1fr 420px;
+  gap:20px;
 }
 
-/* Card */
-.platformCard{
+@media (max-width: 1100px){
+  .postureWrap{
+    grid-template-columns:1fr;
+  }
+}
+
+/* =============================
+   SOC Cards
+   ============================= */
+.postureCard,
+.card{
   background: linear-gradient(
     180deg,
     rgba(255,255,255,.06),
     rgba(0,0,0,.20)
   );
   border:1px solid var(--p-border);
-  border-radius:16px;
-  padding:16px;
+  border-radius:var(--p-radius);
+  padding:18px;
 }
 
 /* =============================
-   Mobile Adjustments
+   Posture Header
+   ============================= */
+.postureTop{
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.postureTitle small{
+  display:block;
+  font-size:12px;
+  color:var(--p-muted);
+}
+
+/* =============================
+   Score Ring
+   ============================= */
+.postureScore{
+  display:flex;
+  gap:12px;
+  align-items:center;
+}
+
+.scoreRing{
+  width:64px;
+  height:64px;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at center, #0b0e14 55%, transparent 56%),
+    conic-gradient(
+      var(--p-accent) calc(var(--val, 75) * 1%),
+      rgba(255,255,255,.15) 0
+    );
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:800;
+}
+
+.scoreMeta span{
+  font-size:12px;
+  color:var(--p-muted);
+}
+
+/* =============================
+   Meters & Bars
+   ============================= */
+.meter,
+.coverBar{
+  width:100%;
+  height:10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  overflow:hidden;
+  margin:10px 0;
+}
+
+.meter > div,
+.coverBar > div{
+  height:100%;
+  background: linear-gradient(
+    90deg,
+    var(--p-accent),
+    #9db7ff
+  );
+}
+
+/* =============================
+   Coverage Grid
+   ============================= */
+.coverGrid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+  margin-top:16px;
+}
+
+.coverItemTop{
+  display:flex;
+  justify-content:space-between;
+  font-size:13px;
+}
+
+/* =============================
+   Lists (Actions, Alerts)
+   ============================= */
+.list{
+  list-style:none;
+  padding:0;
+  margin:0;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.list li{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+}
+
+.dot{
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  margin-top:6px;
+  background:var(--p-muted);
+}
+
+.dot.ok{ background:var(--p-ok); }
+.dot.warn{ background:var(--p-warn); }
+.dot.bad{ background:var(--p-bad); }
+
+/* =============================
+   Errors
+   ============================= */
+.error{
+  color:var(--p-bad);
+  font-size:13px;
+}
+
+/* =============================
+   Mobile
    ============================= */
 @media (max-width: 768px){
-
-  .platformTop{
-    flex-direction:column;
-    align-items:stretch;
-  }
-
-  .platformBrand{
-    justify-content:flex-start;
-  }
-
-  .platformTabs{
-    justify-content:space-between;
-  }
-
-  .platformActions{
-    justify-content:space-between;
-  }
-
-  .pbtn,
-  .ptab{
-    flex:1;
-    text-align:center;
-  }
-
-  .platformBody{
-    padding:12px;
-  }
-
-  .platformCard{
-    padding:14px;
+  .postureWrap{
+    grid-template-columns:1fr;
   }
 }
