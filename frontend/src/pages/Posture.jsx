@@ -82,15 +82,14 @@ export default function Posture() {
           </div>
 
           <div className="postureScore">
-            <div
-              className="scoreRing"
-              style={{ "--val": pct(score) }}
-            >
+            <div className="scoreRing" style={{ "--val": pct(score) }}>
               {pct(score)}
             </div>
             <div className="scoreMeta">
               <b>Overall Score</b>
-              <span>{loading ? "Analyzing…" : err ? "Error" : "Operational"}</span>
+              <span>
+                {loading ? "Analyzing…" : err ? "Error" : "Operational"}
+              </span>
             </div>
           </div>
         </div>
@@ -145,13 +144,11 @@ export default function Posture() {
         </div>
       </section>
 
-      {/* ================= RIGHT: RESERVED (ASSISTANT LIVES IN LAYOUT) ================= */}
+      {/* ================= RIGHT: SOC STATUS PANEL ================= */}
       <aside className="postureCard">
-        <h3>Security Overview</h3>
+        <h3>System Status</h3>
         <p className="muted">
-          This dashboard provides a real-time overview of your organization’s
-          cybersecurity posture. Use the assistant at the bottom of the page
-          to ask questions or get guidance on remediation.
+          Live operational status of your security environment.
         </p>
 
         <ul className="list">
@@ -159,17 +156,36 @@ export default function Posture() {
             <span className="dot ok" />
             <div>
               <b>Monitoring Active</b>
-              <small>Threat telemetry operational</small>
+              <small>Telemetry and sensors online</small>
+            </div>
+          </li>
+          <li>
+            <span className="dot ok" />
+            <div>
+              <b>Threat Detection</b>
+              <small>Behavioral analysis running</small>
             </div>
           </li>
           <li>
             <span className="dot warn" />
             <div>
-              <b>Policy Review Suggested</b>
-              <small>Some controls need attention</small>
+              <b>Policy Review Needed</b>
+              <small>One or more controls need review</small>
+            </div>
+          </li>
+          <li>
+            <span className="dot ok" />
+            <div>
+              <b>Data Freshness</b>
+              <small>Last update within minutes</small>
             </div>
           </li>
         </ul>
+
+        <p className="muted" style={{ marginTop: 12 }}>
+          Use the assistant at the bottom of the page to ask about risks,
+          remediation steps, or what actions matter most right now.
+        </p>
       </aside>
     </div>
   );
