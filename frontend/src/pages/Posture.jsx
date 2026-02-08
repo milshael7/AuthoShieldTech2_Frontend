@@ -1,3 +1,4 @@
+// frontend/src/pages/Posture.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
 
@@ -82,7 +83,10 @@ export default function Posture() {
           </div>
 
           <div className="postureScore">
-            <div className="scoreRing" style={{ "--val": pct(score) }}>
+            <div
+              className="scoreRing"
+              style={{ "--val": pct(score) }}
+            >
               {pct(score)}
             </div>
             <div className="scoreMeta">
@@ -148,7 +152,7 @@ export default function Posture() {
       <aside className="postureCard">
         <h3>System Status</h3>
         <p className="muted">
-          Live operational status of your security environment.
+          Live operational state of your security environment.
         </p>
 
         <ul className="list">
@@ -170,7 +174,7 @@ export default function Posture() {
             <span className="dot warn" />
             <div>
               <b>Policy Review Needed</b>
-              <small>One or more controls need review</small>
+              <small>One or more controls need attention</small>
             </div>
           </li>
           <li>
