@@ -1,29 +1,29 @@
 // frontend/src/layouts/CompanyLayout.jsx
 // Company Layout — SOC Visibility Baseline
 //
-// RULES ENFORCED:
-// - Company has VISIBILITY only
-// - No compliance management
-// - No policy authoring
+// ENFORCEMENT:
+// - Visibility only
+// - No compliance / policy control
 // - No AutoDev execution
-// - Assistant = advisory only
-// - Upgrade path to full Company exists
+// - Advisory-only assistant
+// - Upgrade path exists (notifications only)
 //
 // SAFE:
 // - Full file replacement
+// - Default export (Vercel-safe)
+// - layout.css aligned
 // - No AI wording
-// - Platform-consistent
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { clearToken, clearUser } from "../lib/api";
-import AuthoDevPanel from "../components/AuthoDevPanel";
+import { clearToken, clearUser } from "../lib/api.js";
+import AutoDevPanel from "../components/AutoDevPanel.jsx";
 import "../styles/layout.css";
 
 export default function CompanyLayout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [advisorOpen, setAdvisorOpen] = useState(false);
 
   function logout() {
     clearToken();
@@ -33,22 +33,13 @@ export default function CompanyLayout() {
 
   return (
     <div className={`layout-root ${menuOpen ? "sidebar-open" : ""}`}>
-      {/* ================= MOBILE OVERLAY ================= */}
-      {menuOpen && (
-        <div
-          className="sidebar-overlay"
-          onClick={() => setMenuOpen(false)}
-        />
-      )}
-
       {/* ================= SIDEBAR ================= */}
-      <aside className="layout-sidebar company">
+      <aside className="layout-sidebar">
         <div className="layout-brand">
-          <strong>AutoShield</strong>
-          <span>Company Security</span>
+          <strong>AutoShield Tech</strong>
+          <small className="muted">Company Visibility</small>
         </div>
 
-        {/* ===== NAVIGATION (VISIBILITY ONLY) ===== */}
         <nav className="layout-nav">
           <NavLink to="/company" end onClick={() => setMenuOpen(false)}>
             Security Overview
@@ -78,73 +69,68 @@ export default function CompanyLayout() {
           </NavLink>
         </nav>
 
-        <button className="btn logout-btn" onClick={logout}>
+        <button onClick={logout} style={{ marginTop: "auto" }}>
           Log out
         </button>
       </aside>
 
+      {/* ================= MOBILE OVERLAY ================= */}
+      <div
+        className="sidebar-overlay"
+        onClick={() => setMenuOpen(false)}
+      />
+
       {/* ================= MAIN ================= */}
-      <main className="layout-main">
-        {/* ================= TOP BAR ================= */}
+      <div className="layout-main">
+        {/* ================= TOPBAR ================= */}
         <header className="layout-topbar">
-          <div className="topbar-left">
-            <button
-              className="btn btn-icon mobile-menu-btn"
-              onClick={() => setMenuOpen(true)}
-              aria-label="Open menu"
-            >
-              ☰
-            </button>
+          <button
+            className="mobile-menu-btn"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Open menu"
+          >
+            ☰
+          </button>
 
-            <h1 style={{ margin: 0 }}>Company Security Dashboard</h1>
-          </div>
-
-          <div className="topbar-right">
-            <button
-              className="btn"
-              onClick={() => setAssistantOpen((v) => !v)}
-              title="Open Security Advisor"
-            >
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <button onClick={() => setAdvisorOpen((v) => !v)}>
               Advisor
             </button>
-
             <span className="badge">Company</span>
           </div>
         </header>
 
-        {/* ================= PAGE CONTENT ================= */}
-        <section className="layout-content">
+        {/* ================= CONTENT ================= */}
+        <main className="layout-content">
           <Outlet />
-        </section>
+        </main>
 
-        {/* ================= ASSISTANT (ADVISORY ONLY) ================= */}
+        {/* ================= ADVISOR (VISIBILITY ONLY) ================= */}
         <section
-          className={`ai-drawer ${assistantOpen ? "open" : ""}`}
-          aria-hidden={!assistantOpen}
+          className={`ai-drawer ${advisorOpen ? "open" : ""}`}
+          aria-hidden={!advisorOpen}
         >
           <div className="ai-drawer-handle">
             <button
               className="ai-toggle"
-              onClick={() => setAssistantOpen((v) => !v)}
+              onClick={() => setAdvisorOpen((v) => !v)}
             >
-              {assistantOpen
-                ? "▼ Hide Advisor"
-                : "▲ Show Security Advisor"}
+              {advisorOpen ? "▼ Hide Advisor" : "▲ Show Security Advisor"}
             </button>
           </div>
 
           <div className="ai-drawer-body">
-            <AuthoDevPanel
+            <AutoDevPanel
               title="AutoDev 6.5 — Company Security Advisor"
               getContext={() => ({
                 role: "company",
-                permissions: "visibility-only",
+                mode: "advisory",
                 location: window.location.pathname,
               })}
             />
           </div>
         </section>
-      </main>
+      </div>
     </div>
   );
 }
