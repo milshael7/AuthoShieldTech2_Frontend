@@ -3,14 +3,14 @@ import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getSavedUser } from "./lib/api.js";
 
-// Layouts
+// Layouts (UNCHANGED)
 import AdminLayout from "./layouts/AdminLayout.jsx";
 import ManagerLayout from "./layouts/ManagerLayout.jsx";
 import CompanyLayout from "./layouts/CompanyLayout.jsx";
 import SmallCompanyLayout from "./layouts/SmallCompanyLayout.jsx";
 import UserLayout from "./layouts/UserLayout.jsx";
 
-// Pages
+// Pages (EXISTING)
 import Login from "./pages/Login.jsx";
 import Trading from "./pages/Trading.jsx";
 import Posture from "./pages/Posture.jsx";
@@ -23,6 +23,12 @@ import Policies from "./pages/Policies.jsx";
 import Reports from "./pages/Reports.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import NotFound from "./pages/NotFound.jsx";
+
+// PUBLIC PAGES (NEW – already exist in your repo)
+import Pricing from "./pages/public/Pricing.jsx";
+import Signup from "./pages/public/Signup.jsx";
+// Landing page will be created next
+import Landing from "./pages/public/Landing.jsx"; // NEW FILE (next step)
 
 /* =========================================================
    ROLE GUARDS — SOC HARDENED (CONTRACT-ALIGNED)
@@ -73,6 +79,9 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         {/* ================= PUBLIC ================= */}
+        <Route path="/" element={<Landing />} />          {/* NEW */}
+        <Route path="/pricing" element={<Pricing />} />   {/* NEW */}
+        <Route path="/signup" element={<Signup />} />     {/* NEW */}
         <Route path="/login" element={<Login />} />
 
         {/* ================= ADMIN — FULL SOC ================= */}
@@ -89,7 +98,6 @@ export default function App() {
           <Route path="threats" element={<Threats />} />
           <Route path="incidents" element={<Incidents />} />
           <Route path="vulnerabilities" element={<Vulnerabilities />} />
-
           <Route
             path="compliance"
             element={
@@ -106,13 +114,12 @@ export default function App() {
               </RequireAdmin>
             }
           />
-
           <Route path="reports" element={<Reports />} />
           <Route path="trading" element={<Trading mode="admin" />} />
           <Route path="notifications" element={<Notifications />} />
         </Route>
 
-        {/* ================= MANAGER — OPERATIONAL SOC ================= */}
+        {/* ================= MANAGER ================= */}
         <Route
           path="/manager/*"
           element={
@@ -130,7 +137,7 @@ export default function App() {
           <Route path="notifications" element={<Notifications />} />
         </Route>
 
-        {/* ================= COMPANY — FULL COMPANY ================= */}
+        {/* ================= COMPANY ================= */}
         <Route
           path="/company/*"
           element={
@@ -147,7 +154,7 @@ export default function App() {
           <Route path="notifications" element={<Notifications />} />
         </Route>
 
-        {/* ================= SMALL COMPANY — LIMITED ================= */}
+        {/* ================= SMALL COMPANY ================= */}
         <Route
           path="/small-company/*"
           element={
@@ -162,20 +169,10 @@ export default function App() {
           <Route path="incidents" element={<Incidents />} />
           <Route path="reports" element={<Reports />} />
           <Route path="notifications" element={<Notifications />} />
-
-          {/* Upgrade placeholder (NO LOGIC YET) */}
-          <Route
-            path="upgrade"
-            element={
-              <div style={{ padding: 40 }}>
-                <h2>Upgrade to Company</h2>
-                <p>
-                  Unlock full company features, team access, and expanded
-                  security capabilities.
-                </p>
-              </div>
-            }
-          />
+          <Route path="upgrade" element={<div style={{ padding: 40 }}>
+            <h2>Upgrade to Company</h2>
+            <p>Upgrade notification only. No forced upgrades.</p>
+          </div>} />
         </Route>
 
         {/* ================= INDIVIDUAL ================= */}
@@ -199,7 +196,7 @@ export default function App() {
             <Navigate
               to={
                 !user
-                  ? "/login"
+                  ? "/"
                   : role === "admin"
                   ? "/admin"
                   : role === "manager"
