@@ -1,29 +1,16 @@
-// frontend/src/pages/public/Pricing.jsx
-// AutoShield Tech — Plans & Pricing (UPGRADED)
-//
-// PURPOSE:
-// - Clear, professional pricing
-// - Notification-driven upgrade model
-// - Admin-controlled pricing (future-ready)
-// - Contract-aware (monthly / yearly)
-// - NO forced upgrades
-// - NO automation wording
-
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { PRICING } from "../../config/pricing.config";
 import "../../styles/main.css";
 
 export default function Pricing() {
   const navigate = useNavigate();
   const [billing, setBilling] = useState("monthly");
 
-  // NOTE:
-  // Prices shown here are DISPLAY values only.
-  // Actual billing will be controlled by administrators.
   const yearlyNote =
     billing === "yearly"
-      ? "Yearly contracts include a 5% contract fee. Pricing confirmed before billing."
-      : "Month-to-month. No automatic upgrades.";
+      ? "Yearly contract includes a 5% contract fee."
+      : "Month-to-month. Cancel anytime.";
 
   return (
     <div className="pricing-page">
@@ -31,7 +18,7 @@ export default function Pricing() {
       <section className="pricing-header">
         <h1>Plans & Pricing</h1>
         <p className="muted center">
-          Transparent pricing. Upgrade only when notified or when you choose.
+          Choose the plan that fits your role. Upgrade only when you’re ready.
         </p>
 
         <div className="billing-toggle">
@@ -59,18 +46,15 @@ export default function Pricing() {
           <h2>Individual</h2>
           <p className="price">
             {billing === "monthly"
-              ? "$250 / month"
-              : "$250 × 12 + 5%"}
-          </p>
-          <p className="muted">
-            For professional cybersecurity practitioners.
+              ? `$${PRICING.individual.monthly} / month`
+              : `$${PRICING.individual.monthly} × ${PRICING.individual.yearlyMultiplier} + ${PRICING.individual.yearlyFeePercent}%`}
           </p>
 
           <ul>
             <li>Single professional account</li>
             <li>One role per client company</li>
             <li>Core SOC visibility</li>
-            <li>Manual cybersecurity operations</li>
+            <li>Manual cybersecurity work</li>
             <li>AutoDev 6.5 available as upgrade</li>
           </ul>
 
@@ -84,19 +68,15 @@ export default function Pricing() {
           <h2>Small Company</h2>
           <p className="price">
             {billing === "monthly"
-              ? "$350 → $700 (growth-based)"
-              : "Contract-based + 5%"}
-          </p>
-          <p className="muted">
-            Designed for growing teams with capped user limits.
+              ? `$${PRICING.smallCompany.start} → $${PRICING.smallCompany.max}`
+              : `Contract-based + ${PRICING.smallCompany.yearlyFeePercent}%`}
           </p>
 
           <ul>
-            <li>Up to 10–15 users</li>
+            <li>Up to {PRICING.smallCompany.userLimit} users</li>
             <li>Limited SOC visibility</li>
             <li>No AutoDev 6.5 access</li>
-            <li>Monthly upgrade notifications</li>
-            <li>Cannot exceed user cap without upgrade</li>
+            <li>Upgrade notifications only</li>
           </ul>
 
           <button onClick={() => navigate("/signup")}>
@@ -109,19 +89,15 @@ export default function Pricing() {
           <h2>Company</h2>
           <p className="price">
             {billing === "monthly"
-              ? "$1,000 → $1,500 (after 6 months)"
-              : "Contract-based + 5%"}
-          </p>
-          <p className="muted">
-            Enterprise-grade cybersecurity operations.
+              ? `$${PRICING.company.start} → $${PRICING.company.afterSixMonths}`
+              : `Contract-based + ${PRICING.company.yearlyFeePercent}%`}
           </p>
 
           <ul>
             <li>Unlimited users</li>
             <li>Full SOC visibility</li>
-            <li>Admin & manager roles</li>
-            <li>Incident, threat & asset governance</li>
-            <li>No automatic upgrades</li>
+            <li>Manager & admin roles</li>
+            <li>Incident, threat, asset governance</li>
           </ul>
 
           <button onClick={() => navigate("/signup")}>
@@ -133,37 +109,27 @@ export default function Pricing() {
       {/* ================= AUTODEV ================= */}
       <section className="pricing-autodev">
         <h2>AutoDev 6.5</h2>
-        <p className="muted center">
-          Advanced cybersecurity execution and reporting.
-          Available to individuals only.
-        </p>
 
         <div className="price-card wide">
           <p className="price">
-            First Month: $100<br />
-            Ongoing: $450 / month
+            First Month: ${PRICING.individual.autodev.firstMonth}
+            <br />
+            Ongoing: ${PRICING.individual.autodev.ongoing} / month
           </p>
 
           <ul>
-            <li>Continuous cybersecurity execution</li>
-            <li>Scheduled work hours</li>
+            <li>Autonomous cybersecurity execution</li>
             <li>Human intervention alerts</li>
-            <li>Immutable audit & reporting history</li>
+            <li>Immutable reporting & audit trail</li>
             <li>Owner-branded reports</li>
           </ul>
-
-          <p className="muted">
-            AutoDev 6.5 operates continuously and escalates
-            when human action is required.
-          </p>
         </div>
       </section>
 
-      {/* ================= FOOTER ================= */}
       <footer className="public-footer">
         <p>
-          Prices shown are subject to administrative control and notification.
-          No automatic upgrades. No forced billing changes.
+          Pricing is controlled by administrators.
+          No automatic upgrades. Notifications only.
         </p>
       </footer>
     </div>
