@@ -1,14 +1,25 @@
 // frontend/src/pages/Incidents.jsx
-// SOC Threats, Detections & Incidents — Phase 1
-// Timeline-driven incident visibility
+// SOC Incidents & Response — FINAL SOC BASELINE
+// Timeline-driven • Priority-aware • Blueprint-aligned
+// SAFE: UI-only upgrade using existing platform.css
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+
+/* ================= HELPERS ================= */
+
+function sevDot(sev) {
+  if (sev === "critical") return "bad";
+  if (sev === "high") return "warn";
+  if (sev === "medium") return "warn";
+  return "ok";
+}
 
 /* ================= PAGE ================= */
 
 export default function Incidents() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(null);
 
   useEffect(() => {
     // Placeholder until backend feed is wired
@@ -51,44 +62,72 @@ export default function Incidents() {
     }, 600);
   }, []);
 
-  function sevDot(sev) {
-    if (sev === "critical") return "bad";
-    if (sev === "high") return "warn";
-    if (sev === "medium") return "warn";
-    return "ok";
-  }
+  /* ================= DERIVED ================= */
+
+  const stats = useMemo(() => ({
+    total: items.length,
+    critical: items.filter(i => i.severity === "critical").length,
+    investigating: items.filter(i => i.status === "Investigating").length,
+    open: items.filter(i => i.status === "Open").length,
+  }), [items]);
 
   /* ================= UI ================= */
 
   return (
     <div className="postureWrap">
-      {/* ================= LEFT: INCIDENT TIMELINE ================= */}
-      <section className="postureCard">
-        <div className="postureTop">
-          <div>
-            <h2>Threats & Incidents</h2>
-            <small>Live detections across your environment</small>
-          </div>
-
-          <div className="scoreMeta">
-            <b>{items.length} Active</b>
-            <span>Realtime monitoring</span>
-          </div>
+      {/* ================= KPI STRIP ================= */}
+      <div className="kpiGrid">
+        <div className="kpiCard">
+          <small>Total Incidents</small>
+          <b>{stats.total}</b>
         </div>
+        <div className="kpiCard">
+          <small>Critical</small>
+          <b>{stats.critical}</b>
+        </div>
+        <div className="kpiCard">
+          <small>Investigating</small>
+          <b>{stats.investigating}</b>
+        </div>
+        <div className="kpiCard">
+          <small>Open</small>
+          <b>{stats.open}</b>
+        </div>
+      </div>
 
-        <div className="list" style={{ marginTop: 20 }}>
-          {loading && <p className="muted">Loading incidents…</p>}
+      {/* ================= MAIN GRID ================= */}
+      <div className="postureGrid">
+        {/* ===== LEFT: INCIDENT TIMELINE ===== */}
+        <section className="postureCard">
+          <div className="postureTop">
+            <div>
+              <h2>Incidents & Detections</h2>
+              <small>Security events requiring response or review</small>
+            </div>
 
-          {!loading &&
-            items.map((i) => (
+            <div className="scoreMeta">
+              <b>{stats.total} Active</b>
+              <span>
+                {stats.critical} Critical • {stats.investigating} Investigating
+              </span>
+            </div>
+          </div>
+
+          <div className="list" style={{ marginTop: 20 }}>
+            {loading && <p className="muted">Loading incidents…</p>}
+
+            {!loading && items.map(i => (
               <div key={i.id} className="card" style={{ padding: 16 }}>
                 <div
                   style={{
                     display: "grid",
                     gridTemplateColumns: "auto 1fr auto",
                     gap: 14,
-                    alignItems: "flex-start",
+                    cursor: "pointer",
                   }}
+                  onClick={() =>
+                    setExpanded(expanded === i.id ? null : i.id)
+                  }
                 >
                   <span className={`dot ${sevDot(i.severity)}`} />
 
@@ -129,54 +168,76 @@ export default function Incidents() {
                     </small>
                   </div>
                 </div>
+
+                {expanded === i.id && (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      paddingTop: 14,
+                      borderTop: "1px solid var(--p-border)",
+                      fontSize: 13,
+                    }}
+                  >
+                    <p className="muted">
+                      • Event correlated across telemetry<br />
+                      • Asset monitored for lateral movement<br />
+                      • Response actions available
+                    </p>
+                    <p className="muted">
+                      Ask the assistant:<br />
+                      – “What happened here?”<br />
+                      – “Is this contained?”<br />
+                      – “What should I do next?”
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
-        </div>
+          </div>
 
-        <button style={{ marginTop: 18 }}>
-          View Full Incident History
-        </button>
-      </section>
+          <button style={{ marginTop: 18 }}>
+            View Full Incident History
+          </button>
+        </section>
 
-      {/* ================= RIGHT: RESPONSE STATUS ================= */}
-      <aside className="postureCard">
-        <h3>Incident Response</h3>
-        <p className="muted">
-          Current handling and containment state.
-        </p>
+        {/* ===== RIGHT: RESPONSE STATUS ===== */}
+        <aside className="postureCard">
+          <h3>Incident Response State</h3>
+          <p className="muted">
+            Current containment and investigation posture.
+          </p>
 
-        <ul className="list">
-          <li>
-            <span className="dot bad" />
-            <div>
-              <b>Active Threats</b>
-              <small>Immediate attention required</small>
-            </div>
-          </li>
+          <ul className="list">
+            <li>
+              <span className="dot bad" />
+              <div>
+                <b>Immediate Attention Required</b>
+                <small>Critical incidents detected</small>
+              </div>
+            </li>
+            <li>
+              <span className="dot warn" />
+              <div>
+                <b>Investigations Active</b>
+                <small>Analyst review ongoing</small>
+              </div>
+            </li>
+            <li>
+              <span className="dot ok" />
+              <div>
+                <b>Containment Effective</b>
+                <small>No uncontrolled spread detected</small>
+              </div>
+            </li>
+          </ul>
 
-          <li>
-            <span className="dot warn" />
-            <div>
-              <b>Investigations Ongoing</b>
-              <small>Analyst review in progress</small>
-            </div>
-          </li>
-
-          <li>
-            <span className="dot ok" />
-            <div>
-              <b>Contained Incidents</b>
-              <small>No spread detected</small>
-            </div>
-          </li>
-        </ul>
-
-        <p className="muted" style={{ marginTop: 14 }}>
-          Ask the assistant:
-          <br />• “What threats are most urgent?”
-          <br />• “Is lateral movement detected?”
-        </p>
-      </aside>
+          <p className="muted" style={{ marginTop: 14 }}>
+            Use the assistant to ask:<br />
+            • “Which incident is most urgent?”<br />
+            • “Is lateral movement detected?”
+          </p>
+        </aside>
+      </div>
     </div>
   );
 }
