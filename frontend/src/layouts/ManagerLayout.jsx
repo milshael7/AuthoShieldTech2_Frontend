@@ -1,141 +1,46 @@
-// frontend/src/layouts/ManagerLayout.jsx
-// SOC Command Layout — MANAGER BASELINE
-//
-// - Structural parity with AdminLayout
-// - Oversight / governance role
-// - Read-only posture
-// - Bottom-drawer AI advisor only
-// - No floating AI, no page-level AI
+<nav className="layout-nav">
+  <NavLink to="/manager" end onClick={() => setMenuOpen(false)}>
+    Security Overview
+  </NavLink>
 
-import React, { useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { clearToken, clearUser } from "../lib/api";
-import AuthoDevPanel from "../components/AuthoDevPanel";
-import "../styles/layout.css";
+  <NavLink to="/manager/assets" onClick={() => setMenuOpen(false)}>
+    Assets
+  </NavLink>
 
-export default function ManagerLayout() {
-  const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
+  <NavLink to="/manager/threats" onClick={() => setMenuOpen(false)}>
+    Threats
+  </NavLink>
 
-  function logout() {
-    clearToken();
-    clearUser();
-    navigate("/login");
-  }
+  <NavLink to="/manager/incidents" onClick={() => setMenuOpen(false)}>
+    Incidents
+  </NavLink>
 
-  return (
-    <div className={`layout-root ${menuOpen ? "sidebar-open" : ""}`}>
-      {/* ================= MOBILE OVERLAY ================= */}
-      {menuOpen && (
-        <div
-          className="sidebar-overlay"
-          onClick={() => setMenuOpen(false)}
-        />
-      )}
+  <NavLink to="/manager/vulnerabilities" onClick={() => setMenuOpen(false)}>
+    Vulnerabilities
+  </NavLink>
 
-      {/* ================= SIDEBAR ================= */}
-      <aside className="layout-sidebar manager">
-        <div className="layout-brand">
-          <strong>AutoShield</strong>
-          <span>Manager Oversight</span>
-        </div>
+  <NavLink to="/manager/compliance" onClick={() => setMenuOpen(false)}>
+    Compliance
+  </NavLink>
 
-        <nav className="layout-nav">
-          <NavLink to="/manager" end onClick={() => setMenuOpen(false)}>
-            Security Overview
-          </NavLink>
+  <NavLink to="/manager/reports" onClick={() => setMenuOpen(false)}>
+    Reports
+  </NavLink>
 
-          <NavLink to="/manager/companies" onClick={() => setMenuOpen(false)}>
-            Companies
-          </NavLink>
+  <NavLink
+    to="/manager/notifications"
+    onClick={() => setMenuOpen(false)}
+  >
+    Notifications
+  </NavLink>
 
-          <NavLink to="/manager/users" onClick={() => setMenuOpen(false)}>
-            Users
-          </NavLink>
+  <hr style={{ opacity: 0.2 }} />
 
-          <NavLink to="/manager/posture" onClick={() => setMenuOpen(false)}>
-            Security Posture
-          </NavLink>
+  <NavLink to="/admin" onClick={() => setMenuOpen(false)}>
+    Admin View
+  </NavLink>
 
-          <NavLink to="/manager/audit" onClick={() => setMenuOpen(false)}>
-            Audit Logs
-          </NavLink>
-
-          <NavLink
-            to="/manager/notifications"
-            onClick={() => setMenuOpen(false)}
-          >
-            Notifications
-          </NavLink>
-        </nav>
-
-        <button className="btn logout-btn" onClick={logout}>
-          Log out
-        </button>
-      </aside>
-
-      {/* ================= MAIN ================= */}
-      <main className="layout-main">
-        {/* ================= TOP BAR ================= */}
-        <header className="layout-topbar">
-          <div className="topbar-left">
-            <button
-              className="btn btn-icon mobile-menu-btn"
-              onClick={() => setMenuOpen(true)}
-              aria-label="Open menu"
-            >
-              ☰
-            </button>
-
-            <h1 style={{ margin: 0 }}>Oversight Dashboard</h1>
-          </div>
-
-          <div className="topbar-right">
-            <button
-              className="btn"
-              onClick={() => setAiOpen((v) => !v)}
-              title="Toggle AI Assistant"
-            >
-              🤖 Assistant
-            </button>
-
-            <span className="badge">Read-only</span>
-          </div>
-        </header>
-
-        {/* ================= PAGE CONTENT ================= */}
-        <section className="layout-content">
-          <Outlet />
-        </section>
-
-        {/* ================= AI ASSISTANT (BOTTOM ONLY) ================= */}
-        <section
-          className={`ai-drawer ${aiOpen ? "open" : ""}`}
-          aria-hidden={!aiOpen}
-        >
-          <div className="ai-drawer-handle">
-            <button
-              className="ai-toggle"
-              onClick={() => setAiOpen((v) => !v)}
-            >
-              {aiOpen ? "▼ Hide Assistant" : "▲ Show Assistant"}
-            </button>
-          </div>
-
-          <div className="ai-drawer-body">
-            <AuthoDevPanel
-              title="AuthoDev 6.5 — Oversight Advisor"
-              getContext={() => ({
-                role: "manager",
-                scope: "oversight",
-                permissions: "read-only",
-                location: window.location.pathname,
-              })}
-            />
-          </div>
-        </section>
-      </main>
-    </div>
-  );
-}
+  <NavLink to="/company" onClick={() => setMenuOpen(false)}>
+    Company View
+  </NavLink>
+</nav>
