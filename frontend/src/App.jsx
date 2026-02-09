@@ -3,19 +3,25 @@ import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getSavedUser } from "./lib/api.js";
 
-// Layouts
+// =======================
+// Layouts (UNCHANGED)
+// =======================
 import AdminLayout from "./layouts/AdminLayout.jsx";
 import ManagerLayout from "./layouts/ManagerLayout.jsx";
 import CompanyLayout from "./layouts/CompanyLayout.jsx";
 import SmallCompanyLayout from "./layouts/SmallCompanyLayout.jsx";
 import UserLayout from "./layouts/UserLayout.jsx";
 
+// =======================
 // Public Pages
+// =======================
 import Landing from "./pages/public/Landing.jsx";
 import Pricing from "./pages/public/Pricing.jsx";
 import Signup from "./pages/public/Signup.jsx";
 
+// =======================
 // Auth / App Pages
+// =======================
 import Login from "./pages/Login.jsx";
 import Trading from "./pages/Trading.jsx";
 import Posture from "./pages/Posture.jsx";
@@ -57,6 +63,10 @@ function RequireAdmin({ children }) {
 
   return children;
 }
+
+/* =========================================================
+   APP ROOT
+   ========================================================= */
 
 export default function App() {
   const [ready, setReady] = useState(false);
