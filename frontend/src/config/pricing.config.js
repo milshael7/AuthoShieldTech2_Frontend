@@ -1,13 +1,22 @@
 /* =========================================================
-   AUTOSHIELD PRICING CONFIG (ADMIN CONTROLLED)
-   Frontend-only source of truth
+   AUTOSHIELD PRICING CONFIG — ADMIN CONTROLLED (LOCKED)
+   File: frontend/src/config/pricing.config.js
+
+   Purpose:
+   - Single source of truth for pricing
+   - Editable by admin panel later
+   - Used by public Pricing page
+   - NO business logic
+   - NO calculations
    ========================================================= */
 
 export const PRICING = {
   individual: {
     monthly: 250,
+
     yearlyMultiplier: 12,
     yearlyFeePercent: 5,
+
     autodev: {
       firstMonth: 100,
       ongoing: 450,
@@ -17,6 +26,7 @@ export const PRICING = {
   smallCompany: {
     start: 350,
     max: 700,
+
     userLimit: "10–15",
     yearlyFeePercent: 5,
   },
@@ -24,6 +34,7 @@ export const PRICING = {
   company: {
     start: 1000,
     afterSixMonths: 1500,
+
     yearlyFeePercent: 5,
   },
 };
