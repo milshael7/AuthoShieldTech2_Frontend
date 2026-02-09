@@ -1,4 +1,14 @@
 // frontend/src/lib/api.js
+/* =========================================================
+   AUTOSHIELD FRONTEND API LAYER — SOC BASELINE (LOCKED)
+
+   Purpose:
+   - Thin, predictable API wrapper
+   - Maps backend responses to frontend contracts
+   - Handles auth, refresh, and errors centrally
+   - NO UI
+   - NO business logic
+   ========================================================= */
 
 const API_BASE = (
   import.meta.env.VITE_API_BASE ||
@@ -9,7 +19,10 @@ const API_BASE = (
 const TOKEN_KEY = "as_token";
 const USER_KEY = "as_user";
 
-// ---------------- Token helpers ----------------
+/* =============================
+   TOKEN & USER STORAGE
+   ============================= */
+
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
@@ -26,14 +39,20 @@ export const saveUser = (u) =>
   localStorage.setItem(USER_KEY, JSON.stringify(u));
 export const clearUser = () => localStorage.removeItem(USER_KEY);
 
-// ---------------- URL helper ----------------
+/* =============================
+   URL HELPER
+   ============================= */
+
 function joinUrl(base, path) {
   const b = String(base || "").replace(/\/+$/, "");
   const p = String(path || "").startsWith("/") ? path : `/${path}`;
   return b ? `${b}${p}` : p;
 }
 
-// ---------------- Core request ----------------
+/* =============================
+   CORE REQUEST WRAPPER
+   ============================= */
+
 async function req(
   path,
   { method = "GET", body, auth = true, headers: extraHeaders = {} } = {},
@@ -42,8 +61,8 @@ async function req(
   const headers = { "Content-Type": "application/json", ...extraHeaders };
 
   if (auth) {
-    const t = getToken();
-    if (t) headers.Authorization = `Bearer ${t}`;
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
   }
 
   const res = await fetch(joinUrl(API_BASE, path), {
@@ -55,10 +74,9 @@ async function req(
 
   const data = await res.json().catch(() => ({}));
 
-  // ---------- HANDLE EXPIRED TOKEN ----------
+  // ---------- TOKEN REFRESH ----------
   if (res.status === 401 && auth && retry) {
     try {
-      // attempt refresh
       const refreshRes = await fetch(
         joinUrl(API_BASE, "/api/auth/refresh"),
         {
@@ -75,14 +93,12 @@ async function req(
         setToken(refreshData.token);
         if (refreshData.user) saveUser(refreshData.user);
 
-        // retry original request once
         return req(path, { method, body, auth, headers: extraHeaders }, false);
       }
     } catch {
-      // fall through to logout
+      // fall through
     }
 
-    // refresh failed → logout
     clearToken();
     clearUser();
     throw new Error("Session expired");
@@ -97,9 +113,12 @@ async function req(
   return data;
 }
 
-// ---------------- API surface ----------------
+/* =============================
+   API SURFACE (SOC ALIGNED)
+   ============================= */
+
 export const api = {
-  // -------- Auth --------
+  /* -------- AUTH -------- */
   login: (email, password) =>
     req("/api/auth/login", {
       method: "POST",
@@ -114,96 +133,60 @@ export const api = {
       auth: false,
     }),
 
-  // -------- Me --------
+  /* -------- USER / ME -------- */
   meNotifications: () => req("/api/me/notifications"),
   markMyNotificationRead: (id) =>
     req(`/api/me/notifications/${id}/read`, { method: "POST" }),
-  createProject: (payload) =>
-    req("/api/me/projects", { method: "POST", body: payload }),
 
-  // -------- Admin --------
+  /* -------- POSTURE -------- */
+  postureSummary: () => req("/api/posture/summary"),
+  postureChecks: () => req("/api/posture/checks"),
+  postureRecent: (limit = 50) =>
+    req(`/api/posture/recent?limit=${encodeURIComponent(limit)}`),
+
+  /* -------- ASSETS -------- */
+  getAssets: () => req("/api/assets"),
+
+  /* -------- THREATS -------- */
+  getThreats: () => req("/api/threats"),
+
+  /* -------- INCIDENTS -------- */
+  getIncidents: () => req("/api/incidents"),
+
+  /* -------- VULNERABILITIES -------- */
+  getVulnerabilities: () => req("/api/vulnerabilities"),
+
+  /* -------- COMPLIANCE -------- */
+  getComplianceControls: () => req("/api/compliance"),
+
+  /* -------- POLICIES -------- */
+  getPolicies: () => req("/api/policies"),
+
+  /* -------- REPORTS -------- */
+  getReports: () => req("/api/reports"),
+
+  /* -------- ADMIN -------- */
   adminUsers: () => req("/api/admin/users"),
-  adminCreateUser: (payload) =>
-    req("/api/admin/users", { method: "POST", body: payload }),
-  adminRotateUserId: (id) =>
-    req(`/api/admin/users/${id}/rotate-id`, { method: "POST" }),
-  adminUpdateSubscription: (id, payload) =>
-    req(`/api/admin/users/${id}/subscription`, {
-      method: "POST",
-      body: payload,
-    }),
   adminCompanies: () => req("/api/admin/companies"),
-  adminCreateCompany: (payload) =>
-    req("/api/admin/companies", { method: "POST", body: payload }),
   adminNotifications: () => req("/api/admin/notifications"),
 
-  // -------- Manager --------
+  /* -------- MANAGER -------- */
   managerOverview: () => req("/api/manager/overview"),
   managerUsers: () => req("/api/manager/users"),
   managerCompanies: () => req("/api/manager/companies"),
-  managerNotifications: (limit = 200) =>
-    req(`/api/manager/notifications?limit=${encodeURIComponent(limit)}`),
   managerAudit: (limit = 200) =>
     req(`/api/manager/audit?limit=${encodeURIComponent(limit)}`),
 
-  // -------- Company --------
+  /* -------- COMPANY -------- */
   companyMe: () => req("/api/company/me"),
   companyNotifications: () => req("/api/company/notifications"),
   companyMarkRead: (id) =>
     req(`/api/company/notifications/${id}/read`, { method: "POST" }),
 
-  companyAddMember: (userId) =>
-    req("/api/company/members/add", {
-      method: "POST",
-      body: { userId },
-    }),
-
-  companyRemoveMember: (userId) =>
-    req("/api/company/members/remove", {
-      method: "POST",
-      body: { userId },
-    }),
-
-  // -------- Trading --------
-  tradingSymbols: () => req("/api/trading/symbols"),
-  tradingCandles: (symbol) =>
-    req(`/api/trading/candles?symbol=${encodeURIComponent(symbol)}`),
-
-  // -------- AI --------
+  /* -------- AI -------- */
   aiChat: (message, context) =>
     req("/api/ai/chat", {
       method: "POST",
       body: { message, context },
     }),
-
-  aiTrainingStatus: () => req("/api/ai/training/status"),
-  aiTrainingStart: () =>
-    req("/api/ai/training/start", { method: "POST" }),
-  aiTrainingStop: () =>
-    req("/api/ai/training/stop", { method: "POST" }),
-
-  // -------- Paper --------
-  paperStatus: () => req("/api/paper/status"),
-
-  paperReset: (resetKey) =>
-    req("/api/paper/reset", {
-      method: "POST",
-      body: {},
-      headers: resetKey ? { "x-reset-key": String(resetKey) } : {},
-    }),
-
-  paperGetConfig: () => req("/api/paper/config"),
-
-  paperSetConfig: ({ baselinePct, maxPct, maxTradesPerDay }, ownerKey) =>
-    req("/api/paper/config", {
-      method: "POST",
-      body: { baselinePct, maxPct, maxTradesPerDay },
-      headers: ownerKey ? { "x-owner-key": String(ownerKey) } : {},
-    }),
-
-  // -------- Posture --------
-  postureSummary: () => req("/api/posture/summary"),
-  postureChecks: () => req("/api/posture/checks"),
-  postureRecent: (limit = 50) =>
-    req(`/api/posture/recent?limit=${encodeURIComponent(limit)}`),
 };
