@@ -15,12 +15,37 @@ export default function Pricing() {
   const navigate = useNavigate();
   const [billing, setBilling] = useState("monthly");
 
-  const yearlyNote = billing === "yearly"
-    ? "Yearly contract includes a 5% contract fee."
-    : "Month-to-month. Cancel anytime.";
+  const yearlyNote =
+    billing === "yearly"
+      ? "Yearly contract includes a 5% contract fee."
+      : "Month-to-month. Cancel anytime.";
 
   return (
     <div className="pricing-page">
+      {/* ================= PUBLIC HEADER ================= */}
+      <header className="public-header">
+        <div className="brand">
+          <img
+            src="/logo.png"
+            alt="AutoShield Tech"
+            className="brand-logo"
+          />
+          <span className="brand-name">AutoShield Tech</span>
+        </div>
+
+        <nav className="public-nav">
+          <button onClick={() => navigate("/login")}>
+            Sign In
+          </button>
+          <button
+            className="primary"
+            onClick={() => navigate("/signup")}
+          >
+            Get Started
+          </button>
+        </nav>
+      </header>
+
       {/* ================= HEADER ================= */}
       <section className="pricing-header">
         <h1>Plans & Pricing</h1>
