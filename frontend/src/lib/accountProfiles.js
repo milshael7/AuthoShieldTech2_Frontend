@@ -1,12 +1,13 @@
 /* =========================================================
-   AUTOSHIELD ACCOUNT PROFILES — BASELINE (LOCKED)
+   AUTOSHIELD ACCOUNT PROFILES — SOC BASELINE (LOCKED)
    File: frontend/src/lib/accountProfiles.js
 
    Purpose:
    - Defines account types and operational limits
    - Enforces Small Company constraints
-   - Controls upgrade eligibility
-   - Prevents role abuse and feature leakage
+   - Controls upgrade eligibility (NOT automatic)
+   - Prevents role abuse and task overlap
+   - Aligns with pricing + AutoDev 6.5 rules
 
    ⚠️ NO UI
    ⚠️ NO API CALLS
@@ -20,15 +21,19 @@ import { AccountType } from "./permits";
    ============================= */
 
 export const AccountProfiles = {
+  /* =====================================================
+     INDIVIDUAL
+     ===================================================== */
   [AccountType.INDIVIDUAL]: {
     label: "Individual",
     description:
-      "Single professional serving one company at a time.",
+      "Independent cybersecurity professional serving multiple companies, one role per company.",
 
     limits: {
-      maxCompaniesServed: 1,
-      maxActiveTasks: 1,
-      maxEmployees: 0,
+      maxCompaniesServed: "multiple",
+      maxRolesPerCompany: 1,        // 🔒 CRITICAL RULE
+      maxActiveTasksPerCompany: 1,  // 🔒 No multi-task abuse
+      maxEmployeesManaged: 0,
     },
 
     features: {
@@ -42,18 +47,28 @@ export const AccountProfiles = {
       reports: true,
     },
 
-    upgradeOptions: ["autodev"],
+    autodev: {
+      allowed: true,
+      mode: "optional",
+      firstMonthTrial: true,
+    },
+
+    upgradeOptions: [], // Individuals do NOT upgrade to company automatically
   },
 
+  /* =====================================================
+     SMALL COMPANY
+     ===================================================== */
   [AccountType.SMALL_COMPANY]: {
     label: "Small Company",
     description:
-      "Growing organization with limited workforce and scope.",
+      "Growing organization with limited workforce and controlled access.",
 
     limits: {
-      maxEmployees: 5,
-      maxManagers: 1,
-      maxProjects: 3,
+      minEmployees: 1,
+      maxEmployees: 15,           // ✅ per your rule (10–15)
+      maxManagers: 2,
+      maxProjects: "limited",
     },
 
     features: {
@@ -68,16 +83,25 @@ export const AccountProfiles = {
     },
 
     restrictions: {
-      autodevAllowed: false,
+      autodevAllowed: false,      // 🔒 NEVER allowed
+      hardUserCap: true,          // 🔔 blocks adding more users
     },
 
-    upgradeOptions: ["company"],
+    notifications: {
+      monthlyUpgradeReminder: true,
+      limitReachedWarning: true,  // 🔔 special notification
+    },
+
+    upgradeOptions: ["company"], // 🔔 notification only
   },
 
+  /* =====================================================
+     COMPANY
+     ===================================================== */
   [AccountType.COMPANY]: {
     label: "Company",
     description:
-      "Full organization with internal security workforce.",
+      "Full organization with internal cybersecurity workforce and governance.",
 
     limits: {
       maxEmployees: "unlimited",
@@ -97,15 +121,19 @@ export const AccountProfiles = {
     },
 
     restrictions: {
-      autodevAllowed: false,
+      autodevAllowed: false, // 🔒 Company NEVER uses AutoDev 6.5
     },
 
-    upgradeOptions: [],
+    notifications: {
+      monthlyPlanNotice: true,
+    },
+
+    upgradeOptions: [], // Top tier
   },
 };
 
 /* =============================
-   HELPERS
+   HELPERS (SAFE, READ-ONLY)
    ============================= */
 
 export function getAccountProfile(type) {
@@ -124,4 +152,8 @@ export function isSmallCompany(type) {
 
 export function isIndividual(type) {
   return type === AccountType.INDIVIDUAL;
+}
+
+export function isCompany(type) {
+  return type === AccountType.COMPANY;
 }
