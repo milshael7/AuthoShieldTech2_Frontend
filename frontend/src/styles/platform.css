@@ -1,9 +1,9 @@
 /* =========================================================
-   AUTOSHIELD PLATFORM UI — SOC BASELINE (LOCKED)
+   AUTOSHIELD PLATFORM UI — SOC BASELINE (UPGRADED)
    File: frontend/src/styles/platform.css
    Purpose:
-   - SOC dashboards (Posture, Status, Coverage)
-   - Shared cards, meters, lists
+   - SOC dashboards (Posture, Threats, Assets, Incidents)
+   - Shared cards, meters, KPI strips, lists
    - NO layout, NO AI positioning
    ========================================================= */
 
@@ -12,7 +12,7 @@
    ============================= */
 :root{
   --p-bg: rgba(255,255,255,.06);
-  --p-bg-soft: rgba(0,0,0,.28);
+  --p-bg-soft: rgba(0,0,0,.32);
   --p-border: rgba(255,255,255,.14);
 
   --p-accent: rgba(122,167,255,.9);
@@ -39,10 +39,59 @@
   align-items:start;
 }
 
+.postureGrid{
+  display:grid;
+  grid-template-columns: minmax(0,1fr) 420px;
+  gap:24px;
+  margin-top:24px;
+}
+
 @media (max-width:1100px){
-  .postureWrap{
+  .postureWrap,
+  .postureGrid{
     grid-template-columns:1fr;
   }
+}
+
+/* =============================
+   KPI STRIP (TOP METRICS)
+   ============================= */
+.kpiGrid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:16px;
+  margin-bottom:24px;
+}
+
+.kpiCard{
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,255,255,.08),
+      rgba(0,0,0,.35)
+    );
+  border:1px solid var(--p-border);
+  border-radius:var(--p-radius-sm);
+  padding:14px 16px;
+}
+
+.kpiCard small{
+  font-size:12px;
+  color:var(--p-muted);
+}
+
+.kpiCard b{
+  display:block;
+  margin-top:4px;
+  font-size:20px;
+  font-weight:800;
+}
+
+.kpiCard .trend{
+  display:block;
+  margin-top:4px;
+  font-size:11px;
+  color:var(--p-accent);
 }
 
 /* =============================
@@ -54,7 +103,7 @@
     linear-gradient(
       180deg,
       rgba(255,255,255,.06),
-      rgba(0,0,0,.26)
+      rgba(0,0,0,.30)
     );
   border:1px solid var(--p-border);
   border-radius:var(--p-radius);
@@ -70,18 +119,6 @@
   align-items:center;
   gap:20px;
   flex-wrap:wrap;
-}
-
-.postureTitle h2{
-  margin:0;
-  font-size:20px;
-}
-
-.postureTitle small{
-  display:block;
-  margin-top:4px;
-  font-size:12px;
-  color:var(--p-muted);
 }
 
 /* =============================
@@ -202,7 +239,8 @@
    MOBILE TUNING
    ============================= */
 @media (max-width:768px){
-  .postureWrap{
+  .postureWrap,
+  .postureGrid{
     gap:16px;
   }
 
