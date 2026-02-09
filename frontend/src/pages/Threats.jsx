@@ -1,7 +1,11 @@
 // frontend/src/pages/Threats.jsx
-// SOC Threats & Detections — FINAL SOC BASELINE
-// Analyst-first, priority-driven, enterprise-ready
-// SAFE: builds strictly on existing layout + platform.css
+// SOC Threats & Detections — SOC BASELINE (UPGRADED)
+// Analyst-first, priority-driven
+// SAFE:
+// - Full file replacement
+// - No AI wording
+// - No automation
+// - AutoDev 6.5–ready (observational + reporting only)
 
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
@@ -11,6 +15,7 @@ import { api } from "../lib/api";
 function sevDot(sev) {
   if (sev === "critical") return "bad";
   if (sev === "high") return "warn";
+  if (sev === "medium") return "warn";
   return "ok";
 }
 
@@ -23,6 +28,7 @@ export default function Threats() {
   async function load() {
     setLoading(true);
     try {
+      // Placeholder until backend is wired
       const data = await api.getThreats?.();
       setThreats(
         data?.threats || [
@@ -33,6 +39,7 @@ export default function Threats() {
             source: "Endpoint",
             status: "Unresolved",
             time: "5 minutes ago",
+            scope: "company",
           },
           {
             id: 2,
@@ -41,6 +48,7 @@ export default function Threats() {
             source: "Identity",
             status: "Investigating",
             time: "14 minutes ago",
+            scope: "small-company",
           },
           {
             id: 3,
@@ -49,6 +57,7 @@ export default function Threats() {
             source: "Email",
             status: "Contained",
             time: "38 minutes ago",
+            scope: "individual",
           },
         ]
       );
@@ -69,6 +78,13 @@ export default function Threats() {
       high: threats.filter((t) => t.severity === "high").length,
       total: threats.length,
     };
+  }, [threats]);
+
+  const prioritized = useMemo(() => {
+    return [...threats].sort((a, b) => {
+      const order = { critical: 3, high: 2, medium: 1, low: 0 };
+      return (order[b.severity] || 0) - (order[a.severity] || 0);
+    });
   }, [threats]);
 
   /* ================= UI ================= */
@@ -98,7 +114,9 @@ export default function Threats() {
           <div className="postureTop">
             <div>
               <h2>Active Threats</h2>
-              <small>Real-time detections requiring attention</small>
+              <small>
+                Real-time detections across monitored environments
+              </small>
             </div>
 
             <div className="scoreMeta">
@@ -113,7 +131,7 @@ export default function Threats() {
             {loading && <p className="muted">Loading threats…</p>}
 
             {!loading &&
-              threats.map((t) => (
+              prioritized.map((t) => (
                 <div key={t.id} className="card" style={{ padding: 16 }}>
                   <div
                     style={{
@@ -133,6 +151,16 @@ export default function Threats() {
                       >
                         Source: {t.source} • Detected {t.time}
                       </small>
+                      <small
+                        style={{
+                          display: "block",
+                          marginTop: 2,
+                          fontSize: 12,
+                          color: "var(--p-muted)",
+                        }}
+                      >
+                        Scope: {t.scope}
+                      </small>
                     </div>
 
                     <div style={{ textAlign: "right" }}>
@@ -142,11 +170,26 @@ export default function Threats() {
                           display: "block",
                           marginTop: 6,
                           fontSize: 12,
+                          fontWeight: 700,
                         }}
                       >
                         {t.status}
                       </small>
                     </div>
+                  </div>
+
+                  {/* ===== RESPONSE CONTEXT ===== */}
+                  <div
+                    style={{
+                      marginTop: 12,
+                      fontSize: 12,
+                      color: "var(--p-muted)",
+                    }}
+                  >
+                    Recommended next step:
+                    <br />– Review impact
+                    <br />– Validate containment
+                    <br />– Assign remediation owner
                   </div>
                 </div>
               ))}
@@ -163,42 +206,42 @@ export default function Threats() {
 
         {/* ===== RIGHT: ANALYST GUIDANCE ===== */}
         <aside className="postureCard">
-          <h3>Analyst Guidance</h3>
+          <h3>Response Guidance</h3>
           <p className="muted">
-            Prioritize threats with the highest impact first.
+            Focus on threats with highest risk and exposure.
           </p>
 
           <ul className="list">
             <li>
               <span className="dot bad" />
               <div>
-                <b>Immediate Action Required</b>
-                <small>Critical threats are active</small>
+                <b>Critical Threats</b>
+                <small>Immediate response required</small>
               </div>
             </li>
 
             <li>
               <span className="dot warn" />
               <div>
-                <b>Investigate High Severity</b>
-                <small>Potential lateral movement</small>
+                <b>Ongoing Investigations</b>
+                <small>Monitor for escalation</small>
               </div>
             </li>
 
             <li>
               <span className="dot ok" />
               <div>
-                <b>Containment Working</b>
-                <small>Some threats already mitigated</small>
+                <b>Contained Events</b>
+                <small>No active spread detected</small>
               </div>
             </li>
           </ul>
 
           <p className="muted" style={{ marginTop: 14 }}>
             Ask the assistant:
-            <br />• “Which threat should I handle first?”
-            <br />• “What is the business impact?”
-            <br />• “How do I remediate this?”
+            <br />• “Which threat is highest priority?”
+            <br />• “What system is most at risk?”
+            <br />• “What should be done next?”
           </p>
         </aside>
       </div>
