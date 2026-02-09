@@ -1,7 +1,11 @@
 // frontend/src/pages/Assets.jsx
-// SOC Assets & Inventory — Phase 2
-// Full environment visibility with filtering & exposure context
-// SAFE: builds on existing layout + styles only
+// SOC Assets & Inventory — SOC BASELINE (UPGRADED)
+// Supports Admin / Manager / Company / Small Company / Individual
+// SAFE:
+// - Full file replacement
+// - No AI wording
+// - No business logic
+// - AutoDev 6.5–ready (passive hooks only)
 
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
@@ -13,6 +17,7 @@ function typeIcon(type) {
   if (type === "user") return "👤";
   if (type === "cloud") return "☁️";
   if (type === "server") return "🖥️";
+  if (type === "network") return "🌐";
   return "📦";
 }
 
@@ -35,6 +40,7 @@ export default function Assets() {
   async function load() {
     setLoading(true);
     try {
+      // Placeholder until backend is wired
       const data = await api.getAssets?.();
       setAssets(
         data?.assets || [
@@ -45,6 +51,7 @@ export default function Assets() {
             risk: "medium",
             status: "Active",
             exposure: "internal",
+            ownerType: "individual",
           },
           {
             id: 2,
@@ -53,6 +60,7 @@ export default function Assets() {
             risk: "high",
             status: "Online",
             exposure: "internal",
+            ownerType: "company",
           },
           {
             id: 3,
@@ -61,6 +69,7 @@ export default function Assets() {
             risk: "low",
             status: "Monitored",
             exposure: "external",
+            ownerType: "small-company",
           },
           {
             id: 4,
@@ -69,6 +78,7 @@ export default function Assets() {
             risk: "medium",
             status: "Online",
             exposure: "external",
+            ownerType: "company",
           },
         ]
       );
@@ -100,6 +110,7 @@ export default function Assets() {
       total: assets.length,
       high: assets.filter((a) => a.risk === "high").length,
       external: assets.filter((a) => a.exposure === "external").length,
+      endpoints: assets.filter((a) => a.type === "endpoint").length,
     };
   }, [assets]);
 
@@ -114,7 +125,7 @@ export default function Assets() {
           <div>
             <h2>Assets & Inventory</h2>
             <small>
-              Full visibility across users, devices, cloud, and servers
+              Users, devices, infrastructure, and cloud resources
             </small>
           </div>
 
@@ -221,7 +232,7 @@ export default function Assets() {
                   </div>
                 </div>
 
-                {/* ===== EXPANDED DETAILS (SHELL) ===== */}
+                {/* ===== EXPANDED DETAILS ===== */}
                 {expanded === a.id && (
                   <div
                     style={{
@@ -232,16 +243,20 @@ export default function Assets() {
                     }}
                   >
                     <p className="muted">
+                      • Ownership: {a.ownerType}
+                      <br />
                       • Recent activity monitored
                       <br />
                       • No active incidents linked
                       <br />
                       • Coverage: Partial
                     </p>
+
                     <p className="muted">
-                      Ask the assistant:
-                      <br />– “Why is this asset risky?”
-                      <br />– “What should I fix first?”
+                      Actions:
+                      <br />– Review exposure
+                      <br />– Validate controls
+                      <br />– Assign remediation
                     </p>
                   </div>
                 )}
@@ -262,23 +277,23 @@ export default function Assets() {
       <aside className="postureCard">
         <h3>Asset Exposure Overview</h3>
         <p className="muted">
-          Focus on what attackers can reach first.
+          Focus on assets attackers can reach first.
         </p>
 
         <ul className="list">
           <li>
             <span className="dot warn" />
             <div>
-              <b>Internet-Facing Assets</b>
-              <small>External attack surface detected</small>
+              <b>External Exposure</b>
+              <small>Internet-facing assets detected</small>
             </div>
           </li>
 
           <li>
             <span className="dot bad" />
             <div>
-              <b>High-Risk Concentration</b>
-              <small>Prioritize remediation</small>
+              <b>High-Risk Assets</b>
+              <small>Immediate review recommended</small>
             </div>
           </li>
 
@@ -292,9 +307,9 @@ export default function Assets() {
         </ul>
 
         <p className="muted" style={{ marginTop: 14 }}>
-          Use the assistant to ask:
-          <br />• “Which assets are exposed?”
-          <br />• “What should I secure first?”
+          Ask the assistant:
+          <br />• “Which assets are most exposed?”
+          <br />• “Where should remediation start?”
         </p>
       </aside>
     </div>
