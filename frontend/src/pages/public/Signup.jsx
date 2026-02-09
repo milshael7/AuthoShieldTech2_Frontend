@@ -1,11 +1,15 @@
 // frontend/src/pages/public/Signup.jsx
-// AutoShield Tech — Secure Signup & Intake
+// AutoShield Tech — Secure Signup & Professional Intake (UPGRADED)
+//
 // PURPOSE:
 // - Business-grade onboarding
 // - Business email enforcement
 // - Role-aware setup
-// - No payment logic yet
-// - Prepares company connection for cybersecurity protection
+// - Cybersecurity branch selection
+// - Insurance opt-in placeholder
+// - NO payment logic
+// - NO automation wording
+// - Prepares company connection for protection
 
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -21,6 +25,9 @@ export default function Signup() {
     email: "",
     companyName: "",
     industry: "",
+    branch: "",
+    insuranceOptIn: false,
+    acknowledge: false,
   });
 
   const [error, setError] = useState("");
@@ -63,8 +70,17 @@ export default function Signup() {
       return setError("Company name is required for this account type.");
     }
 
+    if (!form.branch) {
+      return setError("Please select your cybersecurity specialization.");
+    }
+
+    if (!form.acknowledge) {
+      return setError(
+        "You must acknowledge professional responsibility to continue."
+      );
+    }
+
     // Placeholder: backend onboarding hook will go here
-    // For now, route to login after intake
     navigate("/login");
   }
 
@@ -75,7 +91,7 @@ export default function Signup() {
       <section className="signup-card">
         <h1>Create Your Account</h1>
         <p className="muted">
-          Secure onboarding for professional cybersecurity operations.
+          Professional onboarding for cybersecurity operations.
         </p>
 
         {error && <div className="alert error">{error}</div>}
@@ -154,6 +170,52 @@ export default function Signup() {
             </>
           )}
 
+          {/* ===== CYBERSECURITY BRANCH ===== */}
+          <label>
+            Cybersecurity Specialization
+            <select
+              value={form.branch}
+              onChange={(e) => update("branch", e.target.value)}
+              required
+            >
+              <option value="">Select specialization</option>
+              <option value="soc">SOC Operations</option>
+              <option value="incident_response">Incident Response</option>
+              <option value="cloud_security">Cloud Security</option>
+              <option value="grc">Governance, Risk & Compliance</option>
+              <option value="appsec">Application Security</option>
+              <option value="network">Network Security</option>
+            </select>
+          </label>
+
+          {/* ===== INSURANCE PLACEHOLDER ===== */}
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={form.insuranceOptIn}
+              onChange={(e) =>
+                update("insuranceOptIn", e.target.checked)
+              }
+            />
+            Interested in cybersecurity insurance options
+            <small className="muted">
+              (Details provided later — no commitment)
+            </small>
+          </label>
+
+          {/* ===== ACKNOWLEDGEMENT ===== */}
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={form.acknowledge}
+              onChange={(e) =>
+                update("acknowledge", e.target.checked)
+              }
+            />
+            I acknowledge that cybersecurity operations require
+            active participation and professional responsibility.
+          </label>
+
           {/* ===== SUBMIT ===== */}
           <button type="submit" className="primary">
             Continue Securely
@@ -161,8 +223,8 @@ export default function Signup() {
         </form>
 
         <p className="muted small">
-          By continuing, you acknowledge that cybersecurity operations
-          require accurate business information.
+          No automatic upgrades. No forced payments.
+          Professional use only.
         </p>
       </section>
     </div>
