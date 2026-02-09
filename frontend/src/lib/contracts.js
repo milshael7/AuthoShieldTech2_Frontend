@@ -9,9 +9,17 @@
    - Prevents frontend/backend drift
    - Backend MUST conform to these contracts
 
-   ⚠️ NO UI
-   ⚠️ NO API CALLS
-   ⚠️ NO BUSINESS LOGIC
+   RULES:
+   - NO UI
+   - NO API CALLS
+   - NO BUSINESS LOGIC
+   - DATA SHAPE ONLY
+
+   NOTE:
+   - "AutoDev 6.5" is a SYSTEM ACTOR (not called AI anywhere)
+   - Companies may NOT use AutoDev 6.5
+   - Individuals MAY upgrade to AutoDev 6.5
+   - Small Companies may upgrade to Full Company ONLY
    ========================================================= */
 
 /* =============================
@@ -51,12 +59,63 @@ export const AssetType = {
 };
 
 /* =============================
+   PLATFORM ROLES
+   ============================= */
+
+export const PlatformRole = {
+  ADMIN: "admin",
+  MANAGER: "manager",
+  COMPANY: "company",
+  SMALL_COMPANY: "small_company",
+  INDIVIDUAL: "individual",
+};
+
+/* =============================
+   AUTODEV 6.5 (SYSTEM ACTOR)
+   ============================= */
+
+export const AutoDevMode = {
+  DISABLED: "disabled",
+  ADVISORY: "advisory", // guidance + reporting only
+  EXECUTION: "execution", // performs cyber tasks autonomously
+};
+
+export const AutoDevContract = {
+  enabled: false,
+  mode: AutoDevMode.DISABLED,
+
+  // Who can use AutoDev 6.5
+  allowedRoles: ["individual"],
+
+  // Scheduling (AutoDev does NOT work 24/7 unless configured)
+  schedule: {
+    timezone: "UTC",
+    workDays: ["mon", "tue", "wed", "thu", "fri"],
+    startHour: "09:00",
+    endHour: "17:00",
+  },
+
+  // Reporting behavior
+  reporting: {
+    enabled: true,
+    delivery: "dashboard | email",
+    recipientEmails: [],
+  },
+
+  // Task lifecycle rules
+  lifecycle: {
+    finishActiveTaskOnCancel: true,
+    stopNewTasksOnCancel: true,
+  },
+};
+
+/* =============================
    POSTURE
    ============================= */
 
 export const PostureSummaryContract = {
   scope: {
-    type: "global | manager | company | user",
+    type: "global | manager | company | small_company | individual",
   },
   score: 0, // 0–100
   users: 0,
@@ -65,6 +124,7 @@ export const PostureSummaryContract = {
   browsers: 0,
   drives: 0,
   assets: 0,
+  highRiskAssets: 0,
   updatedAt: "ISO_TIMESTAMP",
 };
 
@@ -164,6 +224,28 @@ export const ReportMetricsContract = {
     incidents: "▲ | ▼ | =",
     risk: "▲ | ▼ | =",
   },
+};
+
+/* =============================
+   SUBSCRIPTION & UPGRADE RULES
+   ============================= */
+
+export const SubscriptionContract = {
+  role: PlatformRole.INDIVIDUAL,
+
+  limits: {
+    maxUsers: 1,
+    maxAssets: 50,
+    maxIncidents: 100,
+  },
+
+  upgradePaths: {
+    individual: ["autodev"],
+    small_company: ["company"],
+    company: [],
+  },
+
+  autodevAllowed: false,
 };
 
 /* =============================
