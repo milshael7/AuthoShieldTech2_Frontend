@@ -13,6 +13,13 @@ import UserLayout from "./layouts/UserLayout.jsx";
 import Login from "./pages/Login.jsx";
 import Trading from "./pages/Trading.jsx";
 import Posture from "./pages/Posture.jsx";
+import Assets from "./pages/Assets.jsx";
+import Threats from "./pages/Threats.jsx";
+import Incidents from "./pages/Incidents.jsx";
+import Vulnerabilities from "./pages/Vulnerabilities.jsx";
+import Compliance from "./pages/Compliance.jsx";
+import Policies from "./pages/Policies.jsx";
+import Reports from "./pages/Reports.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
@@ -53,7 +60,7 @@ export default function App() {
         {/* PUBLIC */}
         <Route path="/login" element={<Login />} />
 
-        {/* ADMIN */}
+        {/* ADMIN — FULL SOC */}
         <Route
           path="/admin/*"
           element={
@@ -63,11 +70,18 @@ export default function App() {
           }
         >
           <Route index element={<Posture scope="global" />} />
+          <Route path="assets" element={<Assets />} />
+          <Route path="threats" element={<Threats />} />
+          <Route path="incidents" element={<Incidents />} />
+          <Route path="vulnerabilities" element={<Vulnerabilities />} />
+          <Route path="compliance" element={<Compliance />} />
+          <Route path="policies" element={<Policies />} />
+          <Route path="reports" element={<Reports />} />
           <Route path="trading" element={<Trading mode="admin" />} />
           <Route path="notifications" element={<Notifications />} />
         </Route>
 
-        {/* MANAGER */}
+        {/* MANAGER — OPERATIONAL SOC */}
         <Route
           path="/manager/*"
           element={
@@ -77,10 +91,15 @@ export default function App() {
           }
         >
           <Route index element={<Posture scope="manager" />} />
+          <Route path="assets" element={<Assets />} />
+          <Route path="threats" element={<Threats />} />
+          <Route path="incidents" element={<Incidents />} />
+          <Route path="vulnerabilities" element={<Vulnerabilities />} />
+          <Route path="reports" element={<Reports />} />
           <Route path="notifications" element={<Notifications />} />
         </Route>
 
-        {/* COMPANY */}
+        {/* COMPANY — VISIBILITY SOC */}
         <Route
           path="/company/*"
           element={
@@ -90,6 +109,10 @@ export default function App() {
           }
         >
           <Route index element={<Posture scope="company" />} />
+          <Route path="assets" element={<Assets />} />
+          <Route path="threats" element={<Threats />} />
+          <Route path="incidents" element={<Incidents />} />
+          <Route path="reports" element={<Reports />} />
           <Route path="notifications" element={<Notifications />} />
         </Route>
 
