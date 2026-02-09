@@ -25,7 +25,7 @@ import Notifications from "./pages/Notifications.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
 /* =========================================================
-   ROLE GUARDS — SOC HARDENED
+   ROLE GUARDS — SOC HARDENED (CONTRACT-ALIGNED)
    ========================================================= */
 
 function RequireRole({ allow, children }) {
@@ -151,34 +151,34 @@ export default function App() {
         <Route
           path="/small-company/*"
           element={
-            <RequireRole allow={["small-company"]}>
+            <RequireRole allow={["small_company"]}>
               <SmallCompanyLayout />
             </RequireRole>
           }
         >
-          <Route index element={<Posture scope="small-company" />} />
+          <Route index element={<Posture scope="small_company" />} />
           <Route path="assets" element={<Assets />} />
           <Route path="threats" element={<Threats />} />
           <Route path="incidents" element={<Incidents />} />
           <Route path="reports" element={<Reports />} />
           <Route path="notifications" element={<Notifications />} />
 
-          {/* Upgrade placeholder */}
+          {/* Upgrade placeholder (NO LOGIC YET) */}
           <Route
             path="upgrade"
             element={
               <div style={{ padding: 40 }}>
                 <h2>Upgrade to Company</h2>
                 <p>
-                  Unlock full company features, team management, and expanded
-                  security controls.
+                  Unlock full company features, team access, and expanded
+                  security capabilities.
                 </p>
               </div>
             }
           />
         </Route>
 
-        {/* ================= USER ================= */}
+        {/* ================= INDIVIDUAL ================= */}
         <Route
           path="/user/*"
           element={
@@ -187,7 +187,7 @@ export default function App() {
             </RequireRole>
           }
         >
-          <Route index element={<Posture scope="user" />} />
+          <Route index element={<Posture scope="individual" />} />
           <Route path="notifications" element={<Notifications />} />
         </Route>
 
@@ -206,7 +206,7 @@ export default function App() {
                   ? "/manager"
                   : role === "company"
                   ? "/company"
-                  : role === "small-company"
+                  : role === "small_company"
                   ? "/small-company"
                   : "/user"
               }
