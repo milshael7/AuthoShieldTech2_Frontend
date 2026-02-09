@@ -3,14 +3,19 @@ import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getSavedUser } from "./lib/api.js";
 
-// Layouts (UNCHANGED)
+// Layouts
 import AdminLayout from "./layouts/AdminLayout.jsx";
 import ManagerLayout from "./layouts/ManagerLayout.jsx";
 import CompanyLayout from "./layouts/CompanyLayout.jsx";
 import SmallCompanyLayout from "./layouts/SmallCompanyLayout.jsx";
 import UserLayout from "./layouts/UserLayout.jsx";
 
-// Pages (EXISTING)
+// Public Pages
+import Landing from "./pages/public/Landing.jsx";
+import Pricing from "./pages/public/Pricing.jsx";
+import Signup from "./pages/public/Signup.jsx";
+
+// Auth / App Pages
 import Login from "./pages/Login.jsx";
 import Trading from "./pages/Trading.jsx";
 import Posture from "./pages/Posture.jsx";
@@ -23,12 +28,6 @@ import Policies from "./pages/Policies.jsx";
 import Reports from "./pages/Reports.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import NotFound from "./pages/NotFound.jsx";
-
-// PUBLIC PAGES (NEW – already exist in your repo)
-import Pricing from "./pages/public/Pricing.jsx";
-import Signup from "./pages/public/Signup.jsx";
-// Landing page will be created next
-import Landing from "./pages/public/Landing.jsx"; // NEW FILE (next step)
 
 /* =========================================================
    ROLE GUARDS — SOC HARDENED (CONTRACT-ALIGNED)
@@ -79,9 +78,9 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         {/* ================= PUBLIC ================= */}
-        <Route path="/" element={<Landing />} />          {/* NEW */}
-        <Route path="/pricing" element={<Pricing />} />   {/* NEW */}
-        <Route path="/signup" element={<Signup />} />     {/* NEW */}
+        <Route path="/" element={<Landing />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
 
         {/* ================= ADMIN — FULL SOC ================= */}
@@ -169,10 +168,6 @@ export default function App() {
           <Route path="incidents" element={<Incidents />} />
           <Route path="reports" element={<Reports />} />
           <Route path="notifications" element={<Notifications />} />
-          <Route path="upgrade" element={<div style={{ padding: 40 }}>
-            <h2>Upgrade to Company</h2>
-            <p>Upgrade notification only. No forced upgrades.</p>
-          </div>} />
         </Route>
 
         {/* ================= INDIVIDUAL ================= */}
