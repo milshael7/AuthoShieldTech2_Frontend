@@ -15,8 +15,8 @@
    - NO BUSINESS LOGIC
    - DATA SHAPE ONLY
 
-   NOTE:
-   - "AutoDev 6.5" is a SYSTEM ACTOR (not called AI anywhere)
+   SYSTEM NOTE:
+   - "AutoDev 6.5" is a SYSTEM ACTOR (never called AI)
    - Companies may NOT use AutoDev 6.5
    - Individuals MAY upgrade to AutoDev 6.5
    - Small Companies may upgrade to Full Company ONLY
@@ -71,23 +71,22 @@ export const PlatformRole = {
 };
 
 /* =============================
-   AUTODEV 6.5 (SYSTEM ACTOR)
+   AUTODEV 6.5 — SYSTEM ACTOR
    ============================= */
 
 export const AutoDevMode = {
   DISABLED: "disabled",
-  ADVISORY: "advisory", // guidance + reporting only
-  EXECUTION: "execution", // performs cyber tasks autonomously
+  ADVISORY: "advisory",     // guidance + reporting only
+  EXECUTION: "execution",   // performs cyber tasks autonomously
 };
 
 export const AutoDevContract = {
   enabled: false,
   mode: AutoDevMode.DISABLED,
 
-  // Who can use AutoDev 6.5
-  allowedRoles: ["individual"],
+  // Strict eligibility
+  allowedRoles: [PlatformRole.INDIVIDUAL],
 
-  // Scheduling (AutoDev does NOT work 24/7 unless configured)
   schedule: {
     timezone: "UTC",
     workDays: ["mon", "tue", "wed", "thu", "fri"],
@@ -95,18 +94,52 @@ export const AutoDevContract = {
     endHour: "17:00",
   },
 
-  // Reporting behavior
   reporting: {
     enabled: true,
     delivery: "dashboard | email",
     recipientEmails: [],
   },
 
-  // Task lifecycle rules
   lifecycle: {
     finishActiveTaskOnCancel: true,
     stopNewTasksOnCancel: true,
   },
+};
+
+/* =============================
+   AUTODEV TASK & REPORTING
+   ============================= */
+
+export const AutoDevTaskContract = {
+  id: "string",
+  type: "detection | mitigation | investigation | hardening",
+  status: "pending | running | waiting_human | completed | failed",
+  startedAt: "ISO_TIMESTAMP",
+  completedAt: "ISO_TIMESTAMP | null",
+
+  requiresHumanAction: false,
+  humanInstructions: [],
+};
+
+export const AutoDevReportContract = {
+  id: "string",
+  generatedAt: "ISO_TIMESTAMP",
+  summary: "string",
+
+  stepsPerformed: [
+    {
+      step: "string",
+      outcome: "string",
+    },
+  ],
+
+  evidence: {
+    charts: [],
+    logs: [],
+    metrics: {},
+  },
+
+  shareable: true,
 };
 
 /* =============================
@@ -117,7 +150,7 @@ export const PostureSummaryContract = {
   scope: {
     type: "global | manager | company | small_company | individual",
   },
-  score: 0, // 0–100
+  score: 0,
   users: 0,
   devices: 0,
   mailboxes: 0,
@@ -183,7 +216,7 @@ export const VulnerabilityContract = {
   id: "CVE-YYYY-NNNN",
   asset: "string",
   severity: Severity.HIGH,
-  score: 0.0, // CVSS
+  score: 0.0,
   status: "Open | Mitigated | Accepted",
 };
 
@@ -207,7 +240,7 @@ export const PolicyContract = {
   name: "string",
   category: "string",
   status: "enforced | partial | missing",
-  acknowledged: 0, // percentage
+  acknowledged: 0,
 };
 
 /* =============================
@@ -215,7 +248,7 @@ export const PolicyContract = {
    ============================= */
 
 export const ReportMetricsContract = {
-  postureScore: 0, // 0–100
+  postureScore: 0,
   incidents: 0,
   criticalFindings: 0,
   resolvedIssues: 0,
@@ -227,7 +260,7 @@ export const ReportMetricsContract = {
 };
 
 /* =============================
-   SUBSCRIPTION & UPGRADE RULES
+   SUBSCRIPTIONS & LIMITS
    ============================= */
 
 export const SubscriptionContract = {
@@ -249,11 +282,22 @@ export const SubscriptionContract = {
 };
 
 /* =============================
-   SOC MATURITY (NEXT PHASE)
+   UPGRADE EVENTS
+   ============================= */
+
+export const UpgradeEventContract = {
+  fromRole: PlatformRole.INDIVIDUAL,
+  toRole: PlatformRole.SMALL_COMPANY,
+  triggeredAt: "ISO_TIMESTAMP",
+  effectiveImmediately: true,
+};
+
+/* =============================
+   SOC MATURITY
    ============================= */
 
 export const SocMaturityContract = {
-  overall: 0, // 0–100
+  overall: 0,
   postureWeight: 0,
   threatWeight: 0,
   vulnerabilityWeight: 0,
