@@ -1,17 +1,17 @@
 // frontend/src/layouts/AdminLayout.jsx
-// Admin Layout — FULL SOC CONTROL
+// Admin Layout — FULL SOC CONTROL (UPGRADED)
 //
 // SAFE:
 // - Full file replacement
-// - Default export (fixes Vercel error)
-// - Matches existing nav + layout.css
-// - No pricing / no auth changes
-// - No business logic
+// - Default export
+// - Visual upgrade only
+// - No auth / pricing / business logic changes
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearToken, clearUser } from "../lib/api";
 import AuthoDevPanel from "../components/AuthoDevPanel";
+import Logo from "../components/Logo.jsx";
 import "../styles/layout.css";
 
 export default function AdminLayout() {
@@ -37,12 +37,15 @@ export default function AdminLayout() {
 
       {/* ================= SIDEBAR ================= */}
       <aside className="layout-sidebar admin">
+        {/* BRAND */}
         <div className="layout-brand">
-          <strong>AutoShield</strong>
-          <span>Admin SOC</span>
+          <Logo size="md" />
+          <span className="muted" style={{ fontSize: 12 }}>
+            Admin SOC
+          </span>
         </div>
 
-        {/* ===== NAVIGATION ===== */}
+        {/* NAVIGATION */}
         <nav className="layout-nav">
           <NavLink to="/admin" end onClick={() => setMenuOpen(false)}>
             Security Posture
@@ -60,7 +63,10 @@ export default function AdminLayout() {
             Incidents
           </NavLink>
 
-          <NavLink to="/admin/vulnerabilities" onClick={() => setMenuOpen(false)}>
+          <NavLink
+            to="/admin/vulnerabilities"
+            onClick={() => setMenuOpen(false)}
+          >
             Vulnerabilities
           </NavLink>
 
@@ -84,7 +90,7 @@ export default function AdminLayout() {
             Notifications
           </NavLink>
 
-          <hr style={{ opacity: 0.2 }} />
+          <hr style={{ opacity: 0.18 }} />
 
           <NavLink to="/manager" onClick={() => setMenuOpen(false)}>
             Manager View
@@ -104,7 +110,10 @@ export default function AdminLayout() {
       <main className="layout-main">
         {/* ================= TOP BAR ================= */}
         <header className="layout-topbar">
-          <div className="topbar-left">
+          <div
+            className="topbar-left"
+            style={{ display: "flex", alignItems: "center", gap: 14 }}
+          >
             <button
               className="btn btn-icon mobile-menu-btn"
               onClick={() => setMenuOpen(true)}
@@ -113,10 +122,15 @@ export default function AdminLayout() {
               ☰
             </button>
 
-            <h1 style={{ margin: 0 }}>Admin Security Operations</h1>
+            <h1 style={{ margin: 0, fontSize: 18 }}>
+              Admin Security Operations
+            </h1>
           </div>
 
-          <div className="topbar-right">
+          <div
+            className="topbar-right"
+            style={{ display: "flex", alignItems: "center", gap: 12 }}
+          >
             <button
               className="btn"
               onClick={() => setAssistantOpen((v) => !v)}
