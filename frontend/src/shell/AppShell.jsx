@@ -3,6 +3,7 @@
 //
 // PURPOSE:
 // - Global background mounting
+// - Global top header mounting
 // - Brand watermark layer
 // - Single visual wrapper for entire platform
 // - Z-index & render safety boundary
@@ -18,6 +19,7 @@
 import React from "react";
 import BackgroundLayer from "../components/BackgroundLayer.jsx";
 import BrandMark from "../components/BrandMark.jsx";
+import TopHeader from "../components/TopHeader.jsx";
 import "../styles/background.css";
 
 export default function AppShell({ children }) {
@@ -28,8 +30,10 @@ export default function AppShell({ children }) {
         position: "relative",
         minHeight: "100svh",
         width: "100%",
-        backgroundColor: "#0B0E14", // hard fallback (prevents blue/white screen)
+        backgroundColor: "#0B0E14", // hard fallback
         isolation: "isolate",       // z-index safety (Safari fix)
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       {/* ===== BACKGROUND LAYER (VISUAL ONLY) ===== */}
@@ -39,7 +43,7 @@ export default function AppShell({ children }) {
           position: "fixed",
           inset: 0,
           zIndex: 0,
-          pointerEvents: "none",     // CRITICAL: never capture input
+          pointerEvents: "none",
         }}
       >
         <BackgroundLayer />
@@ -58,14 +62,27 @@ export default function AppShell({ children }) {
         <BrandMark />
       </div>
 
+      {/* ===== GLOBAL TOP HEADER ===== */}
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+          width: "100%",
+        }}
+      >
+        <TopHeader />
+      </div>
+
       {/* ===== APPLICATION UI ===== */}
       <div
         className="app-shell-content"
         style={{
           position: "relative",
           zIndex: 10,
-          minHeight: "100svh",
+          flex: 1,
           width: "100%",
+          overflow: "auto", // ✅ FIXES: cannot scroll / cannot type
         }}
       >
         {children}
