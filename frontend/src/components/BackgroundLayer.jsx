@@ -1,44 +1,37 @@
 /**
- * AutoShield Tech — Background Layer
+ * AutoShield Tech — useBackground Hook
  *
  * RESPONSIBILITY:
- * - Render rotating background images
- * - Apply security-grade overlays
- * - Stay behind all UI
+ * - Central background state
+ * - Future-safe for trading / SOC / branding visuals
  *
  * RULES:
+ * - No DOM access
+ * - No layout logic
  * - No business logic
- * - Uses useBackground hook
- * - Layout-safe (position: fixed)
  */
 
-import React from "react";
-import useBackground from "../hooks/useBackground";
+import { useEffect, useState } from "react";
 
-export default function BackgroundLayer() {
-  const { background } = useBackground();
+const DEFAULT_BACKGROUNDS = [
+  {
+    id: "soc-default",
+    src: "/assets/backgrounds/soc-dark-01.jpg",
+    context: "global",
+  },
+];
 
-  if (!background) return null;
+export default function useBackground() {
+  const [background, setBackground] = useState(null);
 
-  return (
-    <div
-      className="background-layer"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: -1,
-        backgroundImage: `
-          linear-gradient(
-            rgba(11,14,20,0.75),
-            rgba(11,14,20,0.85)
-          ),
-          url(${background.src})
-        `,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-        transition: "background-image 0.6s ease-in-out",
-      }}
-    />
-  );
+  useEffect(() => {
+    // Default background for now
+    // (later: switch based on route / trading mode)
+    setBackground(DEFAULT_BACKGROUNDS[0]);
+  }, []);
+
+  return {
+    background,
+    setBackground, // exposed for future routing / trading logic
+  };
 }
