@@ -1,5 +1,5 @@
 // frontend/src/pages/NotFound.jsx
-// AutoShield Tech — Route Safety Page
+// AutoShield Tech — Route Safety Page (HARDENED)
 //
 // PURPOSE:
 // - Prevent blank / blue-screen confusion
@@ -11,11 +11,28 @@
 // - No redirects
 // - Visual-only safety net
 
-import React from "react";
+import React, { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function NotFound() {
   const navigate = useNavigate();
+
+  // ---- SAFETY: guarded navigation (mobile + Safari safe)
+  const goHome = useCallback(() => {
+    try {
+      navigate("/");
+    } catch {
+      window.location.href = "/";
+    }
+  }, [navigate]);
+
+  const goBack = useCallback(() => {
+    try {
+      navigate(-1);
+    } catch {
+      window.history.back();
+    }
+  }, [navigate]);
 
   return (
     <div
@@ -80,14 +97,14 @@ export default function NotFound() {
         >
           <button
             className="primary"
-            onClick={() => navigate("/")}
+            onClick={goHome}
             style={{ minWidth: 140 }}
           >
             Go to Home
           </button>
 
           <button
-            onClick={() => navigate(-1)}
+            onClick={goBack}
             style={{ minWidth: 140 }}
           >
             Go Back
