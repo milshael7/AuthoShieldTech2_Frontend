@@ -3,78 +3,111 @@ import React, { useEffect, useState } from "react";
 /**
  * Notifications.jsx
  * SOC-style Notifications & Alerts
- * Matches Posture dashboard look & feel
- * UI-only (safe to wire backend later)
+ *
+ * ROLE:
+ * - System alerts
+ * - Security findings
+ * - Operational signals
+ *
+ * SAFE:
+ * - UI only
+ * - No backend dependency
+ * - Matches platform.css + layout.css
  */
 
 export default function Notifications() {
   const [items, setItems] = useState([]);
+  const [filter, setFilter] = useState("all"); // all | ok | warn | bad
 
   useEffect(() => {
-    // Placeholder data (backend can replace later)
     setItems([
       {
         id: 1,
         level: "warn",
         title: "Suspicious Login Attempt",
-        message: "Multiple failed login attempts detected from a new location.",
+        message:
+          "Multiple failed login attempts detected from a new location.",
         time: "2 minutes ago",
       },
       {
         id: 2,
         level: "ok",
         title: "Security Scan Completed",
-        message: "Daily posture scan completed with no critical findings.",
+        message:
+          "Daily posture scan completed with no critical findings.",
         time: "1 hour ago",
       },
       {
         id: 3,
         level: "bad",
         title: "Outdated Endpoint Agent",
-        message: "One device is running an outdated security agent.",
+        message:
+          "One device is running an outdated security agent.",
         time: "Yesterday",
       },
     ]);
   }, []);
 
+  const visible = filter === "all"
+    ? items
+    : items.filter((i) => i.level === filter);
+
   return (
     <div className="postureWrap">
-      {/* ================= LEFT: NOTIFICATIONS ================= */}
+      {/* ================= LEFT ================= */}
       <section className="postureCard">
         <div className="postureTop">
-          <div className="postureTitle">
+          <div>
             <h2>Notifications</h2>
-            <small>System alerts, security events, and AI activity</small>
+            <small>System alerts and security events</small>
+          </div>
+
+          {/* FILTER */}
+          <div className="ctrlRow">
+            {["all", "ok", "warn", "bad"].map((f) => (
+              <button
+                key={f}
+                className={`pill ${filter === f ? "active" : ""}`}
+                onClick={() => setFilter(f)}
+              >
+                {f === "all"
+                  ? "All"
+                  : f === "ok"
+                  ? "OK"
+                  : f === "warn"
+                  ? "Warnings"
+                  : "Critical"}
+              </button>
+            ))}
           </div>
         </div>
 
-        {items.length === 0 && (
-          <p className="muted">No notifications available.</p>
+        {visible.length === 0 && (
+          <p className="muted" style={{ marginTop: 16 }}>
+            No notifications for this filter.
+          </p>
         )}
 
-        <ul className="list" style={{ marginTop: 16 }}>
-          {items.map((n) => (
+        <ul className="list" style={{ marginTop: 18 }}>
+          {visible.map((n) => (
             <li key={n.id}>
               <span className={`dot ${n.level}`} />
               <div>
                 <b>{n.title}</b>
-                <div>
-                  <small>{n.message}</small>
-                </div>
-                <small className="muted">{n.time}</small>
+                <small>{n.message}</small>
+                <div className="muted">{n.time}</div>
               </div>
             </li>
           ))}
         </ul>
       </section>
 
-      {/* ================= RIGHT: CONTEXT / STATUS ================= */}
+      {/* ================= RIGHT ================= */}
       <aside className="postureCard">
         <h3>Notification Center</h3>
         <p className="muted">
-          This panel surfaces important system events, security alerts,
-          and automated findings. Review warnings promptly and resolve
-          critical issues to maintain a healthy security posture.
+          This panel highlights important operational and security
+          events. Address warnings promptly to maintain posture health.
         </p>
 
         <ul className="list">
@@ -82,14 +115,14 @@ export default function Notifications() {
             <span className="dot ok" />
             <div>
               <b>System Operational</b>
-              <small>No active outages detected</small>
+              <small>No outages detected</small>
             </div>
           </li>
           <li>
             <span className="dot warn" />
             <div>
-              <b>Attention Required</b>
-              <small>Some alerts need review</small>
+              <b>Review Required</b>
+              <small>Some alerts need attention</small>
             </div>
           </li>
         </ul>
