@@ -5,80 +5,86 @@ import "../styles/platform.css";
 
 /**
  * Trading.jsx
- * SOC-aligned Trading Oversight Module
+ * SOC-aligned Trading Oversight Module (HARDENED)
  *
  * PURPOSE:
- * - Central trading governance view (Admin)
- * - Paper vs Live awareness (UI-only)
- * - Trade limits & execution state visibility
- * - Market + Trading Room supervision
+ * - Central trading supervision
+ * - Paper vs Live governance (UI-only)
+ * - Shared limits & execution state
+ * - Market + Trading Room coordination
  *
- * RULES:
+ * HARD RULES:
  * - NO execution logic
  * - NO API keys
- * - NO AI control here
- * - Assistant handled ONLY by layout
+ * - NO automation
+ * - NO AI control
  */
 
 export default function Trading() {
   const [tab, setTab] = useState("market");
 
-  // Oversight controls (UI only)
-  const [mode, setMode] = useState("paper"); // paper | live
+  /* ================= GOVERNANCE STATE (UI ONLY) ================= */
+  const [mode, setMode] = useState("paper");            // paper | live
   const [dailyLimit, setDailyLimit] = useState(5);
   const [executionState, setExecutionState] = useState("idle"); // idle | armed | executing
+  const [tradesUsed, setTradesUsed] = useState(1);
 
   return (
     <div className="platformCard">
       {/* ================= HEADER ================= */}
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 18 }}>
         <h2 style={{ margin: 0 }}>Trading Oversight</h2>
         <p className="muted" style={{ marginTop: 6 }}>
-          Monitor markets, supervise AI-assisted execution, and enforce
-          trading governance.
+          Market supervision, execution governance, and operator control.
         </p>
       </div>
 
       {/* ================= GOVERNANCE PANEL ================= */}
-      <div className="platformCard" style={{ marginBottom: 18 }}>
-        <div className="grid" style={{ gap: 16 }}>
-          {/* Mode */}
+      <div className="platformCard" style={{ marginBottom: 22 }}>
+        <div
+          className="grid"
+          style={{
+            gap: 18,
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          }}
+        >
+          {/* MODE */}
           <div>
             <small className="muted">Execution Mode</small>
-            <div style={{ marginTop: 6 }}>
+            <div style={{ marginTop: 8 }}>
               <button
                 className={mode === "paper" ? "ptab active" : "ptab"}
                 onClick={() => setMode("paper")}
               >
-                Paper Trading
+                Paper
               </button>
               <button
-                className={mode === "live" ? "ptab active" : "ptab"}
+                className={mode === "live" ? "ptab active warn" : "ptab"}
                 onClick={() => setMode("live")}
                 style={{ marginLeft: 8 }}
               >
-                Live Trading
+                Live
               </button>
             </div>
           </div>
 
-          {/* Daily Limit */}
+          {/* DAILY LIMIT */}
           <div>
-            <small className="muted">Trades per Day (Limit)</small>
+            <small className="muted">Daily Trade Limit</small>
             <input
               type="number"
               min={1}
               max={50}
               value={dailyLimit}
               onChange={(e) => setDailyLimit(Number(e.target.value))}
-              style={{ marginTop: 6 }}
+              style={{ marginTop: 8, width: "100%" }}
             />
           </div>
 
-          {/* Execution State */}
+          {/* EXECUTION STATUS */}
           <div>
             <small className="muted">Execution Status</small>
-            <div style={{ marginTop: 6 }}>
+            <div style={{ marginTop: 10 }}>
               <span
                 className={`badge ${
                   executionState === "idle"
@@ -92,11 +98,19 @@ export default function Trading() {
               </span>
             </div>
           </div>
+
+          {/* USAGE */}
+          <div>
+            <small className="muted">Trades Used</small>
+            <div style={{ marginTop: 10, fontWeight: 700 }}>
+              {tradesUsed} / {dailyLimit}
+            </div>
+          </div>
         </div>
 
-        <p className="muted" style={{ marginTop: 12, fontSize: 13 }}>
-          Live trading requires additional authorization and is never enabled
-          automatically. All controls are logged.
+        <p className="muted" style={{ marginTop: 14, fontSize: 13 }}>
+          Live trading is never automatic. All actions require operator intent
+          and are subject to audit and limits.
         </p>
       </div>
 
@@ -108,14 +122,12 @@ export default function Trading() {
         >
           Market
         </button>
-
         <button
           className={tab === "room" ? "ptab active" : "ptab"}
           onClick={() => setTab("room")}
         >
           Trading Room
         </button>
-
         <button
           className={tab === "reports" ? "ptab active" : "ptab"}
           onClick={() => setTab("reports")}
@@ -127,7 +139,11 @@ export default function Trading() {
       {/* ================= CONTENT ================= */}
       {tab === "market" && (
         <section className="platformCard">
-          <Market />
+          <Market
+            mode={mode}
+            dailyLimit={dailyLimit}
+            tradesUsed={tradesUsed}
+          />
         </section>
       )}
 
@@ -169,8 +185,8 @@ export default function Trading() {
             <li>
               <span className="dot ok" />
               <div>
-                <b>AI Notes</b>
-                <small>Execution rationale &amp; observations</small>
+                <b>Execution Notes</b>
+                <small>Operator and system observations</small>
               </div>
             </li>
           </ul>
