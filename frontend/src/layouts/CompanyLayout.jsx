@@ -17,7 +17,7 @@
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearToken, clearUser } from "../lib/api.js";
-import AutoDevPanel from "../components/AutoDevPanel.jsx";
+import AuthoDevPanel from "../components/AuthoDevPanel";
 import "../styles/layout.css";
 
 export default function CompanyLayout() {
@@ -33,8 +33,16 @@ export default function CompanyLayout() {
 
   return (
     <div className={`layout-root ${menuOpen ? "sidebar-open" : ""}`}>
+      {/* ================= MOBILE OVERLAY ================= */}
+      {menuOpen && (
+        <div
+          className="sidebar-overlay"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+
       {/* ================= SIDEBAR ================= */}
-      <aside className="layout-sidebar">
+      <aside className="layout-sidebar company">
         <div className="layout-brand">
           <strong>AutoShield Tech</strong>
           <small className="muted">Company Visibility</small>
@@ -69,31 +77,28 @@ export default function CompanyLayout() {
           </NavLink>
         </nav>
 
-        <button onClick={logout} style={{ marginTop: "auto" }}>
+        <button className="btn logout-btn" onClick={logout}>
           Log out
         </button>
       </aside>
 
-      {/* ================= MOBILE OVERLAY ================= */}
-      <div
-        className="sidebar-overlay"
-        onClick={() => setMenuOpen(false)}
-      />
-
       {/* ================= MAIN ================= */}
-      <div className="layout-main">
+      <main className="layout-main">
         {/* ================= TOPBAR ================= */}
         <header className="layout-topbar">
           <button
-            className="mobile-menu-btn"
+            className="btn btn-icon mobile-menu-btn"
             onClick={() => setMenuOpen(true)}
             aria-label="Open menu"
           >
             ☰
           </button>
 
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <button onClick={() => setAdvisorOpen((v) => !v)}>
+          <div className="topbar-right">
+            <button
+              className="btn"
+              onClick={() => setAdvisorOpen((v) => !v)}
+            >
               Advisor
             </button>
             <span className="badge">Company</span>
@@ -101,9 +106,9 @@ export default function CompanyLayout() {
         </header>
 
         {/* ================= CONTENT ================= */}
-        <main className="layout-content">
+        <section className="layout-content">
           <Outlet />
-        </main>
+        </section>
 
         {/* ================= ADVISOR (VISIBILITY ONLY) ================= */}
         <section
@@ -115,12 +120,14 @@ export default function CompanyLayout() {
               className="ai-toggle"
               onClick={() => setAdvisorOpen((v) => !v)}
             >
-              {advisorOpen ? "▼ Hide Advisor" : "▲ Show Security Advisor"}
+              {advisorOpen
+                ? "▼ Hide Advisor"
+                : "▲ Show Security Advisor"}
             </button>
           </div>
 
           <div className="ai-drawer-body">
-            <AutoDevPanel
+            <AuthoDevPanel
               title="AutoDev 6.5 — Company Security Advisor"
               getContext={() => ({
                 role: "company",
@@ -130,7 +137,7 @@ export default function CompanyLayout() {
             />
           </div>
         </section>
-      </div>
+      </main>
     </div>
   );
 }
