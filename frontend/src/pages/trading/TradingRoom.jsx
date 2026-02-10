@@ -1,42 +1,62 @@
-// frontend/src/pages/trading/TradingRoom.jsx
 import React, { useMemo, useState, useEffect, useRef } from "react";
 
 /**
  * TradingRoom.jsx
  * SOC-aligned Trading Control Room
  *
- * - No AI mounted here
- * - AI assistant lives in layout (bottom drawer)
- * - This page is operational + telemetry only
+ * ROLE:
+ * - Operational governance
+ * - Risk & execution visibility
+ * - Operator-controlled intent only
+ *
+ * HARD RULES:
+ * - NO AI execution
+ * - NO API keys
+ * - NO auto trading
+ * - Assistant lives in layout ONLY
  */
 
-export default function TradingRoom() {
+export default function TradingRoom({
+  mode: parentMode = "paper",
+  dailyLimit = 5,
+  executionState: parentExecution = "idle",
+}) {
   /* ===================== STATE ===================== */
   const [log, setLog] = useState([
     { t: new Date().toLocaleTimeString(), m: "Trading room initialized." },
   ]);
 
-  const [mode, setMode] = useState("PAPER"); // PAPER | LIVE
+  const [mode, setMode] = useState(parentMode.toUpperCase()); // PAPER | LIVE
+  const [execution, setExecution] = useState(parentExecution); // idle | armed | executing | paused
   const [shortTrades, setShortTrades] = useState(true);
-  const [maxTrades, setMaxTrades] = useState(3);
   const [riskPct, setRiskPct] = useState(1);
+  const [tradesUsed, setTradesUsed] = useState(1);
 
-  /* ===== MOCK STATS (wire backend later) ===== */
+  /* ===================== SYNC WITH PARENT ===================== */
+  useEffect(() => {
+    setMode(parentMode.toUpperCase());
+  }, [parentMode]);
+
+  useEffect(() => {
+    setExecution(parentExecution);
+  }, [parentExecution]);
+
+  /* ===================== MOCK STATS ===================== */
   const stats = useMemo(
     () => ({
-      tradesToday: 1,
+      tradesToday: tradesUsed,
       wins: 1,
       losses: 0,
       lastAction: "BUY BTCUSDT",
     }),
-    []
+    [tradesUsed]
   );
 
   /* ===================== HELPERS ===================== */
   const pushLog = (m) =>
     setLog((p) => [{ t: new Date().toLocaleTimeString(), m }, ...p].slice(0, 50));
 
-  /* ===================== OPTIONAL AI LEARNING ===================== */
+  /* ===================== AI CONTEXT (ADVISORY ONLY) ===================== */
   const learnedRef = useRef(false);
 
   useEffect(() => {
@@ -52,11 +72,12 @@ export default function TradingRoom() {
         text: `
 AutoShield Trading Room (SOC Context):
 
-- PAPER = simulated trades
+- PAPER = simulated execution
 - LIVE = real capital exposure
-- Short trades favored by default
-- Risk is percentage-based
-- AI should explain trades clearly and conservatively
+- Operator-controlled execution only
+- Daily trade limits enforced visually
+- Risk defined as percentage exposure
+- AI explains decisions, never executes
 `,
       }),
     }).catch(() => {});
@@ -65,44 +86,28 @@ AutoShield Trading Room (SOC Context):
   /* ===================== UI ===================== */
   return (
     <div className="postureWrap">
-      {/* ================= LEFT: TRADING CONTROL ================= */}
+      {/* ================= LEFT: CONTROL ================= */}
       <section className="postureCard">
-        {/* ===== HEADER ===== */}
         <div className="postureTop">
-          <div className="postureTitle">
+          <div>
             <h2>Trading Control Room</h2>
-            <small>Execution, exposure & risk governance</small>
+            <small>Execution intent, exposure & governance</small>
           </div>
 
-          <div className="tr-mode">
-            <button
-              className={`modeBtn ${mode === "PAPER" ? "active" : ""}`}
-              onClick={() => setMode("PAPER")}
-            >
-              Paper
-            </button>
-            <button
-              className={`modeBtn warn ${mode === "LIVE" ? "active" : ""}`}
-              onClick={() => setMode("LIVE")}
-            >
-              Live
-            </button>
-          </div>
+          <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
+            {mode}
+          </span>
+        </div>
+
+        {/* ===== EXECUTION STATUS ===== */}
+        <div className="stats">
+          <div><b>Status:</b> {execution.toUpperCase()}</div>
+          <div><b>Trades Used:</b> {tradesUsed} / {dailyLimit}</div>
+          <div><b>Risk %:</b> {riskPct}%</div>
         </div>
 
         {/* ===== RISK CONTROLS ===== */}
         <div className="ctrl">
-          <label>
-            Trades / Day
-            <input
-              type="number"
-              min="1"
-              max="10"
-              value={maxTrades}
-              onChange={(e) => setMaxTrades(e.target.value)}
-            />
-          </label>
-
           <label>
             Risk %
             <input
@@ -110,7 +115,10 @@ AutoShield Trading Room (SOC Context):
               min="0.1"
               step="0.1"
               value={riskPct}
-              onChange={(e) => setRiskPct(e.target.value)}
+              onChange={(e) => {
+                setRiskPct(e.target.value);
+                pushLog(`Risk adjusted to ${e.target.value}%`);
+              }}
             />
           </label>
         </div>
@@ -118,34 +126,61 @@ AutoShield Trading Room (SOC Context):
         <div className="ctrlRow">
           <button
             className={`pill ${shortTrades ? "active" : ""}`}
-            onClick={() => setShortTrades(true)}
+            onClick={() => {
+              setShortTrades(true);
+              pushLog("Trade style set to short trades");
+            }}
           >
             Short Trades
           </button>
           <button
             className={`pill ${!shortTrades ? "active" : ""}`}
-            onClick={() => setShortTrades(false)}
+            onClick={() => {
+              setShortTrades(false);
+              pushLog("Trade style set to session trades");
+            }}
           >
             Session Trades
           </button>
         </div>
 
-        {/* ===== TELEMETRY ===== */}
-        <div className="stats">
-          <div><b>Mode:</b> {mode}</div>
-          <div><b>Trades Today:</b> {stats.tradesToday}</div>
-          <div><b>Wins:</b> {stats.wins}</div>
-          <div><b>Losses:</b> {stats.losses}</div>
-          <div><b>Last Action:</b> {stats.lastAction}</div>
+        {/* ===== OPERATOR ACTIONS ===== */}
+        <div className="actions">
+          <button
+            className="btn warn"
+            disabled={execution === "paused"}
+            onClick={() => {
+              setExecution("paused");
+              pushLog("Operator paused trading");
+            }}
+          >
+            Pause
+          </button>
+
+          <button
+            className="btn ok"
+            disabled={tradesUsed >= dailyLimit}
+            onClick={() => {
+              setExecution("executing");
+              setTradesUsed((v) => v + 1);
+              pushLog("Trade executed (simulated)");
+            }}
+          >
+            Execute Trade
+          </button>
         </div>
+
+        {tradesUsed >= dailyLimit && (
+          <p className="muted" style={{ marginTop: 10 }}>
+            Daily trade limit reached. No further execution allowed today.
+          </p>
+        )}
       </section>
 
-      {/* ================= RIGHT: ACTIVITY LOG ================= */}
+      {/* ================= RIGHT: LOG ================= */}
       <aside className="postureCard">
         <h3>Operational Activity</h3>
-        <p className="muted">
-          Real-time system actions and operator events.
-        </p>
+        <p className="muted">System and operator actions.</p>
 
         <div className="tr-log">
           {log.map((x, i) => (
@@ -156,24 +191,8 @@ AutoShield Trading Room (SOC Context):
           ))}
         </div>
 
-        <div className="actions">
-          <button
-            className="btn warn"
-            onClick={() => pushLog("Operator action: Trading paused")}
-          >
-            Pause Trading
-          </button>
-          <button
-            className="btn ok"
-            onClick={() => pushLog("Operator action: Trading resumed")}
-          >
-            Resume Trading
-          </button>
-        </div>
-
         <p className="muted" style={{ marginTop: 12 }}>
-          Use the assistant at the bottom of the page for explanations,
-          risk clarification, or trade rationale.
+          Use the assistant drawer for explanations and rationale.
         </p>
       </aside>
     </div>
