@@ -1,17 +1,18 @@
 // frontend/src/layouts/SmallCompanyLayout.jsx
-// Small Company Layout — SOC Baseline (LIMITED)
+// Small Company Layout — SOC Baseline (PHASE 1 CLEAN)
 //
 // ENFORCEMENT:
-// - No AutoDev execution
+// - No topbar (global header only)
 // - No AI branding
 // - Advisory-only insights
-// - Upgrade path to full Company
-// - Structural parity with other layouts
+// - Scroll-safe
+// - Upgrade path preserved
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearToken, clearUser } from "../lib/api";
 import AuthoDevPanel from "../components/AuthoDevPanel";
+import Logo from "../components/Logo.jsx";
 import "../styles/layout.css";
 
 export default function SmallCompanyLayout() {
@@ -27,6 +28,7 @@ export default function SmallCompanyLayout() {
 
   return (
     <div className={`layout-root ${menuOpen ? "sidebar-open" : ""}`}>
+      {/* ================= MOBILE OVERLAY ================= */}
       {menuOpen && (
         <div
           className="sidebar-overlay"
@@ -37,8 +39,10 @@ export default function SmallCompanyLayout() {
       {/* ================= SIDEBAR ================= */}
       <aside className="layout-sidebar small-company">
         <div className="layout-brand">
-          <strong>AutoShield</strong>
-          <span>Small Company SOC</span>
+          <Logo size="md" />
+          <span style={{ fontSize: 12, opacity: 0.75 }}>
+            Small Company SOC
+          </span>
         </div>
 
         <nav className="layout-nav">
@@ -80,32 +84,7 @@ export default function SmallCompanyLayout() {
 
       {/* ================= MAIN ================= */}
       <main className="layout-main">
-        <header className="layout-topbar">
-          <div className="topbar-left">
-            <button
-              className="btn btn-icon mobile-menu-btn"
-              onClick={() => setMenuOpen(true)}
-              aria-label="Open menu"
-            >
-              ☰
-            </button>
-
-            <h1 style={{ margin: 0 }}>Small Company Dashboard</h1>
-          </div>
-
-          <div className="topbar-right">
-            <button
-              className="btn"
-              onClick={() => setInsightsOpen((v) => !v)}
-              title="Toggle security insights"
-            >
-              Insights
-            </button>
-
-            <span className="badge">Limited</span>
-          </div>
-        </header>
-
+        {/* ================= CONTENT ================= */}
         <section className="layout-content">
           <Outlet />
         </section>
@@ -118,7 +97,7 @@ export default function SmallCompanyLayout() {
           <div className="ai-drawer-handle">
             <button
               className="ai-toggle"
-              onClick={() => setInsightsOpen((v) => !v)}
+              onClick={() => setInsightsOpen(v => !v)}
             >
               {insightsOpen
                 ? "▼ Hide Security Insights"
@@ -126,7 +105,10 @@ export default function SmallCompanyLayout() {
             </button>
           </div>
 
-          <div className="ai-drawer-body">
+          <div
+            className="ai-drawer-body"
+            style={{ overflow: "auto" }} // 🔑 FIX: scrolling + typing
+          >
             <AuthoDevPanel
               title="Security Insights"
               getContext={() => ({
