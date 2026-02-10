@@ -1,25 +1,15 @@
 /* =========================================================
    AUTOSHIELD CORE LAYOUT — FINAL HARDENED (LOCKED)
    File: frontend/src/styles/layout.css
-
-   PURPOSE:
-   - Sidebar + Topbar structure
-   - Scroll-safe SOC content
-   - Advisor drawer compatibility
-   - BackgroundLayer + BrandMark safe
-   - AUTH PAGES ONLY
    ========================================================= */
 
-/* =============================
-   ROOT LAYOUT (AUTH ONLY)
-   ============================= */
 .layout-root{
   display:flex;
   min-height:100svh;
   width:100%;
   position:relative;
   overflow:hidden;
-  z-index:1; /* must stay above background layers */
+  z-index:1;
 }
 
 /* =============================
@@ -27,12 +17,11 @@
    ============================= */
 .layout-sidebar{
   width:260px;
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255,255,255,.06),
-      rgba(0,0,0,.45)
-    );
+  background:linear-gradient(
+    180deg,
+    rgba(255,255,255,.06),
+    rgba(0,0,0,.45)
+  );
   border-right:1px solid rgba(255,255,255,.12);
   padding:18px;
   display:flex;
@@ -51,7 +40,6 @@
   display:flex;
   flex-direction:column;
   min-width:0;
-  background:transparent;
   position:relative;
   z-index:2;
 }
@@ -65,12 +53,11 @@
   z-index:35;
   padding:14px 20px;
   border-bottom:1px solid rgba(255,255,255,.12);
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255,255,255,.08),
-      rgba(0,0,0,.45)
-    );
+  background:linear-gradient(
+    180deg,
+    rgba(255,255,255,.08),
+    rgba(0,0,0,.45)
+  );
   backdrop-filter: blur(10px);
   display:flex;
   align-items:center;
@@ -90,56 +77,7 @@
 }
 
 /* =============================
-   BRANDING & NAV
-   ============================= */
-.layout-brand{
-  display:flex;
-  flex-direction:column;
-  gap:4px;
-  font-weight:800;
-  letter-spacing:.3px;
-}
-
-.layout-nav{
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-}
-
-.layout-nav a{
-  text-decoration:none;
-  color:inherit;
-  opacity:.75;
-  font-size:14px;
-}
-
-.layout-nav a.active{
-  opacity:1;
-  font-weight:800;
-}
-
-/* =============================
-   BUTTONS / BADGES (LAYOUT SAFE)
-   ============================= */
-.mobile-menu-btn{
-  display:none;
-  font-size:22px;
-  background:none;
-  border:none;
-  cursor:pointer;
-  color:inherit;
-}
-
-.badge{
-  padding:6px 10px;
-  border-radius:999px;
-  font-size:12px;
-  font-weight:800;
-  background:rgba(255,255,255,.12);
-}
-
-/* =============================
-   ADVISOR DRAWER (STRUCTURE ONLY)
+   ADVISOR DRAWER (FIXED)
    ============================= */
 .ai-drawer{
   position:sticky;
@@ -172,10 +110,13 @@
   cursor:pointer;
 }
 
+/* 🔥 FIX IS HERE */
 .ai-drawer-body{
   height:min(70vh,520px);
   padding:12px;
-  overflow:hidden;
+  overflow-y:auto;     /* ✅ ENABLE SCROLL */
+  overflow-x:hidden;
+  overscroll-behavior:contain;
 }
 
 @media (min-width:900px){
@@ -192,10 +133,7 @@
 }
 
 @media (max-width:768px){
-
-  .mobile-menu-btn{
-    display:block;
-  }
+  .mobile-menu-btn{ display:block; }
 
   .layout-sidebar{
     position:fixed;
@@ -231,10 +169,9 @@
   }
 }
 
-/* =========================================================
+/* =============================
    PUBLIC PAGE SAFETY
-   Prevents layout styles from leaking
-   ========================================================= */
+   ============================= */
 .landing-page,
 .pricing-page,
 .signup-page{
