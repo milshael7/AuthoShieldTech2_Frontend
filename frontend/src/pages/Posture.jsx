@@ -10,11 +10,19 @@ function pct(n) {
   return Math.max(0, Math.min(100, Math.round(x)));
 }
 
+function safeArray(v) {
+  return Array.isArray(v) ? v : [];
+}
+
+function safeStr(v, fallback = "—") {
+  return typeof v === "string" && v.trim() ? v : fallback;
+}
+
 function scoreFrom(checks = []) {
   if (!checks.length) return 0;
   const val = checks.reduce((s, c) => {
-    if (c.status === "ok") return s + 1;
-    if (c.status === "warn") return s + 0.5;
+    if (c?.status === "ok") return s + 1;
+    if (c?.status === "warn") return s + 0.5;
     return s;
   }, 0);
   return Math.round((val / checks.length) * 100);
@@ -23,7 +31,7 @@ function scoreFrom(checks = []) {
 /* ================= PAGE ================= */
 
 export default function Posture() {
-  const [summary, setSummary] = useState(null);
+  const [summary, setSummary] = useState({});
   const [checks, setChecks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -33,13 +41,16 @@ export default function Posture() {
     setErr("");
     try {
       const [s, c] = await Promise.all([
-        api.postureSummary(),
-        api.postureChecks(),
+        api.postureSummary().catch(() => ({})),
+        api.postureChecks().catch(() => ({})),
       ]);
-      setSummary(s);
-      setChecks(c?.checks || []);
+
+      setSummary(s && typeof s === "object" ? s : {});
+      setChecks(safeArray(c?.checks));
     } catch (e) {
-      setErr(e?.message || "Failed to load security posture");
+      setErr("Failed to load security posture");
+      setSummary({});
+      setChecks([]);
     } finally {
       setLoading(false);
     }
@@ -55,11 +66,11 @@ export default function Posture() {
 
   const kpis = useMemo(
     () => [
-      { label: "Users", value: summary?.users ?? 108 },
-      { label: "Devices", value: summary?.devices ?? 111 },
-      { label: "Mailboxes", value: summary?.mailboxes ?? 124 },
-      { label: "Cloud Drives", value: summary?.drives ?? 62 },
-      { label: "Internet Assets", value: summary?.assets ?? 38 },
+      { label: "Users", value: summary.users ?? 0 },
+      { label: "Devices", value: summary.devices ?? 0 },
+      { label: "Mailboxes", value: summary.mailboxes ?? 0 },
+      { label: "Cloud Drives", value: summary.drives ?? 0 },
+      { label: "Internet Assets", value: summary.assets ?? 0 },
     ],
     [summary]
   );
@@ -76,7 +87,6 @@ export default function Posture() {
     [score]
   );
 
-  // 🔹 Radar-ready normalized data (NO recomputation)
   const radarCoverage = useMemo(
     () =>
       coverage.map((c) => ({
@@ -86,26 +96,26 @@ export default function Posture() {
     [coverage]
   );
 
-  const signals = useMemo(
-    () => [
+  const signals = useMemo(() => {
+    const safeChecks = safeArray(checks);
+    return [
       {
         label: "Active Threats",
-        value: checks.filter((c) => c.status === "warn").length || 3,
+        value: safeChecks.filter((c) => c?.status === "warn").length,
         tone: "warn",
       },
       {
         label: "High-Risk Assets",
-        value: summary?.highRiskAssets ?? 7,
+        value: summary.highRiskAssets ?? 0,
         tone: "bad",
       },
       {
         label: "Controls Degraded",
-        value: checks.filter((c) => c.status !== "ok").length || 2,
+        value: safeChecks.filter((c) => c?.status && c.status !== "ok").length,
         tone: "warn",
       },
-    ],
-    [checks, summary]
-  );
+    ];
+  }, [checks, summary]);
 
   /* ================= UI ================= */
 
@@ -129,7 +139,13 @@ export default function Posture() {
             <div>
               <h2>Security Posture</h2>
               <small>
-                Scope: {summary?.scope?.type || "—"} • Last scan just now
+                Scope:{" "}
+                {safeStr(
+                  typeof summary.scope === "object"
+                    ? summary.scope?.type
+                    : null
+                )}{" "}
+                • Last scan just now
               </small>
             </div>
 
@@ -170,10 +186,8 @@ export default function Posture() {
             Coverage by Security Control
           </h3>
 
-          {/* 🔹 RADAR VISUAL (Blueprint element) */}
           <CoverageRadar data={radarCoverage} />
 
-          {/* 🔹 EXISTING BARS (kept intentionally) */}
           <div className="coverGrid" style={{ marginTop: 20 }}>
             {coverage.map((x) => (
               <div key={x.name}>
@@ -197,15 +211,17 @@ export default function Posture() {
           </p>
 
           <ul className="list">
-            {checks.slice(0, 6).map((c) => (
-              <li key={c.id}>
-                <span className={`dot ${c.status || "info"}`} />
-                <div>
-                  <b>{c.title}</b>
-                  <small>{c.message}</small>
-                </div>
-              </li>
-            ))}
+            {safeArray(checks)
+              .slice(0, 6)
+              .map((c, i) => (
+                <li key={c?.id || i}>
+                  <span className={`dot ${c?.status || "info"}`} />
+                  <div>
+                    <b>{safeStr(c?.title, "Security Signal")}</b>
+                    <small>{safeStr(c?.message, "Details unavailable")}</small>
+                  </div>
+                </li>
+              ))}
           </ul>
 
           <button onClick={load} disabled={loading}>
