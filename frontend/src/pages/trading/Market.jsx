@@ -2,16 +2,16 @@ import React, { useMemo, useRef, useState, useEffect } from "react";
 import "../../styles/terminal.css";
 
 /**
- * Market.jsx
- * SOC-aligned Market Observation & Trade Intent
+ * Market.jsx — UPGRADED
+ * SOC-aligned Market Observation & Trade Intent Panel
  *
- * PURPOSE:
+ * RESPONSIBILITY:
  * - Market visibility
- * - Trade intent preparation
- * - NO execution
+ * - Operator trade intent preparation
+ * - ZERO execution authority
  *
- * EXECUTION HAPPENS IN:
- * - TradingRoom.jsx
+ * EXECUTION:
+ * - Happens ONLY in TradingRoom.jsx
  */
 
 const SYMBOLS = [
@@ -21,14 +21,15 @@ const SYMBOLS = [
   "BINANCE:ETHUSDT",
 ];
 
-const SNAP_POS = { x: 16, y: 100 };
-const SNAP_DELAY = 2500;
+const SNAP_POS = { x: 16, y: 110 };
+const SNAP_DELAY = 2200;
 
 export default function Market({
-  mode = "paper",          // paper | live
+  mode = "paper",        // paper | live
   dailyLimit = 5,
-  tradesUsed = 1,
+  tradesUsed = 0,
 }) {
+  /* ================= STATE ================= */
   const [symbol, setSymbol] = useState(SYMBOLS[0]);
   const [tf, setTf] = useState("D");
   const [side, setSide] = useState("BUY");
@@ -40,6 +41,7 @@ export default function Market({
   const dragData = useRef({ x: 0, y: 0, dragging: false });
   const snapTimer = useRef(null);
 
+  /* ================= TRADINGVIEW ================= */
   const tvSrc = useMemo(() => {
     const params = new URLSearchParams({
       symbol,
@@ -51,7 +53,7 @@ export default function Market({
     return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
   }, [symbol, tf]);
 
-  /* ---------------- DRAG LOGIC ---------------- */
+  /* ================= DRAG LOGIC ================= */
   function startDrag(e) {
     const t = e.touches ? e.touches[0] : e;
     dragData.current = {
@@ -102,15 +104,18 @@ export default function Market({
     setPos(SNAP_POS);
   }
 
+  const limitReached = tradesUsed >= dailyLimit;
+
+  /* ================= UI ================= */
   return (
     <div className="terminalRoot">
       {/* ===== GOVERNANCE BANNER ===== */}
       <div className={`marketBanner ${mode === "live" ? "warn" : ""}`}>
         <b>Mode:</b> {mode.toUpperCase()} &nbsp;•&nbsp;
         <b>Trades Used:</b> {tradesUsed}/{dailyLimit}
-        {tradesUsed >= dailyLimit && (
+        {limitReached && (
           <span className="warnText">
-            &nbsp;— Daily limit reached
+            &nbsp;— Daily trade limit reached
           </span>
         )}
       </div>
@@ -147,7 +152,7 @@ export default function Market({
           <button
             className="tvPrimary"
             onClick={togglePanel}
-            disabled={tradesUsed >= dailyLimit}
+            disabled={limitReached}
           >
             Prepare Trade
           </button>
@@ -159,7 +164,7 @@ export default function Market({
         <main className="tvChartArea">
           <iframe
             className="tvIframe"
-            title="chart"
+            title="market-chart"
             src={tvSrc}
             frameBorder="0"
           />
@@ -218,7 +223,9 @@ function TradePanel({
         onTouchStart={draggable ? onDragStart : undefined}
       >
         <span>{symbol}</span>
-        <button className="tpClose" onClick={onClose}>✕</button>
+        <button className="tpClose" onClick={onClose}>
+          ✕
+        </button>
       </header>
 
       <div className="orderSide">
@@ -244,7 +251,7 @@ function TradePanel({
       </button>
 
       <small className="muted" style={{ marginTop: 8 }}>
-        Trade execution occurs in the Trading Control Room.
+        Trade intent only. Execution occurs in Trading Control Room.
       </small>
     </div>
   );
