@@ -1,10 +1,17 @@
 // frontend/src/layouts/SmallCompanyLayout.jsx
 // Small Company Layout — SOC Baseline (LIMITED)
-// - No AutoDev access
+//
+// ENFORCEMENT:
+// - No AutoDev execution
 // - Limited SOC visibility
 // - Upgrade path to full Company
 // - Structural parity with other layouts
-// - Assistant shell allowed (NO AI naming)
+// - Advisory-only assistant (NO AI wording)
+//
+// SAFE:
+// - Full file replacement
+// - Default export
+// - layout.css aligned
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -34,10 +41,10 @@ export default function SmallCompanyLayout() {
       )}
 
       {/* ================= SIDEBAR ================= */}
-      <aside className="layout-sidebar company small">
+      <aside className="layout-sidebar small-company">
         <div className="layout-brand">
-          <span className="brand-logo">🏬</span>
-          <span className="brand-text">Small Company</span>
+          <strong>AutoShield</strong>
+          <span>Small Company SOC</span>
         </div>
 
         <nav className="layout-nav">
@@ -81,7 +88,7 @@ export default function SmallCompanyLayout() {
             className="upgrade-link"
             onClick={() => setMenuOpen(false)}
           >
-            🚀 Upgrade to Company
+            Upgrade to Company
           </NavLink>
         </nav>
 
@@ -112,7 +119,7 @@ export default function SmallCompanyLayout() {
               onClick={() => setAdvisorOpen((v) => !v)}
               title="Toggle Security Advisor"
             >
-              🛡️ Advisor
+              Advisor
             </button>
 
             <span className="badge">Limited</span>
@@ -124,7 +131,7 @@ export default function SmallCompanyLayout() {
           <Outlet />
         </section>
 
-        {/* ================= ADVISOR DRAWER (BOTTOM ONLY) ================= */}
+        {/* ================= ADVISOR DRAWER ================= */}
         <section
           className={`ai-drawer ${advisorOpen ? "open" : ""}`}
           aria-hidden={!advisorOpen}
@@ -142,9 +149,9 @@ export default function SmallCompanyLayout() {
 
           <div className="ai-drawer-body">
             <AuthoDevPanel
-              title="AutoDev 6.5 — Security Advisor"
+              title="AutoDev 6.5 — Small Company Advisor"
               getContext={() => ({
-                role: "small-company",
+                role: "small_company",
                 scope: "limited-soc",
                 permissions: "visibility-only",
                 upgradeAvailable: true,
