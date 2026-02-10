@@ -1,15 +1,16 @@
 /**
- * AutoShield Tech — Logo Component (FINAL)
+ * AutoShield Tech — Logo Component (HARDENED)
  *
  * RESPONSIBILITY:
  * - Render platform logo consistently
- * - Support sidebar, topbar, and public pages
+ * - Sidebar / topbar / public safe
  * - Dark-background safe
  *
  * RULES:
  * - No routing
- * - No logic
+ * - No state
  * - No layout assumptions
+ * - No external dependencies
  */
 
 import React from "react";
@@ -19,18 +20,9 @@ export default function Logo({
   variant = "full",   // full | icon
 }) {
   const sizes = {
-    sm: {
-      fontSize: 16,
-      icon: 20,
-    },
-    md: {
-      fontSize: 18,
-      icon: 24,
-    },
-    lg: {
-      fontSize: 22,
-      icon: 30,
-    },
+    sm: { fontSize: 15, icon: 20 },
+    md: { fontSize: 17, icon: 24 },
+    lg: { fontSize: 21, icon: 30 },
   };
 
   const cfg = sizes[size] || sizes.md;
@@ -38,12 +30,13 @@ export default function Logo({
   return (
     <div
       className="autosheild-logo"
+      aria-hidden="true"
       style={{
         display: "flex",
         alignItems: "center",
         gap: 10,
         fontWeight: 900,
-        letterSpacing: "0.08em",
+        letterSpacing: "0.12em",
         color: "#7AA7FF",
         userSelect: "none",
         whiteSpace: "nowrap",
@@ -63,8 +56,9 @@ export default function Logo({
           alignItems: "center",
           justifyContent: "center",
           color: "#0b0e14",
-          fontSize: cfg.icon * 0.55,
+          fontSize: Math.round(cfg.icon * 0.55),
           fontWeight: 900,
+          lineHeight: 1,
         }}
       >
         A
