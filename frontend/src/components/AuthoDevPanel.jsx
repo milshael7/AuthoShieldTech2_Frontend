@@ -1,11 +1,17 @@
 // frontend/src/components/AuthoDevPanel.jsx
-// AuthoDev 6.5 — Universal AI Text Panel (SOC-TUNED)
-// STEP 34 — ROLE + PAGE AWARE BEHAVIOR LAYER
-// ✅ Assistant-only (non-intrusive)
-// ✅ SOC-grade tone enforcement
-// ✅ Role + page contextual framing
-// ❌ No UI / layout changes
-// ❌ No auto speech, no mic, no floating
+// AuthoDev 6.5 — Universal AI Text + Speech Panel (HARDENED)
+//
+// RESPONSIBILITY:
+// - Text-based advisory assistant
+// - Optional click-to-speak (TTS)
+// - Role + page aware context
+//
+// ENFORCEMENT:
+// - NO microphone
+// - NO auto speech
+// - NO execution
+// - NO UI layout changes
+// - Speech is USER-INITIATED ONLY
 
 import React, { useEffect, useRef, useState } from "react";
 import { readAloud } from "./ReadAloud";
@@ -38,15 +44,15 @@ function buildSystemContext(user, pageContext = {}) {
   return {
     role,
     page,
-    guidance: {
+    tone: {
       admin:
-        "You are a SOC advisor. Be concise, technical, and action-oriented. Assume expertise.",
+        "SOC advisor. Concise, technical, decisive. Assume expertise.",
       manager:
-        "You are an oversight assistant. Focus on risk, trends, and decisions.",
+        "Risk-focused advisor. Highlight trends and decisions.",
       company:
-        "You are a security guidance assistant. Explain clearly without jargon.",
+        "Security guidance. Clear explanations, minimal jargon.",
       user:
-        "You are a security assistant. Keep explanations simple and practical.",
+        "Simple security assistance. Practical and calm.",
     }[role],
   };
 }
@@ -74,7 +80,7 @@ export default function AuthoDevPanel({
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
 
-  /* ================= PERSISTENCE ================= */
+  /* ================= PERSIST ================= */
 
   useEffect(() => {
     try {
@@ -118,10 +124,12 @@ export default function AuthoDevPanel({
 
       const data = await res.json();
 
+      const aiText = data?.reply || "No response available.";
+
       const aiMsg = {
         role: "ai",
-        text: data?.reply || "No response available.",
-        speakText: data?.speakText || data?.reply || "",
+        text: aiText,
+        speakText: data?.speakText || aiText,
         ts: new Date().toLocaleTimeString(),
       };
 
@@ -167,7 +175,7 @@ export default function AuthoDevPanel({
             {m.role === "ai" && (
               <div className="ad-actions">
                 <button
-                  title="Read this message"
+                  title="Read aloud"
                   onClick={() => readAloud(m.speakText)}
                 >
                   🔊
@@ -180,7 +188,8 @@ export default function AuthoDevPanel({
                 <button
                   title="Share"
                   onClick={() =>
-                    navigator.share?.({ text: m.text }) || copyText(m.text)
+                    navigator.share?.({ text: m.text }) ||
+                    copyText(m.text)
                   }
                 >
                   🔗
