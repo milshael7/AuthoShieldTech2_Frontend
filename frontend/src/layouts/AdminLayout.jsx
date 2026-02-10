@@ -1,11 +1,12 @@
 // frontend/src/layouts/AdminLayout.jsx
-// Admin Layout — FULL SOC CONTROL (UPGRADED)
+// Admin Layout — FULL SOC CONTROL (PHASE 1 CLEAN)
 //
-// SAFE:
-// - Full file replacement
-// - Default export
-// - Visual upgrade only
-// - No auth / pricing / business logic changes
+// RULES ENFORCED:
+// - NO topbar (handled globally)
+// - Sidebar + content only
+// - Scroll-safe
+// - Advisor usable
+// - No AI branding text
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -37,7 +38,6 @@ export default function AdminLayout() {
 
       {/* ================= SIDEBAR ================= */}
       <aside className="layout-sidebar admin">
-        {/* BRAND */}
         <div className="layout-brand">
           <Logo size="md" />
           <span className="muted" style={{ fontSize: 12 }}>
@@ -45,7 +45,6 @@ export default function AdminLayout() {
           </span>
         </div>
 
-        {/* NAVIGATION */}
         <nav className="layout-nav">
           <NavLink to="/admin" end onClick={() => setMenuOpen(false)}>
             Security Posture
@@ -63,10 +62,7 @@ export default function AdminLayout() {
             Incidents
           </NavLink>
 
-          <NavLink
-            to="/admin/vulnerabilities"
-            onClick={() => setMenuOpen(false)}
-          >
+          <NavLink to="/admin/vulnerabilities" onClick={() => setMenuOpen(false)}>
             Vulnerabilities
           </NavLink>
 
@@ -108,46 +104,12 @@ export default function AdminLayout() {
 
       {/* ================= MAIN ================= */}
       <main className="layout-main">
-        {/* ================= TOP BAR ================= */}
-        <header className="layout-topbar">
-          <div
-            className="topbar-left"
-            style={{ display: "flex", alignItems: "center", gap: 14 }}
-          >
-            <button
-              className="btn btn-icon mobile-menu-btn"
-              onClick={() => setMenuOpen(true)}
-              aria-label="Open menu"
-            >
-              ☰
-            </button>
-
-            <h1 style={{ margin: 0, fontSize: 18 }}>
-              Admin Security Operations
-            </h1>
-          </div>
-
-          <div
-            className="topbar-right"
-            style={{ display: "flex", alignItems: "center", gap: 12 }}
-          >
-            <button
-              className="btn"
-              onClick={() => setAssistantOpen((v) => !v)}
-            >
-              Assistant
-            </button>
-
-            <span className="badge">Admin</span>
-          </div>
-        </header>
-
-        {/* ================= PAGE CONTENT ================= */}
+        {/* ================= CONTENT ================= */}
         <section className="layout-content">
           <Outlet />
         </section>
 
-        {/* ================= ASSISTANT ================= */}
+        {/* ================= ADVISOR DRAWER ================= */}
         <section
           className={`ai-drawer ${assistantOpen ? "open" : ""}`}
           aria-hidden={!assistantOpen}
@@ -155,15 +117,18 @@ export default function AdminLayout() {
           <div className="ai-drawer-handle">
             <button
               className="ai-toggle"
-              onClick={() => setAssistantOpen((v) => !v)}
+              onClick={() => setAssistantOpen(v => !v)}
             >
-              {assistantOpen ? "▼ Hide Assistant" : "▲ Show Assistant"}
+              {assistantOpen ? "▼ Hide Advisor" : "▲ Show Advisor"}
             </button>
           </div>
 
-          <div className="ai-drawer-body">
+          <div
+            className="ai-drawer-body"
+            style={{ overflow: "auto" }} // 🔑 FIX: allow scroll + input
+          >
             <AuthoDevPanel
-              title="AutoDev 6.5 — Admin SOC Assistant"
+              title="Security Advisor"
               getContext={() => ({
                 role: "admin",
                 location: window.location.pathname,
