@@ -5,7 +5,7 @@
 // - Global background mounting
 // - Brand watermark layer
 // - Single visual wrapper for entire platform
-// - Z-index safety boundary (FIXED)
+// - Z-index & render safety boundary
 //
 // HARD RULES (ENFORCED):
 // - NO routing
@@ -26,29 +26,45 @@ export default function AppShell({ children }) {
       className="app-shell"
       style={{
         position: "relative",
-        minHeight: "100vh",
+        minHeight: "100svh",
         width: "100%",
-        overflow: "hidden",
-        backgroundColor: "#0B0E14", // safety fallback (prevents blue blank)
+        backgroundColor: "#0B0E14", // hard fallback (prevents blue/white screen)
+        isolation: "isolate",       // z-index safety (Safari fix)
       }}
     >
-      {/* ===== BACKGROUND LAYER (z-index: 0) ===== */}
-      <div style={{ position: "fixed", inset: 0, zIndex: 0 }}>
+      {/* ===== BACKGROUND LAYER (VISUAL ONLY) ===== */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 0,
+          pointerEvents: "none",     // CRITICAL: never capture input
+        }}
+      >
         <BackgroundLayer />
       </div>
 
-      {/* ===== BRAND WATERMARK (z-index: 1) ===== */}
-      <div style={{ position: "fixed", inset: 0, zIndex: 1 }}>
+      {/* ===== BRAND WATERMARK (VISUAL ONLY) ===== */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 1,
+          pointerEvents: "none",
+        }}
+      >
         <BrandMark />
       </div>
 
-      {/* ===== APPLICATION UI (z-index: 10) ===== */}
+      {/* ===== APPLICATION UI ===== */}
       <div
         className="app-shell-content"
         style={{
           position: "relative",
           zIndex: 10,
-          minHeight: "100vh",
+          minHeight: "100svh",
           width: "100%",
         }}
       >
