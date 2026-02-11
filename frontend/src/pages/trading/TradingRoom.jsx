@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { executeEngine } from "./engines/ExecutionEngine";
-import { isTradingWindowOpen } from "./engines/TimeGovernor";
-import { applyGovernance } from "./engines/GovernanceEngine";
-import { checkVolatility } from "./engines/VolatilityGovernor";
-import { evaluateConfidence } from "./engines/ConfidenceEngine";
-import { evaluateDrawdown } from "./engines/DrawdownEngine";
+import { runBacktest } from "./engines/BacktestEngine";
 import EquityChart from "./components/EquityChart";
 
 export default function TradingRoom({
@@ -15,10 +10,7 @@ export default function TradingRoom({
   const [engineType, setEngineType] = useState("scalp");
   const [baseRisk, setBaseRisk] = useState(1);
   const [leverage, setLeverage] = useState(1);
-  const [tradesUsed, setTradesUsed] = useState(0);
-  const [log, setLog] = useState([]);
-  const [equityHistory, setEquityHistory] = useState([1000]);
-  const [currentEquity, setCurrentEquity] = useState(1000);
+  const [backtestResult, setBacktestResult] = useState(null);
 
   const humanCaps = {
     maxRiskPct: 2,
@@ -30,114 +22,30 @@ export default function TradingRoom({
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
 
-  function pushLog(message) {
-    setLog((prev) => [
-      { t: new Date().toLocaleTimeString(), m: message },
-      ...prev,
-    ]);
-  }
-
-  function executeTrade() {
-    if (!isTradingWindowOpen()) {
-      pushLog("Weekend lock active.");
-      return;
-    }
-
-    if (tradesUsed >= dailyLimit) {
-      pushLog("Daily limit reached.");
-      return;
-    }
-
-    const volatilityCheck = checkVolatility();
-    if (!volatilityCheck.approved) {
-      pushLog(volatilityCheck.reason);
-      return;
-    }
-
-    const confidenceCheck = evaluateConfidence(engineType);
-    if (!confidenceCheck.approved) {
-      pushLog(`Blocked — Confidence ${confidenceCheck.score}%`);
-      return;
-    }
-
-    const drawdownCheck = evaluateDrawdown({
-      equityHistory,
-      currentEquity,
-      maxDrawdownPct: humanCaps.maxDrawdownPct,
-    });
-
-    if (!drawdownCheck.approved) {
-      pushLog(drawdownCheck.reason);
-      return;
-    }
-
-    const governance = applyGovernance({
+  function runSimulation() {
+    const result = runBacktest({
       engineType,
-      balance: currentEquity,
-      requestedRisk:
-        baseRisk *
-        volatilityCheck.riskModifier *
-        confidenceCheck.modifier *
-        drawdownCheck.riskModifier,
-      requestedLeverage: leverage,
+      trades: 200,
+      baseRisk,
+      leverage,
       humanCaps,
     });
 
-    if (!governance.approved) {
-      pushLog(governance.reason);
-      return;
-    }
-
-    const result = executeEngine({
-      engineType,
-      balance: currentEquity,
-      riskPct: governance.effectiveRisk,
-      leverage: governance.effectiveLeverage,
-    });
-
-    const newEquity = result.newBalance;
-
-    setCurrentEquity(newEquity);
-    setEquityHistory((prev) => [...prev, newEquity]);
-    setTradesUsed((v) => v + 1);
-
-    pushLog(
-      `${engineType.toUpperCase()} | PnL: ${result.pnl.toFixed(
-        2
-      )} | Equity: ${newEquity.toFixed(2)}`
-    );
+    setBacktestResult(result);
   }
-
-  const peak = Math.max(...equityHistory);
-  const drawdown =
-    peak > 0 ? ((peak - currentEquity) / peak) * 100 : 0;
 
   return (
     <div className="postureWrap">
       <section className="postureCard">
         <div className="postureTop">
           <div>
-            <h2>Trading Control Room</h2>
-            <small>Equity Curve + Drawdown Protection</small>
+            <h2>Strategy Backtesting Lab</h2>
+            <small>Simulated performance testing</small>
           </div>
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
             {mode}
           </span>
         </div>
-
-        <div className="stats">
-          <div><b>Equity:</b> ${currentEquity.toFixed(2)}</div>
-          <div><b>Peak:</b> ${peak.toFixed(2)}</div>
-          <div>
-            <b>Drawdown:</b>{" "}
-            <span style={{ color: drawdown > 10 ? "#ff6b6b" : "" }}>
-              {drawdown.toFixed(2)}%
-            </span>
-          </div>
-          <div><b>Trades:</b> {tradesUsed}/{dailyLimit}</div>
-        </div>
-
-        <EquityChart data={equityHistory} />
 
         <div className="ctrlRow">
           <button
@@ -179,23 +87,39 @@ export default function TradingRoom({
         </div>
 
         <div className="actions">
-          <button className="btn ok" onClick={executeTrade}>
-            Execute Trade
+          <button className="btn ok" onClick={runSimulation}>
+            Run 200 Trade Backtest
           </button>
         </div>
       </section>
 
-      <aside className="postureCard">
-        <h3>Execution Log</h3>
-        <div style={{ maxHeight: 300, overflowY: "auto" }}>
-          {log.map((x, i) => (
-            <div key={i}>
-              <small>{x.t}</small>
-              <div>{x.m}</div>
+      {backtestResult && (
+        <>
+          <section className="postureCard">
+            <h3>Backtest Results</h3>
+            <div className="stats">
+              <div>
+                <b>Final Balance:</b> $
+                {backtestResult.finalBalance.toFixed(2)}
+              </div>
+              <div>
+                <b>Wins:</b> {backtestResult.wins}
+              </div>
+              <div>
+                <b>Losses:</b> {backtestResult.losses}
+              </div>
+              <div>
+                <b>Drawdown:</b>{" "}
+                {backtestResult.drawdown.toFixed(2)}%
+              </div>
             </div>
-          ))}
-        </div>
-      </aside>
+
+            <EquityChart
+              data={backtestResult.equityHistory}
+            />
+          </section>
+        </>
+      )}
     </div>
   );
 }
