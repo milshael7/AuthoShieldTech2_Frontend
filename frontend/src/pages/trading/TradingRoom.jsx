@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { executeEngine } from "./engines/ExecutionEngine";
 import { ExchangeManager } from "./exchanges/ExchangeManager";
 import { OrderLedger } from "./ledger/OrderLedger";
+import { DrawdownGovernor } from "./risk/DrawdownGovernor";
 
 export default function TradingRoom({
   mode: parentMode = "paper",
@@ -14,9 +15,11 @@ export default function TradingRoom({
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
   const [stats, setStats] = useState(null);
+  const [peakBalance, setPeakBalance] = useState(10000);
 
   const exchangeManager = new ExchangeManager({ mode });
   const ledger = new OrderLedger();
+  const governor = new DrawdownGovernor();
 
   useEffect(() => {
     setMode(parentMode.toLowerCase());
@@ -36,11 +39,34 @@ export default function TradingRoom({
       return;
     }
 
-    const decision = executeEngine({
-      engineType,
-      balance: 10000,
+    const statsNow = ledger.getStats();
+    const currentBalance = 10000 + (statsNow.pnl || 0);
+
+    if (currentBalance > peakBalance) {
+      setPeakBalance(currentBalance);
+    }
+
+    const protection = governor.evaluate({
+      peakBalance,
+      currentBalance,
       riskPct,
       leverage,
+    });
+
+    if (protection.paused) {
+      pushLog("Drawdown protection triggered → Trading paused.");
+      return;
+    }
+
+    if (protection.action === "throttled") {
+      pushLog("Risk throttled due to drawdown.");
+    }
+
+    const decision = executeEngine({
+      engineType,
+      balance: currentBalance,
+      riskPct: protection.adjustedRisk,
+      leverage: protection.adjustedLeverage,
     });
 
     if (decision.blocked) {
@@ -55,7 +81,7 @@ export default function TradingRoom({
       size: decision.positionSize,
     });
 
-    const recorded = ledger.record({
+    ledger.record({
       engine: engineType,
       exchange: order.exchange || "paper",
       side: order.side,
@@ -67,14 +93,17 @@ export default function TradingRoom({
     setStats(ledger.getStats());
 
     pushLog(
-      `Recorded Trade → ${recorded.side} | PnL: ${decision.pnl.toFixed(2)}`
+      `Trade executed | PnL: ${decision.pnl.toFixed(2)} | DD: ${protection.drawdownPct.toFixed(
+        2
+      )}%`
     );
   }
 
   function resetLedger() {
     ledger.clear();
     setStats(ledger.getStats());
-    pushLog("Ledger cleared.");
+    setPeakBalance(10000);
+    pushLog("Ledger cleared. Peak reset.");
   }
 
   return (
@@ -82,8 +111,8 @@ export default function TradingRoom({
       <section className="postureCard">
         <div className="postureTop">
           <div>
-            <h2>Execution Control Room</h2>
-            <small>Ledger-backed trading system</small>
+            <h2>Institutional Control Room</h2>
+            <small>Ledger + Drawdown Governance</small>
           </div>
           <span className={`badge ${mode === "live" ? "warn" : ""}`}>
             {mode.toUpperCase()}
@@ -92,13 +121,16 @@ export default function TradingRoom({
 
         <div className="stats">
           <div>
-            <b>Trades Used:</b> {tradesUsed} / {dailyLimit}
+            <b>Trades:</b> {tradesUsed} / {dailyLimit}
           </div>
           <div>
             <b>Win Rate:</b> {stats?.winRate || 0}%
           </div>
           <div>
             <b>Total PnL:</b> ${stats?.pnl?.toFixed(2) || "0.00"}
+          </div>
+          <div>
+            <b>Peak Balance:</b> ${peakBalance.toFixed(2)}
           </div>
         </div>
 
@@ -119,7 +151,7 @@ export default function TradingRoom({
 
         <div className="ctrl">
           <label>
-            Risk %
+            Base Risk %
             <input
               type="number"
               value={riskPct}
@@ -145,7 +177,6 @@ export default function TradingRoom({
           <button className="btn ok" onClick={executeTrade}>
             Route Order
           </button>
-
           <button className="btn warn" onClick={resetLedger}>
             Reset Ledger
           </button>
