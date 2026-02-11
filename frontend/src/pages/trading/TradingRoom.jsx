@@ -12,11 +12,17 @@ export default function TradingRoom({
   const [leverage, setLeverage] = useState(1);
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
+  const [learningCycles, setLearningCycles] = useState(0);
 
   const [allocation, setAllocation] = useState({
     scalp: 500,
     session: 500,
     total: 1000,
+  });
+
+  const [performance, setPerformance] = useState({
+    scalp: { wins: 0, losses: 0, pnl: 0 },
+    session: { wins: 0, losses: 0, pnl: 0 },
   });
 
   useEffect(() => {
@@ -28,6 +34,32 @@ export default function TradingRoom({
       { t: new Date().toLocaleTimeString(), m: message },
       ...prev,
     ]);
+  }
+
+  function rebalanceCapital(updated) {
+    const floor = 100;
+
+    let { scalp, session } = updated;
+
+    if (scalp < floor && session > floor * 2) {
+      const transfer = floor;
+      scalp += transfer;
+      session -= transfer;
+      pushLog("Capital rebalanced → Session → Scalp");
+    }
+
+    if (session < floor && scalp > floor * 2) {
+      const transfer = floor;
+      session += transfer;
+      scalp -= transfer;
+      pushLog("Capital rebalanced → Scalp → Session");
+    }
+
+    return {
+      scalp,
+      session,
+      total: scalp + session,
+    };
   }
 
   function executeTrade() {
@@ -54,29 +86,53 @@ export default function TradingRoom({
     });
 
     const updatedCapital = result.newBalance;
+    const pnl = result.pnl;
 
-    const newAllocation =
+    const updatedAllocation =
       engineType === "scalp"
         ? {
             ...allocation,
             scalp: updatedCapital,
-            total: updatedCapital + allocation.session,
           }
         : {
             ...allocation,
             session: updatedCapital,
-            total: allocation.scalp + updatedCapital,
           };
 
-    setAllocation(newAllocation);
+    const rebalanced = rebalanceCapital(updatedAllocation);
+
+    setAllocation(rebalanced);
     setTradesUsed((v) => v + 1);
 
+    setPerformance((prev) => {
+      const enginePerf = prev[engineType];
+      const isWin = pnl > 0;
+
+      return {
+        ...prev,
+        [engineType]: {
+          wins: enginePerf.wins + (isWin ? 1 : 0),
+          losses: enginePerf.losses + (!isWin ? 1 : 0),
+          pnl: enginePerf.pnl + pnl,
+        },
+      };
+    });
+
     pushLog(
-      `${engineType.toUpperCase()} trade | PnL: ${result.pnl.toFixed(
+      `${engineType.toUpperCase()} trade | PnL: ${pnl.toFixed(
         2
       )} | Engine Balance: ${updatedCapital.toFixed(2)}`
     );
   }
+
+  /* ================= CONTINUOUS LEARNING ================= */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLearningCycles((v) => v + 1);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="postureWrap">
@@ -102,7 +158,7 @@ export default function TradingRoom({
           <div>
             <b>Total Capital:</b> ${allocation.total.toFixed(2)}
           </div>
-          <div>
+          <div style={{ color: "#5EC6FF" }}>
             <b>Scalp Engine:</b> ${allocation.scalp.toFixed(2)}
           </div>
           <div>
@@ -162,11 +218,25 @@ export default function TradingRoom({
             Execute Trade
           </button>
         </div>
+
+        <div style={{ marginTop: 15, fontSize: 12, opacity: 0.7 }}>
+          Continuous Learning Cycles: {learningCycles}
+        </div>
       </section>
 
       <aside className="postureCard">
+        <h3>Engine Performance</h3>
+
+        <div style={{ marginBottom: 15 }}>
+          <b>Scalp:</b> Wins {performance.scalp.wins} | Losses {performance.scalp.losses} | PnL {performance.scalp.pnl.toFixed(2)}
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <b>Session:</b> Wins {performance.session.wins} | Losses {performance.session.losses} | PnL {performance.session.pnl.toFixed(2)}
+        </div>
+
         <h3>Execution Log</h3>
-        <div style={{ maxHeight: 400, overflowY: "auto" }}>
+        <div style={{ maxHeight: 350, overflowY: "auto" }}>
           {log.map((x, i) => (
             <div key={i}>
               <small>{x.t}</small>
