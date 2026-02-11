@@ -1,42 +1,66 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import Market from "./trading/Market.jsx";
 import TradingRoom from "./trading/TradingRoom.jsx";
 import "../styles/platform.css";
 
 /**
- * Trading.jsx — VISUALLY COORDINATED
- * SOC-aligned Trading Oversight Module
+ * Trading.jsx — DUAL ENGINE OVERSIGHT (PHASE 2)
  *
- * PURPOSE:
- * - Single supervisory surface for trading
- * - Shared governance state
- * - Visual + logical consistency between Market & Trading Room
+ * STRUCTURE:
+ * - Execution Engine (Live / Paper)
+ * - Learning Engine (Always Running)
+ * - Trading Window Enforcement
+ * - Capital Distribution Overview
  *
- * HARD RULES:
- * - NO execution logic
- * - NO API keys
- * - NO automation
- * - NO AI control
+ * STILL:
+ * - No execution logic
+ * - No API keys
+ * - No automation
  */
 
 export default function Trading() {
   const [tab, setTab] = useState("market");
 
-  /* ================= GOVERNANCE STATE (UI ONLY) ================= */
+  /* ================= EXECUTION ENGINE ================= */
   const [mode, setMode] = useState("paper"); // paper | live
   const [dailyLimit, setDailyLimit] = useState(5);
-  const [executionState, setExecutionState] = useState("idle"); // idle | armed | executing
+  const [executionState, setExecutionState] = useState("idle");
   const [tradesUsed, setTradesUsed] = useState(1);
+
+  /* ================= LEARNING ENGINE ================= */
+  const [learningStatus] = useState("active"); // always active (UI only)
+  const [simulatedTrades] = useState(143);
+  const [accuracy] = useState(67.4);
+
+  /* ================= TRADING WINDOW ================= */
+  const tradingAllowed = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun ... 5=Fri 6=Sat
+    const hour = now.getHours();
+
+    if (day === 5 && hour >= 21) return false; // Friday after 9pm
+    if (day === 6 && hour < 21) return false;  // Saturday before 9pm
+    return true;
+  }, []);
+
+  /* ================= CAPITAL UI ================= */
+  const capital = {
+    total: 100000,
+    coinbase: 40000,
+    kraken: 35000,
+    reserve: 25000,
+  };
 
   return (
     <div className="postureWrap">
+
       {/* ================= HEADER ================= */}
       <section className="postureCard" style={{ marginBottom: 20 }}>
         <div className="postureTop">
           <div>
-            <h2>Trading Oversight</h2>
+            <h2 style={{ color: "#7ec8ff" }}>Quant Trading Oversight</h2>
             <small>
-              Market supervision, execution governance, and operator control
+              Dual-engine supervision: execution & learning intelligence
             </small>
           </div>
 
@@ -45,20 +69,59 @@ export default function Trading() {
           </span>
         </div>
 
-        {/* ================= GOVERNANCE STRIP ================= */}
+        {/* ================= ENGINE STATUS GRID ================= */}
         <div
-          className="stats"
           style={{
             marginTop: 16,
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: 14,
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
           }}
         >
-          {/* MODE */}
+          {/* EXECUTION ENGINE */}
+          <div>
+            <b>Execution Engine</b>
+            <div style={{ marginTop: 8 }}>
+              <span className={`badge ${tradingAllowed ? "ok" : "bad"}`}>
+                {tradingAllowed ? "Window Open" : "Trading Paused"}
+              </span>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              Trades: {tradesUsed} / {dailyLimit}
+            </div>
+          </div>
+
+          {/* LEARNING ENGINE */}
+          <div>
+            <b>Learning Engine</b>
+            <div style={{ marginTop: 8 }}>
+              <span className="badge ok">
+                {learningStatus.toUpperCase()}
+              </span>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              Simulated Trades: {simulatedTrades}
+            </div>
+            <div>Signal Accuracy: {accuracy}%</div>
+          </div>
+
+          {/* CAPITAL OVERVIEW */}
+          <div>
+            <b>Capital Distribution</b>
+            <div style={{ marginTop: 8 }}>
+              Total: ${capital.total.toLocaleString()}
+            </div>
+            <small>
+              Coinbase: ${capital.coinbase.toLocaleString()} <br />
+              Kraken: ${capital.kraken.toLocaleString()} <br />
+              Reserve: ${capital.reserve.toLocaleString()}
+            </small>
+          </div>
+
+          {/* MODE CONTROL */}
           <div>
             <b>Execution Mode</b>
-            <div style={{ marginTop: 6 }}>
+            <div style={{ marginTop: 8 }}>
               <button
                 className={mode === "paper" ? "pill active" : "pill"}
                 onClick={() => setMode("paper")}
@@ -74,50 +137,11 @@ export default function Trading() {
               </button>
             </div>
           </div>
-
-          {/* DAILY LIMIT */}
-          <div>
-            <b>Daily Limit</b>
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={dailyLimit}
-              onChange={(e) => setDailyLimit(Number(e.target.value))}
-              style={{ marginTop: 6, width: "100%" }}
-            />
-          </div>
-
-          {/* EXECUTION */}
-          <div>
-            <b>Execution Status</b>
-            <div style={{ marginTop: 8 }}>
-              <span
-                className={`badge ${
-                  executionState === "armed"
-                    ? "warn"
-                    : executionState === "executing"
-                    ? "ok"
-                    : ""
-                }`}
-              >
-                {executionState.toUpperCase()}
-              </span>
-            </div>
-          </div>
-
-          {/* USAGE */}
-          <div>
-            <b>Trades Used</b>
-            <div style={{ marginTop: 8, fontWeight: 700 }}>
-              {tradesUsed} / {dailyLimit}
-            </div>
-          </div>
         </div>
 
-        <p className="muted" style={{ marginTop: 14, fontSize: 13 }}>
-          Live trading is never automatic. All actions require operator intent,
-          are visually enforced, and logged.
+        <p className="muted" style={{ marginTop: 16, fontSize: 13 }}>
+          Execution engine can pause. Learning engine never stops.
+          Capital is segmented and risk-governed.
         </p>
       </section>
 
@@ -146,11 +170,7 @@ export default function Trading() {
       {/* ================= CONTENT ================= */}
       {tab === "market" && (
         <section className="postureCard">
-          <Market
-            mode={mode}
-            dailyLimit={dailyLimit}
-            tradesUsed={tradesUsed}
-          />
+          <Market mode={mode} dailyLimit={dailyLimit} tradesUsed={tradesUsed} />
         </section>
       )}
 
@@ -178,8 +198,8 @@ export default function Trading() {
             <li>
               <span className="dot ok" />
               <div>
-                <b>Win / Loss Ratio</b>
-                <small>Trade outcome distribution</small>
+                <b>Signal Accuracy</b>
+                <small>Learning engine prediction performance</small>
               </div>
             </li>
             <li>
@@ -187,13 +207,6 @@ export default function Trading() {
               <div>
                 <b>Risk Exposure</b>
                 <small>Position sizing &amp; drawdown analysis</small>
-              </div>
-            </li>
-            <li>
-              <span className="dot ok" />
-              <div>
-                <b>Execution Notes</b>
-                <small>Operator and system observations</small>
               </div>
             </li>
           </ul>
