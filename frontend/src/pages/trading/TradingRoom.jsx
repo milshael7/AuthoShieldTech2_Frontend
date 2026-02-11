@@ -5,6 +5,7 @@ import { applyGovernance } from "./engines/GovernanceEngine";
 import { checkVolatility } from "./engines/VolatilityGovernor";
 import { evaluateConfidence } from "./engines/ConfidenceEngine";
 import { evaluateDrawdown } from "./engines/DrawdownEngine";
+import EquityChart from "./components/EquityChart";
 
 export default function TradingRoom({
   mode: parentMode = "paper",
@@ -117,7 +118,7 @@ export default function TradingRoom({
         <div className="postureTop">
           <div>
             <h2>Trading Control Room</h2>
-            <small>Equity + Drawdown Protection Active</small>
+            <small>Equity Curve + Drawdown Protection</small>
           </div>
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
             {mode}
@@ -135,6 +136,8 @@ export default function TradingRoom({
           </div>
           <div><b>Trades:</b> {tradesUsed}/{dailyLimit}</div>
         </div>
+
+        <EquityChart data={equityHistory} />
 
         <div className="ctrlRow">
           <button
