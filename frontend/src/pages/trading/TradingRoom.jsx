@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { executeEngine } from "./engines/ExecutionEngine";
 import { ExchangeManager } from "./exchanges/ExchangeManager";
+import { OrderLedger } from "./ledger/OrderLedger";
 
 export default function TradingRoom({
   mode: parentMode = "paper",
@@ -12,11 +13,14 @@ export default function TradingRoom({
   const [leverage, setLeverage] = useState(1);
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
+  const [stats, setStats] = useState(null);
 
   const exchangeManager = new ExchangeManager({ mode });
+  const ledger = new OrderLedger();
 
   useEffect(() => {
     setMode(parentMode.toLowerCase());
+    setStats(ledger.getStats());
   }, [parentMode]);
 
   function pushLog(message) {
@@ -51,11 +55,26 @@ export default function TradingRoom({
       size: decision.positionSize,
     });
 
+    const recorded = ledger.record({
+      engine: engineType,
+      exchange: order.exchange || "paper",
+      side: order.side,
+      size: order.size,
+      pnl: decision.pnl,
+    });
+
     setTradesUsed((v) => v + 1);
+    setStats(ledger.getStats());
 
     pushLog(
-      `Order routed → ${order.exchange || "paper"} | ${order.side} | Size: ${order.size}`
+      `Recorded Trade → ${recorded.side} | PnL: ${decision.pnl.toFixed(2)}`
     );
+  }
+
+  function resetLedger() {
+    ledger.clear();
+    setStats(ledger.getStats());
+    pushLog("Ledger cleared.");
   }
 
   return (
@@ -64,7 +83,7 @@ export default function TradingRoom({
         <div className="postureTop">
           <div>
             <h2>Execution Control Room</h2>
-            <small>Exchange-routed execution</small>
+            <small>Ledger-backed trading system</small>
           </div>
           <span className={`badge ${mode === "live" ? "warn" : ""}`}>
             {mode.toUpperCase()}
@@ -76,10 +95,10 @@ export default function TradingRoom({
             <b>Trades Used:</b> {tradesUsed} / {dailyLimit}
           </div>
           <div>
-            <b>Risk %:</b> {riskPct}
+            <b>Win Rate:</b> {stats?.winRate || 0}%
           </div>
           <div>
-            <b>Leverage:</b> {leverage}
+            <b>Total PnL:</b> ${stats?.pnl?.toFixed(2) || "0.00"}
           </div>
         </div>
 
@@ -88,13 +107,13 @@ export default function TradingRoom({
             className={`pill ${engineType === "scalp" ? "active" : ""}`}
             onClick={() => setEngineType("scalp")}
           >
-            Scalp Engine
+            Scalp
           </button>
           <button
             className={`pill ${engineType === "session" ? "active" : ""}`}
             onClick={() => setEngineType("session")}
           >
-            Session Engine
+            Session
           </button>
         </div>
 
@@ -125,6 +144,10 @@ export default function TradingRoom({
         <div className="actions">
           <button className="btn ok" onClick={executeTrade}>
             Route Order
+          </button>
+
+          <button className="btn warn" onClick={resetLedger}>
+            Reset Ledger
           </button>
         </div>
       </section>
