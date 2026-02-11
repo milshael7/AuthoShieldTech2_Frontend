@@ -13,26 +13,13 @@ export default function TradingRoom({
 }) {
   const [mode, setMode] = useState(parentMode.toUpperCase());
   const [engineType, setEngineType] = useState("scalp");
-  const [exchange, setExchange] = useState("coinbase");
-
   const [baseRisk, setBaseRisk] = useState(1);
   const [leverage, setLeverage] = useState(1);
-
-  /* ================= AI CONTROL LAYER ================= */
-
-  const [aiConfidence, setAiConfidence] = useState(0.8); // 80% default
-  const [humanOverride, setHumanOverride] = useState(1); // 1 = neutral
-
-  /* ================= PERFORMANCE ================= */
 
   const [dailyPnL, setDailyPnL] = useState(0);
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
-
-  const [performance, setPerformance] = useState({
-    scalp: { wins: 0, losses: 0, pnl: 0 },
-    session: { wins: 0, losses: 0, pnl: 0 },
-  });
+  const [lastConfidence, setLastConfidence] = useState(null);
 
   /* ================= INITIAL CAPITAL ================= */
 
@@ -49,13 +36,16 @@ export default function TradingRoom({
 
   const peakCapital = useRef(initialCapital);
 
-  const totalCapital = calculateTotalCapital(allocation, reserve);
+  const totalCapital = calculateTotalCapital(
+    allocation,
+    reserve
+  );
 
   useEffect(() => {
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
 
-  /* ================= GLOBAL RISK ================= */
+  /* ================= GLOBAL RISK CHECK ================= */
 
   const globalRisk = evaluateGlobalRisk({
     totalCapital,
@@ -67,9 +57,13 @@ export default function TradingRoom({
     peakCapital.current = totalCapital;
   }
 
-  function pushLog(message) {
+  function pushLog(message, confidence) {
     setLog((prev) => [
-      { t: new Date().toLocaleTimeString(), m: message },
+      {
+        t: new Date().toLocaleTimeString(),
+        m: message,
+        confidence,
+      },
       ...prev,
     ]);
   }
@@ -83,9 +77,11 @@ export default function TradingRoom({
     }
 
     if (tradesUsed >= dailyLimit) {
-      pushLog("Daily trade limit reached.");
+      pushLog("Daily trade count limit reached.");
       return;
     }
+
+    const exchange = "coinbase";
 
     const engineCapital =
       allocation[engineType][exchange];
@@ -95,12 +91,13 @@ export default function TradingRoom({
       balance: engineCapital,
       riskPct: baseRisk,
       leverage,
-      confidence: aiConfidence,
-      humanMultiplier: humanOverride,
     });
 
     if (result.blocked) {
-      pushLog(`Blocked: ${result.reason}`);
+      pushLog(
+        `Blocked: ${result.reason}`,
+        result.confidenceScore
+      );
       return;
     }
 
@@ -122,27 +119,24 @@ export default function TradingRoom({
 
     setTradesUsed((v) => v + 1);
     setDailyPnL((v) => v + result.pnl);
-
-    setPerformance((prev) => {
-      const isWin = result.pnl > 0;
-      return {
-        ...prev,
-        [engineType]: {
-          wins: prev[engineType].wins + (isWin ? 1 : 0),
-          losses: prev[engineType].losses + (!isWin ? 1 : 0),
-          pnl: prev[engineType].pnl + result.pnl,
-        },
-      };
-    });
+    setLastConfidence(result.confidenceScore);
 
     pushLog(
       `${engineType.toUpperCase()} | ${exchange} | PnL: ${result.pnl.toFixed(
         2
-      )} | Risk: ${result.effectiveRisk?.toFixed(2)}%`
+      )}`,
+      result.confidenceScore
     );
   }
 
   /* ================= UI ================= */
+
+  function confidenceColor(score) {
+    if (!score && score !== 0) return "";
+    if (score < 50) return "#ff4d4d";
+    if (score < 75) return "#f5b942";
+    return "#5EC6FF"; // light blue high confidence
+  }
 
   return (
     <div className="postureWrap">
@@ -150,7 +144,7 @@ export default function TradingRoom({
         <div className="postureTop">
           <div>
             <h2>Institutional Trading Control</h2>
-            <small>AI Governed — Human Override Layer</small>
+            <small>Allocator + Global Risk Governed</small>
           </div>
 
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
@@ -164,17 +158,36 @@ export default function TradingRoom({
           </div>
         )}
 
-        {/* ================= STATS ================= */}
-
         <div className="stats">
-          <div><b>Total Capital:</b> ${totalCapital.toFixed(2)}</div>
-          <div><b>Reserve:</b> ${reserve.toFixed(2)}</div>
-          <div><b>Peak:</b> ${peakCapital.current.toFixed(2)}</div>
-          <div><b>Daily PnL:</b> ${dailyPnL.toFixed(2)}</div>
-          <div><b>Trades:</b> {tradesUsed} / {dailyLimit}</div>
+          <div>
+            <b>Total Capital:</b> ${totalCapital.toFixed(2)}
+          </div>
+          <div>
+            <b>Reserve:</b> ${reserve.toFixed(2)}
+          </div>
+          <div>
+            <b>Peak Capital:</b> ${peakCapital.current.toFixed(2)}
+          </div>
+          <div>
+            <b>Daily PnL:</b> ${dailyPnL.toFixed(2)}
+          </div>
+          <div>
+            <b>Trades Used:</b> {tradesUsed} / {dailyLimit}
+          </div>
+          {lastConfidence !== null && (
+            <div>
+              <b>Last Confidence:</b>{" "}
+              <span
+                style={{
+                  color: confidenceColor(lastConfidence),
+                  fontWeight: 700,
+                }}
+              >
+                {lastConfidence}%
+              </span>
+            </div>
+          )}
         </div>
-
-        {/* ================= ENGINE SELECT ================= */}
 
         <div className="ctrlRow">
           <button
@@ -183,6 +196,7 @@ export default function TradingRoom({
           >
             Scalp
           </button>
+
           <button
             className={`pill ${engineType === "session" ? "active" : ""}`}
             onClick={() => setEngineType("session")}
@@ -191,28 +205,9 @@ export default function TradingRoom({
           </button>
         </div>
 
-        {/* ================= EXCHANGE ================= */}
-
-        <div className="ctrlRow">
-          <button
-            className={`pill ${exchange === "coinbase" ? "active" : ""}`}
-            onClick={() => setExchange("coinbase")}
-          >
-            Coinbase
-          </button>
-          <button
-            className={`pill ${exchange === "kraken" ? "active" : ""}`}
-            onClick={() => setExchange("kraken")}
-          >
-            Kraken
-          </button>
-        </div>
-
-        {/* ================= RISK CONTROLS ================= */}
-
         <div className="ctrl">
           <label>
-            Base Risk %
+            Risk %
             <input
               type="number"
               value={baseRisk}
@@ -232,37 +227,7 @@ export default function TradingRoom({
               onChange={(e) => setLeverage(Number(e.target.value))}
             />
           </label>
-
-          <label>
-            AI Confidence
-            <input
-              type="number"
-              value={aiConfidence}
-              min="0.1"
-              max="1"
-              step="0.05"
-              onChange={(e) =>
-                setAiConfidence(Number(e.target.value))
-              }
-            />
-          </label>
-
-          <label>
-            Human Override
-            <input
-              type="number"
-              value={humanOverride}
-              min="0.5"
-              max="2"
-              step="0.1"
-              onChange={(e) =>
-                setHumanOverride(Number(e.target.value))
-              }
-            />
-          </label>
         </div>
-
-        {/* ================= EXECUTE ================= */}
 
         <div className="actions">
           <button
@@ -275,29 +240,23 @@ export default function TradingRoom({
         </div>
       </section>
 
-      {/* ================= PERFORMANCE ================= */}
-
       <aside className="postureCard">
-        <h3>Engine Performance</h3>
-
-        <div>
-          <b>Scalp:</b> Wins {performance.scalp.wins} | Losses{" "}
-          {performance.scalp.losses} | PnL{" "}
-          {performance.scalp.pnl.toFixed(2)}
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <b>Session:</b> Wins {performance.session.wins} |
-          Losses {performance.session.losses} | PnL{" "}
-          {performance.session.pnl.toFixed(2)}
-        </div>
-
         <h3>Execution Log</h3>
-        <div style={{ maxHeight: 350, overflowY: "auto" }}>
+        <div style={{ maxHeight: 400, overflowY: "auto" }}>
           {log.map((x, i) => (
-            <div key={i}>
+            <div key={i} style={{ marginBottom: 10 }}>
               <small>{x.t}</small>
               <div>{x.m}</div>
+              {x.confidence !== undefined && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: confidenceColor(x.confidence),
+                  }}
+                >
+                  Confidence: {x.confidence}%
+                </div>
+              )}
             </div>
           ))}
         </div>
