@@ -9,7 +9,8 @@ export default function TradingRoom({
 }) {
   const [mode, setMode] = useState(parentMode.toUpperCase());
   const [engineType, setEngineType] = useState("scalp");
-  const [riskPct, setRiskPct] = useState(1);
+  const [baseRiskPct, setBaseRiskPct] = useState(1);
+  const [adaptiveRiskPct, setAdaptiveRiskPct] = useState(1);
   const [leverage, setLeverage] = useState(1);
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
@@ -50,11 +51,23 @@ export default function TradingRoom({
   function calculateDrawdown(currentEquity) {
     const newPeak = Math.max(peakEquity, currentEquity);
     setPeakEquity(newPeak);
+    return ((newPeak - currentEquity) / newPeak) * 100;
+  }
 
-    const drawdownPct =
-      ((newPeak - currentEquity) / newPeak) * 100;
+  /* ================= ADAPTIVE RISK ================= */
+  function updateAdaptiveRisk(pnl, drawdown) {
+    let newRisk = adaptiveRiskPct;
 
-    return drawdownPct;
+    if (drawdown > 10) {
+      newRisk = Math.max(0.3, newRisk - 0.5);
+      pushLog("Adaptive Risk ↓ due to drawdown");
+    } else if (pnl > 0) {
+      newRisk = Math.min(2, newRisk + 0.1);
+    } else {
+      newRisk = Math.max(0.5, newRisk - 0.2);
+    }
+
+    setAdaptiveRiskPct(newRisk);
   }
 
   function executeTrade() {
@@ -76,7 +89,7 @@ export default function TradingRoom({
     const governance = applyGovernance({
       engineType,
       balance: engineCapital,
-      requestedRisk: riskPct,
+      requestedRisk: adaptiveRiskPct,
       requestedLeverage: leverage,
       performance,
       humanCaps,
@@ -99,24 +112,15 @@ export default function TradingRoom({
 
     const updatedAllocation =
       engineType === "scalp"
-        ? {
-            ...allocation,
-            scalp: updatedCapital,
-          }
-        : {
-            ...allocation,
-            session: updatedCapital,
-          };
+        ? { ...allocation, scalp: updatedCapital }
+        : { ...allocation, session: updatedCapital };
 
     const newTotal =
-      updatedAllocation.scalp +
-      updatedAllocation.session;
+      updatedAllocation.scalp + updatedAllocation.session;
 
     const drawdown = calculateDrawdown(newTotal);
 
-    if (drawdown > humanCaps.maxDrawdownPct) {
-      pushLog("⚠ Drawdown limit breached — Defensive Mode Activated");
-    }
+    updateAdaptiveRisk(pnl, drawdown);
 
     setAllocation({
       ...updatedAllocation,
@@ -142,9 +146,9 @@ export default function TradingRoom({
     });
 
     pushLog(
-      `${engineType.toUpperCase()} trade | PnL: ${pnl.toFixed(
+      `${engineType.toUpperCase()} | PnL: ${pnl.toFixed(
         2
-      )} | Equity: ${newTotal.toFixed(2)}`
+      )} | Risk Used: ${governance.effectiveRisk.toFixed(2)}%`
     );
   }
 
@@ -165,21 +169,20 @@ export default function TradingRoom({
         <div className="postureTop">
           <div>
             <h2>Trading Control Room</h2>
-            <small>Dual Engine + Governance + Equity Monitor</small>
+            <small>Adaptive Risk + Governance Active</small>
           </div>
-
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
             {mode}
           </span>
         </div>
 
         <div className="stats">
-          <div><b>Total Capital:</b> ${allocation.total.toFixed(2)}</div>
-          <div><b>Peak Equity:</b> ${peakEquity.toFixed(2)}</div>
+          <div><b>Total:</b> ${allocation.total.toFixed(2)}</div>
+          <div><b>Peak:</b> ${peakEquity.toFixed(2)}</div>
           <div style={{ color: drawdownPct > 10 ? "red" : "inherit" }}>
             <b>Drawdown:</b> {drawdownPct.toFixed(2)}%
           </div>
-          <div><b>Trades Used:</b> {tradesUsed} / {dailyLimit}</div>
+          <div><b>Adaptive Risk:</b> {adaptiveRiskPct.toFixed(2)}%</div>
         </div>
 
         <div className="ctrlRow">
@@ -187,26 +190,25 @@ export default function TradingRoom({
             className={`pill ${engineType === "scalp" ? "active" : ""}`}
             onClick={() => setEngineType("scalp")}
           >
-            Scalp Engine
+            Scalp
           </button>
-
           <button
             className={`pill ${engineType === "session" ? "active" : ""}`}
             onClick={() => setEngineType("session")}
           >
-            Session Engine
+            Session
           </button>
         </div>
 
         <div className="ctrl">
           <label>
-            Risk %
+            Base Risk %
             <input
               type="number"
-              value={riskPct}
+              value={baseRiskPct}
               min="0.1"
               step="0.1"
-              onChange={(e) => setRiskPct(Number(e.target.value))}
+              onChange={(e) => setBaseRiskPct(Number(e.target.value))}
             />
           </label>
 
@@ -228,13 +230,13 @@ export default function TradingRoom({
           </button>
         </div>
 
-        <div style={{ marginTop: 15, fontSize: 12, opacity: 0.7 }}>
+        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
           Learning Cycles: {learningCycles}
         </div>
       </section>
 
       <aside className="postureCard">
-        <h3>Equity Curve</h3>
+        <h3>Equity History</h3>
         <div style={{ maxHeight: 200, overflowY: "auto" }}>
           {equityHistory.map((e, i) => (
             <div key={i}>
@@ -243,7 +245,7 @@ export default function TradingRoom({
           ))}
         </div>
 
-        <h3 style={{ marginTop: 20 }}>Execution Log</h3>
+        <h3 style={{ marginTop: 20 }}>Log</h3>
         <div style={{ maxHeight: 200, overflowY: "auto" }}>
           {log.map((x, i) => (
             <div key={i}>
