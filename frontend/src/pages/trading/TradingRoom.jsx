@@ -1,8 +1,9 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { executeEngine } from "./engines/ExecutionEngine";
 import { isTradingWindowOpen } from "./engines/TimeGovernor";
 import { applyGovernance } from "./engines/GovernanceEngine";
 import { checkVolatility } from "./engines/VolatilityGovernor";
+import { evaluateConfidence } from "./engines/ConfidenceEngine";
 
 export default function TradingRoom({
   mode: parentMode = "paper",
@@ -14,6 +15,7 @@ export default function TradingRoom({
   const [leverage, setLeverage] = useState(1);
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
+  const [lastConfidence, setLastConfidence] = useState(null);
 
   const [allocation, setAllocation] = useState({
     scalp: 500,
@@ -41,19 +43,26 @@ export default function TradingRoom({
 
   function executeTrade() {
     if (!isTradingWindowOpen()) {
-      pushLog("Execution blocked — Weekend protection active.");
+      pushLog("Weekend lock active.");
       return;
     }
 
     if (tradesUsed >= dailyLimit) {
-      pushLog("Daily trade limit reached.");
+      pushLog("Daily limit reached.");
       return;
     }
 
     const volatilityCheck = checkVolatility();
-
     if (!volatilityCheck.approved) {
       pushLog(volatilityCheck.reason);
+      return;
+    }
+
+    const confidenceCheck = evaluateConfidence(engineType);
+    setLastConfidence(confidenceCheck.score);
+
+    if (!confidenceCheck.approved) {
+      pushLog(`Blocked — Confidence ${confidenceCheck.score}%`);
       return;
     }
 
@@ -66,13 +75,15 @@ export default function TradingRoom({
       engineType,
       balance: engineCapital,
       requestedRisk:
-        adaptiveRiskPct * volatilityCheck.riskModifier,
+        adaptiveRiskPct *
+        volatilityCheck.riskModifier *
+        confidenceCheck.modifier,
       requestedLeverage: leverage,
       humanCaps,
     });
 
     if (!governance.approved) {
-      pushLog(`Execution blocked — ${governance.reason}`);
+      pushLog(`Blocked — ${governance.reason}`);
       return;
     }
 
@@ -84,7 +95,6 @@ export default function TradingRoom({
     });
 
     const updatedCapital = result.newBalance;
-    const pnl = result.pnl;
 
     const updatedAllocation =
       engineType === "scalp"
@@ -101,9 +111,9 @@ export default function TradingRoom({
     setTradesUsed((v) => v + 1);
 
     pushLog(
-      `${engineType.toUpperCase()} | PnL: ${pnl.toFixed(
+      `${engineType.toUpperCase()} | Confidence: ${confidenceCheck.score}% | PnL: ${result.pnl.toFixed(
         2
-      )} | Risk: ${governance.effectiveRisk.toFixed(2)}%`
+      )}`
     );
   }
 
@@ -113,7 +123,9 @@ export default function TradingRoom({
         <div className="postureTop">
           <div>
             <h2>Trading Control Room</h2>
-            <small>Volatility Filter + Governance Active</small>
+            <small>
+              Volatility + Confidence + Governance Active
+            </small>
           </div>
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
             {mode}
@@ -125,6 +137,9 @@ export default function TradingRoom({
           <div><b>Scalp:</b> ${allocation.scalp.toFixed(2)}</div>
           <div><b>Session:</b> ${allocation.session.toFixed(2)}</div>
           <div><b>Trades:</b> {tradesUsed} / {dailyLimit}</div>
+          {lastConfidence !== null && (
+            <div><b>Last Confidence:</b> {lastConfidence}%</div>
+          )}
         </div>
 
         <div className="ctrlRow">
@@ -144,7 +159,7 @@ export default function TradingRoom({
 
         <div className="ctrl">
           <label>
-            Adaptive Risk %
+            Base Risk %
             <input
               type="number"
               value={adaptiveRiskPct}
