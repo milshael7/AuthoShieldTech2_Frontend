@@ -11,22 +11,16 @@ export default function TradingRoom({
   const [engineType, setEngineType] = useState("scalp");
   const [riskPct, setRiskPct] = useState(1);
   const [leverage, setLeverage] = useState(1);
+  const [confidence, setConfidence] = useState(0.8); // 80% AI
+  const [humanMultiplier, setHumanMultiplier] = useState(1);
+
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
-  const [learningCycles, setLearningCycles] = useState(0);
-
-  const MIN_RISK = 0.3;
-  const MAX_RISK = 3;
 
   const [allocation, setAllocation] = useState({
     scalp: 500,
     session: 500,
     total: 1000,
-  });
-
-  const [performance, setPerformance] = useState({
-    scalp: { wins: 0, losses: 0, pnl: 0, streak: 0 },
-    session: { wins: 0, losses: 0, pnl: 0, streak: 0 },
   });
 
   const [history, setHistory] = useState({
@@ -43,61 +37,6 @@ export default function TradingRoom({
       { t: new Date().toLocaleTimeString(), m: message },
       ...prev,
     ]);
-  }
-
-  function rebalanceCapital(updated) {
-    const floor = 100;
-    let { scalp, session } = updated;
-
-    if (scalp < floor && session > floor * 2) {
-      scalp += floor;
-      session -= floor;
-      pushLog("Capital rebalanced → Session → Scalp");
-    }
-
-    if (session < floor && scalp > floor * 2) {
-      session += floor;
-      scalp -= floor;
-      pushLog("Capital rebalanced → Scalp → Session");
-    }
-
-    return {
-      scalp,
-      session,
-      total: scalp + session,
-    };
-  }
-
-  function adjustRisk(engine, pnl) {
-    setPerformance((prev) => {
-      const data = prev[engine];
-      const newStreak =
-        pnl > 0
-          ? Math.max(1, data.streak + 1)
-          : Math.min(-1, data.streak - 1);
-
-      let newRisk = riskPct;
-
-      if (newStreak <= -3) {
-        newRisk = Math.max(MIN_RISK, riskPct * 0.6);
-        pushLog("Drawdown protection activated — Risk reduced.");
-      }
-
-      if (newStreak >= 3) {
-        newRisk = Math.min(MAX_RISK, riskPct * 1.2);
-        pushLog("Positive streak — Risk gradually increased.");
-      }
-
-      setRiskPct(Number(newRisk.toFixed(2)));
-
-      return {
-        ...prev,
-        [engine]: {
-          ...data,
-          streak: newStreak,
-        },
-      };
-    });
   }
 
   function executeTrade() {
@@ -121,6 +60,8 @@ export default function TradingRoom({
       balance: engineCapital,
       riskPct,
       leverage,
+      confidence,
+      humanMultiplier,
     });
 
     const pnl = result.pnl;
@@ -131,84 +72,51 @@ export default function TradingRoom({
         ? { ...allocation, scalp: updatedCapital }
         : { ...allocation, session: updatedCapital };
 
-    const rebalanced = rebalanceCapital(updatedAllocation);
+    setAllocation({
+      ...updatedAllocation,
+      total:
+        updatedAllocation.scalp +
+        updatedAllocation.session,
+    });
 
-    setAllocation(rebalanced);
     setTradesUsed((v) => v + 1);
 
     setHistory((prev) => ({
       scalp:
         engineType === "scalp"
-          ? [...prev.scalp, rebalanced.scalp]
+          ? [...prev.scalp, updatedCapital]
           : prev.scalp,
       session:
         engineType === "session"
-          ? [...prev.session, rebalanced.session]
+          ? [...prev.session, updatedCapital]
           : prev.session,
     }));
-
-    adjustRisk(engineType, pnl);
 
     pushLog(
       `${engineType.toUpperCase()} trade | PnL: ${pnl.toFixed(
         2
-      )} | Balance: ${updatedCapital.toFixed(2)}`
+      )} | Position: ${result.positionSize.toFixed(2)}`
     );
   }
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLearningCycles((v) => v + 1);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <div className="postureWrap">
       <section className="postureCard">
         <div className="postureTop">
           <div>
-            <h2>Trading Control Room</h2>
-            <small>Adaptive Dual Engine Governance</small>
+            <h2>Adaptive Trading Control Room</h2>
+            <small>Confidence Weighted Execution</small>
           </div>
-
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
             {mode}
           </span>
         </div>
 
-        {!isTradingWindowOpen() && (
-          <div className="badge warn" style={{ marginTop: 10 }}>
-            Weekend Lock Active — Learning Mode Only
-          </div>
-        )}
-
         <div className="stats">
-          <div><b>Total Capital:</b> ${allocation.total.toFixed(2)}</div>
-          <div style={{ color: "#5EC6FF" }}>
-            <b>Scalp:</b> ${allocation.scalp.toFixed(2)}
-          </div>
-          <div style={{ color: "#9B7CFF" }}>
-            <b>Session:</b> ${allocation.session.toFixed(2)}
-          </div>
+          <div><b>Total:</b> ${allocation.total.toFixed(2)}</div>
           <div><b>Risk:</b> {riskPct}%</div>
-          <div><b>Trades Used:</b> {tradesUsed} / {dailyLimit}</div>
-        </div>
-
-        <div className="ctrlRow">
-          <button
-            className={`pill ${engineType === "scalp" ? "active" : ""}`}
-            onClick={() => setEngineType("scalp")}
-          >
-            Scalp Engine
-          </button>
-
-          <button
-            className={`pill ${engineType === "session" ? "active" : ""}`}
-            onClick={() => setEngineType("session")}
-          >
-            Session Engine
-          </button>
+          <div><b>Confidence:</b> {(confidence * 100).toFixed(0)}%</div>
+          <div><b>Human Override:</b> {humanMultiplier}x</div>
         </div>
 
         <div className="ctrl">
@@ -217,16 +125,8 @@ export default function TradingRoom({
             <input
               type="number"
               value={riskPct}
-              min="0.1"
               step="0.1"
-              onChange={(e) =>
-                setRiskPct(
-                  Math.max(
-                    MIN_RISK,
-                    Math.min(MAX_RISK, Number(e.target.value))
-                  )
-                )
-              }
+              onChange={(e) => setRiskPct(Number(e.target.value))}
             />
           </label>
 
@@ -240,28 +140,49 @@ export default function TradingRoom({
               onChange={(e) => setLeverage(Number(e.target.value))}
             />
           </label>
+
+          <label>
+            AI Confidence %
+            <input
+              type="number"
+              value={confidence * 100}
+              min="50"
+              max="95"
+              onChange={(e) =>
+                setConfidence(Number(e.target.value) / 100)
+              }
+            />
+          </label>
+
+          <label>
+            Human Multiplier
+            <input
+              type="number"
+              value={humanMultiplier}
+              min="0.5"
+              max="2"
+              step="0.1"
+              onChange={(e) =>
+                setHumanMultiplier(Number(e.target.value))
+              }
+            />
+          </label>
         </div>
 
         <div className="actions">
           <button
             className="btn ok"
             onClick={executeTrade}
-            disabled={!isTradingWindowOpen()}
           >
             Execute Trade
           </button>
         </div>
 
         <div style={{ marginTop: 20 }}>
-          <h3>Equity Curve</h3>
           <PerformanceChart
             scalpHistory={history.scalp}
             sessionHistory={history.session}
           />
-        </div>
-
-        <div style={{ marginTop: 15, fontSize: 12, opacity: 0.7 }}>
-          Continuous Learning Cycles: {learningCycles}
         </div>
       </section>
 
