@@ -1,65 +1,136 @@
-import React, { useState, useEffect } from "react";
-import { runBacktest } from "./engines/BacktestEngine";
-import EquityChart from "./components/EquityChart";
-
-/**
- * TradingRoom.jsx — Strategy Lab + Governance Layer
- *
- * AI = 100% strategy execution
- * Human = exposure override caps
- *
- * NO live execution.
- * NO API keys.
- * Pure simulation lab.
- */
+import React, { useState, useEffect, useMemo } from "react";
+import { executeEngine } from "./engines/ExecutionEngine";
+import { isTradingWindowOpen } from "./engines/TimeGovernor";
 
 export default function TradingRoom({
   mode: parentMode = "paper",
   dailyLimit = 5,
-  overrideActive = false,
-  overrideRiskPct = 20,
 }) {
   const [mode, setMode] = useState(parentMode.toUpperCase());
   const [engineType, setEngineType] = useState("scalp");
-
   const [baseRisk, setBaseRisk] = useState(1);
   const [leverage, setLeverage] = useState(1);
-  const [backtestResult, setBacktestResult] = useState(null);
+  const [tradesUsed, setTradesUsed] = useState(0);
+  const [log, setLog] = useState([]);
 
-  /* ================= HUMAN GOVERNANCE CAPS ================= */
-  const humanCaps = {
-    maxRiskPct: overrideActive ? overrideRiskPct : 2,
-    maxLeverage: 10,
-    maxDrawdownPct: 20,
-  };
+  const [allocation, setAllocation] = useState({
+    scalp: 500,
+    session: 500,
+    total: 1000,
+  });
+
+  const [performance, setPerformance] = useState({
+    scalp: { wins: 0, losses: 0, pnl: 0 },
+    session: { wins: 0, losses: 0, pnl: 0 },
+  });
+
+  const [engineHealth, setEngineHealth] = useState("stable");
+  const [confidence, setConfidence] = useState(0.8);
 
   useEffect(() => {
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
 
-  function runSimulation() {
-    const result = runBacktest({
+  function pushLog(message) {
+    setLog((prev) => [
+      { t: new Date().toLocaleTimeString(), m: message },
+      ...prev,
+    ]);
+  }
+
+  const currentPerf = performance[engineType];
+
+  const winRate = useMemo(() => {
+    const total = currentPerf.wins + currentPerf.losses;
+    if (total === 0) return 0;
+    return (currentPerf.wins / total) * 100;
+  }, [currentPerf]);
+
+  function executeTrade() {
+    if (!isTradingWindowOpen()) {
+      pushLog("Execution blocked — Weekend lock active.");
+      return;
+    }
+
+    if (tradesUsed >= dailyLimit) {
+      pushLog("Daily trade limit reached.");
+      return;
+    }
+
+    const balance =
+      engineType === "scalp"
+        ? allocation.scalp
+        : allocation.session;
+
+    const result = executeEngine({
       engineType,
-      trades: 200,
-      baseRisk,
+      balance,
+      riskPct: baseRisk,
       leverage,
-      humanCaps,
+      confidence,
+      performance: currentPerf,
     });
 
-    setBacktestResult(result);
+    if (result.blocked) {
+      pushLog(`Trade blocked: ${result.reason}`);
+      return;
+    }
+
+    const updatedBalance = result.newBalance;
+
+    const updatedAllocation =
+      engineType === "scalp"
+        ? {
+            ...allocation,
+            scalp: updatedBalance,
+            total: updatedBalance + allocation.session,
+          }
+        : {
+            ...allocation,
+            session: updatedBalance,
+            total: allocation.scalp + updatedBalance,
+          };
+
+    setAllocation(updatedAllocation);
+    setTradesUsed((v) => v + 1);
+    setEngineHealth(result.engineHealth);
+    setConfidence(result.adaptiveConfidence);
+
+    setPerformance((prev) => {
+      const perf = prev[engineType];
+      const isWin = result.isWin;
+
+      return {
+        ...prev,
+        [engineType]: {
+          wins: perf.wins + (isWin ? 1 : 0),
+          losses: perf.losses + (!isWin ? 1 : 0),
+          pnl: perf.pnl + result.pnl,
+        },
+      };
+    });
+
+    pushLog(
+      `${engineType.toUpperCase()} | PnL: ${result.pnl.toFixed(
+        2
+      )} | Health: ${result.engineHealth}`
+    );
   }
+
+  const capitalPressure =
+    allocation.total < 600
+      ? "high"
+      : allocation.total < 800
+      ? "moderate"
+      : "normal";
 
   return (
     <div className="postureWrap">
-
-      {/* ================= STRATEGY LAB ================= */}
       <section className="postureCard">
         <div className="postureTop">
           <div>
-            <h2>Strategy Backtesting Lab</h2>
-            <small>
-              AI strategy simulation with human exposure governance
-            </small>
+            <h2>Quant Execution Engine</h2>
+            <small>Adaptive dual-engine control</small>
           </div>
 
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
@@ -67,24 +138,60 @@ export default function TradingRoom({
           </span>
         </div>
 
-        {/* GOVERNANCE INDICATOR */}
-        <div style={{ marginBottom: 15 }}>
-          <span className={`badge ${overrideActive ? "warn" : "ok"}`}>
-            {overrideActive
-              ? `Human Override Active (${overrideRiskPct}% cap)`
-              : "AI Default Governance Active"}
+        {!isTradingWindowOpen() && (
+          <div className="badge warn" style={{ marginTop: 10 }}>
+            Weekend Lock — Learning Only
+          </div>
+        )}
+
+        {/* ENGINE METRICS */}
+        <div className="stats">
+          <div>
+            <b>Total Capital:</b> ${allocation.total.toFixed(2)}
+          </div>
+          <div>
+            <b>Win Rate:</b> {winRate.toFixed(1)}%
+          </div>
+          <div>
+            <b>AI Confidence:</b>{" "}
+            {(confidence * 100).toFixed(0)}%
+          </div>
+          <div>
+            <b>Engine Health:</b>{" "}
+            <span className={`badge ${
+              engineHealth === "aggressive"
+                ? "ok"
+                : engineHealth === "recovering"
+                ? "warn"
+                : engineHealth === "critical"
+                ? "bad"
+                : ""
+            }`}>
+              {engineHealth.toUpperCase()}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <b>Capital Pressure:</b>{" "}
+          <span className={`badge ${
+            capitalPressure === "high"
+              ? "bad"
+              : capitalPressure === "moderate"
+              ? "warn"
+              : "ok"
+          }`}>
+            {capitalPressure.toUpperCase()}
           </span>
         </div>
 
-        {/* ENGINE SELECT */}
-        <div className="ctrlRow">
+        <div className="ctrlRow" style={{ marginTop: 20 }}>
           <button
             className={`pill ${engineType === "scalp" ? "active" : ""}`}
             onClick={() => setEngineType("scalp")}
           >
             Scalp Engine
           </button>
-
           <button
             className={`pill ${engineType === "session" ? "active" : ""}`}
             onClick={() => setEngineType("session")}
@@ -93,7 +200,6 @@ export default function TradingRoom({
           </button>
         </div>
 
-        {/* RISK CONTROLS */}
         <div className="ctrl">
           <label>
             Base Risk %
@@ -102,7 +208,9 @@ export default function TradingRoom({
               value={baseRisk}
               min="0.1"
               step="0.1"
-              onChange={(e) => setBaseRisk(Number(e.target.value))}
+              onChange={(e) =>
+                setBaseRisk(Number(e.target.value))
+              }
             />
           </label>
 
@@ -113,54 +221,31 @@ export default function TradingRoom({
               value={leverage}
               min="1"
               max="20"
-              onChange={(e) => setLeverage(Number(e.target.value))}
+              onChange={(e) =>
+                setLeverage(Number(e.target.value))
+              }
             />
           </label>
         </div>
 
-        {/* RUN BUTTON */}
         <div className="actions">
-          <button className="btn ok" onClick={runSimulation}>
-            Run 200 Trade Backtest
+          <button className="btn ok" onClick={executeTrade}>
+            Execute Trade
           </button>
         </div>
-
-        <p className="muted" style={{ marginTop: 12 }}>
-          AI makes all trade decisions. Human caps only limit exposure.
-        </p>
       </section>
 
-      {/* ================= RESULTS ================= */}
-      {backtestResult && (
-        <section className="postureCard">
-          <h3>Backtest Results</h3>
-
-          <div className="stats">
-            <div>
-              <b>Final Balance:</b> $
-              {backtestResult.finalBalance.toFixed(2)}
+      <aside className="postureCard">
+        <h3>Execution Log</h3>
+        <div style={{ maxHeight: 350, overflowY: "auto" }}>
+          {log.map((x, i) => (
+            <div key={i}>
+              <small>{x.t}</small>
+              <div>{x.m}</div>
             </div>
-            <div>
-              <b>Wins:</b> {backtestResult.wins}
-            </div>
-            <div>
-              <b>Losses:</b> {backtestResult.losses}
-            </div>
-            <div>
-              <b>Max Drawdown:</b>{" "}
-              {backtestResult.drawdown.toFixed(2)}%
-            </div>
-          </div>
-
-          <div style={{ marginTop: 20 }}>
-            <EquityChart data={backtestResult.equityHistory} />
-          </div>
-
-          <p className="muted" style={{ marginTop: 15 }}>
-            Learning engine adapts from simulation results.
-          </p>
-        </section>
-      )}
+          ))}
+        </div>
+      </aside>
     </div>
   );
 }
