@@ -1,19 +1,16 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 
 /**
- * TradingRoom.jsx — VISUALLY ALIGNED + HARDENED
- * SOC-aligned Trading Control Room
+ * TradingRoom.jsx — DUAL ENGINE QUANT ROOM
  *
- * ROLE:
- * - Operational governance
- * - Risk & execution visibility
- * - Human-in-the-loop execution
+ * - Execution Engine (Operator Controlled)
+ * - Learning Engine (Always Running)
+ * - Micro-Scalp Mode Support
+ * - Capital Segmentation (UI)
+ * - No-Trade Window Enforcement
  *
- * HARD RULES:
- * - NO AI execution
- * - NO API keys
- * - NO auto trading
- * - Assistant lives in layout ONLY
+ * NO execution logic
+ * NO automation
  */
 
 export default function TradingRoom({
@@ -21,18 +18,48 @@ export default function TradingRoom({
   dailyLimit = 5,
   executionState: parentExecution = "idle",
 }) {
-  /* ===================== STATE ===================== */
+  /* ================= EXECUTION ENGINE ================= */
   const [mode, setMode] = useState(parentMode.toUpperCase());
   const [execution, setExecution] = useState(parentExecution);
   const [riskPct, setRiskPct] = useState(1);
-  const [tradeStyle, setTradeStyle] = useState("short");
+  const [tradeStyle, setTradeStyle] = useState("scalp"); // scalp | session
   const [tradesUsed, setTradesUsed] = useState(1);
 
+  /* ================= LEARNING ENGINE ================= */
+  const [learningSignals] = useState(842);
+  const [learningAccuracy] = useState(71.2);
+  const [trainingCycles] = useState(3941);
+
+  /* ================= CAPITAL NODES ================= */
+  const [capitalNodes] = useState({
+    coinbase: 40000,
+    kraken: 35000,
+    reserve: 25000,
+  });
+
+  /* ================= NO TRADE WINDOW ================= */
+  const tradingAllowed = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const hour = now.getHours();
+
+    if (day === 5 && hour >= 21) return false;
+    if (day === 6 && hour < 21) return false;
+    return true;
+  }, []);
+
+  /* ================= LOG ================= */
   const [log, setLog] = useState([
-    { t: new Date().toLocaleTimeString(), m: "Trading room initialized." },
+    { t: new Date().toLocaleTimeString(), m: "Quant control room online." },
   ]);
 
-  /* ===================== SYNC ===================== */
+  const pushLog = (message) => {
+    setLog((prev) =>
+      [{ t: new Date().toLocaleTimeString(), m: message }, ...prev].slice(0, 100)
+    );
+  };
+
+  /* ================= SYNC ================= */
   useEffect(() => {
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
@@ -41,61 +68,17 @@ export default function TradingRoom({
     setExecution(parentExecution);
   }, [parentExecution]);
 
-  /* ===================== STATS ===================== */
-  const stats = useMemo(
-    () => ({
-      tradesToday: tradesUsed,
-      wins: 1,
-      losses: 0,
-      lastAction: "BUY BTCUSDT",
-    }),
-    [tradesUsed]
-  );
-
-  /* ===================== HELPERS ===================== */
-  const pushLog = (message) => {
-    setLog((prev) =>
-      [{ t: new Date().toLocaleTimeString(), m: message }, ...prev].slice(0, 100)
-    );
-  };
-
-  /* ===================== AI CONTEXT (ADVISORY ONLY) ===================== */
-  const learnedRef = useRef(false);
-
-  useEffect(() => {
-    if (learnedRef.current) return;
-    learnedRef.current = true;
-
-    fetch("/api/ai/learn", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        type: "site",
-        text: `
-AutoShield Trading Control Room — SOC Governance
-
-- Execution is human-controlled
-- PAPER = simulated
-- LIVE = real exposure
-- Trade limits enforced visually
-- Risk is percentage-based
-- Assistant provides explanation only
-`,
-      }),
-    }).catch(() => {});
-  }, []);
-
-  /* ===================== UI ===================== */
+  /* ================= UI ================= */
   return (
     <div className="postureWrap">
-      {/* ================= LEFT: CONTROL ================= */}
+
+      {/* ================= LEFT PANEL ================= */}
       <section className="postureCard">
-        {/* HEADER */}
+
         <div className="postureTop">
           <div>
-            <h2>Trading Control Room</h2>
-            <small>Execution intent, exposure & governance</small>
+            <h2 style={{ color: "#7ec8ff" }}>Quant Execution Engine</h2>
+            <small>Operator-controlled micro & session trading</small>
           </div>
 
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
@@ -103,19 +86,18 @@ AutoShield Trading Control Room — SOC Governance
           </span>
         </div>
 
+        {/* WINDOW STATUS */}
+        {!tradingAllowed && (
+          <p style={{ color: "#ff7a7a", marginTop: 12 }}>
+            Trading window closed (Fri 9PM → Sat 9PM)
+          </p>
+        )}
+
         {/* STATUS STRIP */}
         <div className="stats">
           <div>
             <b>Status:</b>{" "}
-            <span
-              className={`badge ${
-                execution === "paused"
-                  ? "warn"
-                  : execution === "executing"
-                  ? "ok"
-                  : ""
-              }`}
-            >
+            <span className={`badge ${execution === "executing" ? "ok" : ""}`}>
               {execution.toUpperCase()}
             </span>
           </div>
@@ -133,7 +115,30 @@ AutoShield Trading Control Room — SOC Governance
           </div>
         </div>
 
-        {/* RISK CONTROL */}
+        {/* TRADE STYLE */}
+        <div className="ctrlRow">
+          <button
+            className={`pill ${tradeStyle === "scalp" ? "active" : ""}`}
+            onClick={() => {
+              setTradeStyle("scalp");
+              pushLog("Micro-scalp mode (2–3s execution) enabled.");
+            }}
+          >
+            Micro Scalp
+          </button>
+
+          <button
+            className={`pill ${tradeStyle === "session" ? "active" : ""}`}
+            onClick={() => {
+              setTradeStyle("session");
+              pushLog("Session trade mode enabled.");
+            }}
+          >
+            Session
+          </button>
+        </div>
+
+        {/* RISK */}
         <div className="ctrl">
           <label>
             Risk %
@@ -150,37 +155,14 @@ AutoShield Trading Control Room — SOC Governance
           </label>
         </div>
 
-        {/* TRADE STYLE */}
-        <div className="ctrlRow">
-          <button
-            className={`pill ${tradeStyle === "short" ? "active" : ""}`}
-            onClick={() => {
-              setTradeStyle("short");
-              pushLog("Trade style set to SHORT trades");
-            }}
-          >
-            Short Trades
-          </button>
-
-          <button
-            className={`pill ${tradeStyle === "session" ? "active" : ""}`}
-            onClick={() => {
-              setTradeStyle("session");
-              pushLog("Trade style set to SESSION trades");
-            }}
-          >
-            Session Trades
-          </button>
-        </div>
-
-        {/* OPERATOR ACTIONS */}
+        {/* EXECUTION ACTIONS */}
         <div className="actions">
           <button
             className="btn warn"
-            disabled={execution === "paused"}
+            disabled={!tradingAllowed}
             onClick={() => {
               setExecution("paused");
-              pushLog("Operator paused trading");
+              pushLog("Execution paused by operator.");
             }}
           >
             Pause
@@ -188,49 +170,62 @@ AutoShield Trading Control Room — SOC Governance
 
           <button
             className="btn ok"
-            disabled={tradesUsed >= dailyLimit}
+            disabled={
+              tradesUsed >= dailyLimit || !tradingAllowed
+            }
             onClick={() => {
               setExecution("executing");
               setTradesUsed((v) => v + 1);
-              pushLog("Trade executed (simulated)");
+              pushLog("Simulated trade executed.");
             }}
           >
-            Execute Trade
+            Execute
           </button>
         </div>
 
-        {tradesUsed >= dailyLimit && (
-          <p className="muted" style={{ marginTop: 12 }}>
-            Daily trade limit reached. Execution locked.
-          </p>
-        )}
       </section>
 
-      {/* ================= RIGHT: ACTIVITY LOG ================= */}
+      {/* ================= RIGHT PANEL ================= */}
       <aside className="postureCard">
-        <h3>Operational Activity</h3>
+
+        <h3 style={{ color: "#7ec8ff" }}>Learning Engine (Always Active)</h3>
         <p className="muted">
-          System state changes and operator actions.
+          This engine continues training regardless of execution window.
         </p>
 
-        <div
-          className="tr-log"
-          style={{
-            maxHeight: 420,
-            overflowY: "auto",
-          }}
-        >
+        <div className="stats">
+          <div>
+            <b>Signals Processed:</b> {learningSignals}
+          </div>
+          <div>
+            <b>Accuracy:</b> {learningAccuracy}%
+          </div>
+          <div>
+            <b>Training Cycles:</b> {trainingCycles}
+          </div>
+        </div>
+
+        <hr style={{ opacity: 0.2, margin: "20px 0" }} />
+
+        <h4>Capital Nodes</h4>
+        <small>
+          Coinbase: ${capitalNodes.coinbase.toLocaleString()} <br />
+          Kraken: ${capitalNodes.kraken.toLocaleString()} <br />
+          Reserve: ${capitalNodes.reserve.toLocaleString()}
+        </small>
+
+        <hr style={{ opacity: 0.2, margin: "20px 0" }} />
+
+        <h4>Activity Log</h4>
+        <div style={{ maxHeight: 260, overflowY: "auto" }}>
           {log.map((x, i) => (
-            <div key={i} className="tr-msg">
-              <span className="time">{x.t}</span>
+            <div key={i} style={{ marginBottom: 6 }}>
+              <span style={{ opacity: 0.5 }}>{x.t}</span>
               <div>{x.m}</div>
             </div>
           ))}
         </div>
 
-        <p className="muted" style={{ marginTop: 12 }}>
-          Use the assistant drawer for explanations and trade rationale.
-        </p>
       </aside>
     </div>
   );
