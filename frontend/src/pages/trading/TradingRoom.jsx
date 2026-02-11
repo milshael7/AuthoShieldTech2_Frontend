@@ -1,35 +1,22 @@
 import React, { useState, useEffect } from "react";
 import { executeEngine } from "./engines/ExecutionEngine";
-import { rebalancePortfolio } from "./engines/PortfolioAllocator";
-import { evaluateGlobalRisk } from "./engines/RiskGovernor";
-import { isTradingWindowOpen } from "./engines/TimeGovernor";
+import { ExchangeManager } from "./exchanges/ExchangeManager";
 
 export default function TradingRoom({
   mode: parentMode = "paper",
   dailyLimit = 5,
 }) {
-  const [mode, setMode] = useState(parentMode.toUpperCase());
+  const [mode, setMode] = useState(parentMode.toLowerCase());
   const [engineType, setEngineType] = useState("scalp");
   const [riskPct, setRiskPct] = useState(1);
   const [leverage, setLeverage] = useState(1);
   const [tradesUsed, setTradesUsed] = useState(0);
-  const [systemLocked, setSystemLocked] = useState(false);
-  const [lockReason, setLockReason] = useState("");
   const [log, setLog] = useState([]);
 
-  const [allocation, setAllocation] = useState({
-    scalp: 500,
-    session: 500,
-    total: 1000,
-  });
-
-  const [performance, setPerformance] = useState({
-    scalp: { wins: 0, losses: 0, pnl: 0 },
-    session: { wins: 0, losses: 0, pnl: 0 },
-  });
+  const exchangeManager = new ExchangeManager({ mode });
 
   useEffect(() => {
-    setMode(parentMode.toUpperCase());
+    setMode(parentMode.toLowerCase());
   }, [parentMode]);
 
   function pushLog(message) {
@@ -39,85 +26,36 @@ export default function TradingRoom({
     ]);
   }
 
-  function executeTrade() {
-    if (!isTradingWindowOpen()) {
-      pushLog("Blocked — Weekend protection active.");
-      return;
-    }
-
-    if (systemLocked) {
-      pushLog("Execution blocked — System locked.");
-      return;
-    }
-
+  async function executeTrade() {
     if (tradesUsed >= dailyLimit) {
       pushLog("Daily trade limit reached.");
       return;
     }
 
-    const engineCapital =
-      engineType === "scalp"
-        ? allocation.scalp
-        : allocation.session;
-
-    const result = executeEngine({
+    const decision = executeEngine({
       engineType,
-      balance: engineCapital,
+      balance: 10000,
       riskPct,
       leverage,
     });
 
-    if (result.blocked) {
-      pushLog("Trade blocked by engine safeguards.");
+    if (decision.blocked) {
+      pushLog(`Execution blocked: ${decision.reason}`);
       return;
     }
 
-    const updatedAllocation =
-      engineType === "scalp"
-        ? { ...allocation, scalp: result.newBalance }
-        : { ...allocation, session: result.newBalance };
-
-    const rebalanced = rebalancePortfolio(
-      updatedAllocation,
-      performance
-    );
-
-    setAllocation(rebalanced);
-
-    setPerformance((prev) => {
-      const isWin = result.isWin;
-      const enginePerf = prev[engineType];
-
-      return {
-        ...prev,
-        [engineType]: {
-          wins: enginePerf.wins + (isWin ? 1 : 0),
-          losses: enginePerf.losses + (!isWin ? 1 : 0),
-          pnl: enginePerf.pnl + result.pnl,
-        },
-      };
+    const order = await exchangeManager.executeOrder({
+      exchange: "coinbase",
+      symbol: "BTCUSDT",
+      side: decision.isWin ? "buy" : "sell",
+      size: decision.positionSize,
     });
 
     setTradesUsed((v) => v + 1);
 
     pushLog(
-      `${engineType.toUpperCase()} | PnL: ${result.pnl.toFixed(
-        2
-      )}`
+      `Order routed → ${order.exchange || "paper"} | ${order.side} | Size: ${order.size}`
     );
-
-    /* ================= GLOBAL RISK CHECK ================= */
-
-    const riskState = evaluateGlobalRisk({
-      allocation: rebalanced,
-      performance,
-    });
-
-    if (riskState.locked) {
-      setSystemLocked(true);
-      setLockReason(riskState.reason);
-      pushLog(`SYSTEM LOCKED → ${riskState.reason}`);
-    }
   }
 
   return (
@@ -125,47 +63,23 @@ export default function TradingRoom({
       <section className="postureCard">
         <div className="postureTop">
           <div>
-            <h2>Unified Trading Engine</h2>
-            <small>Execution · Allocation · Governance</small>
+            <h2>Execution Control Room</h2>
+            <small>Exchange-routed execution</small>
           </div>
-
-          <span
-            className={`badge ${
-              systemLocked
-                ? "bad"
-                : mode === "LIVE"
-                ? "warn"
-                : ""
-            }`}
-          >
-            {systemLocked ? "LOCKED" : mode}
+          <span className={`badge ${mode === "live" ? "warn" : ""}`}>
+            {mode.toUpperCase()}
           </span>
         </div>
 
-        {!isTradingWindowOpen() && (
-          <div className="badge warn" style={{ marginTop: 10 }}>
-            Weekend Lock — Learning Mode Active
-          </div>
-        )}
-
-        {systemLocked && (
-          <div className="badge bad" style={{ marginTop: 10 }}>
-            {lockReason}
-          </div>
-        )}
-
         <div className="stats">
           <div>
-            <b>Total:</b> ${allocation.total.toFixed(2)}
+            <b>Trades Used:</b> {tradesUsed} / {dailyLimit}
           </div>
           <div>
-            <b>Scalp:</b> ${allocation.scalp.toFixed(2)}
+            <b>Risk %:</b> {riskPct}
           </div>
           <div>
-            <b>Session:</b> ${allocation.session.toFixed(2)}
-          </div>
-          <div>
-            <b>Trades:</b> {tradesUsed} / {dailyLimit}
+            <b>Leverage:</b> {leverage}
           </div>
         </div>
 
@@ -174,14 +88,13 @@ export default function TradingRoom({
             className={`pill ${engineType === "scalp" ? "active" : ""}`}
             onClick={() => setEngineType("scalp")}
           >
-            Scalp
+            Scalp Engine
           </button>
-
           <button
             className={`pill ${engineType === "session" ? "active" : ""}`}
             onClick={() => setEngineType("session")}
           >
-            Session
+            Session Engine
           </button>
         </div>
 
@@ -210,18 +123,14 @@ export default function TradingRoom({
         </div>
 
         <div className="actions">
-          <button
-            className="btn ok"
-            onClick={executeTrade}
-            disabled={!isTradingWindowOpen() || systemLocked}
-          >
-            Execute Trade
+          <button className="btn ok" onClick={executeTrade}>
+            Route Order
           </button>
         </div>
       </section>
 
       <aside className="postureCard">
-        <h3>System Log</h3>
+        <h3>Execution Log</h3>
         <div style={{ maxHeight: 400, overflowY: "auto" }}>
           {log.map((x, i) => (
             <div key={i}>
