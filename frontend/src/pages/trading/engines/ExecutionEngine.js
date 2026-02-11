@@ -11,6 +11,7 @@ export function executeEngine({
   riskPct,
   leverage,
   recentPerformance = { wins: 0, losses: 0 },
+  humanMultiplier = 1, // 🔥 human override control
   humanCaps = {
     maxRiskPct: 2,
     maxLeverage: 10,
@@ -18,6 +19,14 @@ export function executeEngine({
     capitalFloor: 100,
   },
 }) {
+  if (balance <= 0) {
+    return {
+      blocked: true,
+      reason: "No capital available",
+      confidenceScore: 0,
+    };
+  }
+
   /* ================= CONFIDENCE ================= */
 
   const confidenceData = evaluateConfidence({
@@ -48,6 +57,7 @@ export function executeEngine({
   const effectiveRisk =
     cappedRisk *
     confidenceData.modifier *
+    humanMultiplier *
     volatilityFactor;
 
   const positionSize =
@@ -66,10 +76,12 @@ export function executeEngine({
 
   const newBalance = balance + pnl;
 
-  /* ================= DRAW DOWN PROTECTION ================= */
+  /* ================= DRAWDOWN PROTECTION ================= */
 
   const drawdownPct =
-    ((balance - newBalance) / balance) * 100;
+    balance > 0
+      ? ((balance - newBalance) / balance) * 100
+      : 0;
 
   if (drawdownPct > humanCaps.maxDrawdownPct) {
     return {
