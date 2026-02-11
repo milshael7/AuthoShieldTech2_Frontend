@@ -1,17 +1,14 @@
 import { PaperExchange } from "./PaperExchange";
 import { CoinbaseExchange } from "./CoinbaseExchange";
 import { KrakenExchange } from "./KrakenExchange";
-import { evaluateConfidence } from "./ConfidenceEngine";
 
 export class ExchangeManager {
   constructor({
-    mode = "paper",
-    humanOverride = false,
-    humanMultiplier = 1,
+    mode = "paper", // paper | live
+    enabledExchanges = ["coinbase", "kraken"],
   }) {
     this.mode = mode;
-    this.humanOverride = humanOverride;
-    this.humanMultiplier = humanMultiplier;
+    this.enabledExchanges = enabledExchanges;
 
     this.exchanges = {
       paper: new PaperExchange(),
@@ -20,74 +17,62 @@ export class ExchangeManager {
     };
   }
 
+  /* ================= MODE CONTROL ================= */
+
   setMode(mode) {
+    if (!["paper", "live"].includes(mode)) {
+      throw new Error("Invalid trading mode");
+    }
+
     this.mode = mode;
   }
 
-  setHumanOverride(enabled, multiplier = 1) {
-    this.humanOverride = enabled;
-    this.humanMultiplier = multiplier;
+  /* ================= EXCHANGE RESOLUTION ================= */
+
+  resolveExchange(name) {
+    if (this.mode === "paper") {
+      return this.exchanges.paper;
+    }
+
+    if (!this.enabledExchanges.includes(name)) {
+      throw new Error(`Exchange ${name} not enabled`);
+    }
+
+    const ex = this.exchanges[name];
+
+    if (!ex) {
+      throw new Error(`Exchange ${name} not found`);
+    }
+
+    return ex;
   }
 
-  getExchange(name) {
-    return this.exchanges[name];
-  }
-
-  /* ==================================================
-     EXECUTION LAYER
-     ================================================== */
+  /* ================= SAFE EXECUTION ================= */
 
   async executeOrder({
-    exchange = "coinbase",
+    exchange,
     symbol,
     side,
     size,
-    engineType,
+    metadata = {},
   }) {
-    /* ================= CONFIDENCE CHECK ================= */
+    const ex = this.resolveExchange(exchange);
 
-    const confidence = evaluateConfidence(engineType);
-
-    if (!confidence.approved && !this.humanOverride) {
-      return {
-        blocked: true,
-        reason: confidence.reason || "AI confidence too low",
-        confidenceScore: confidence.score,
-      };
-    }
-
-    const effectiveSize =
-      size *
-      confidence.modifier *
-      (this.humanOverride ? this.humanMultiplier : 1);
-
-    /* ================= EXCHANGE ROUTING ================= */
-
-    const selectedExchange =
-      this.mode === "paper" ? "paper" : exchange;
-
-    const ex = this.getExchange(selectedExchange);
-
-    if (!ex) {
-      return {
-        blocked: true,
-        reason: "Exchange not available",
-      };
-    }
-
-    /* ================= PLACE ORDER ================= */
-
-    const result = await ex.placeOrder({
+    const orderPayload = {
       symbol,
       side,
-      size: effectiveSize,
-    });
+      size,
+      timestamp: Date.now(),
+      metadata,
+    };
+
+    const result = await ex.placeOrder(orderPayload);
 
     return {
       ...result,
-      confidenceScore: confidence.score,
-      modifier: confidence.modifier,
-      humanOverride: this.humanOverride,
+      mode: this.mode,
+      exchange:
+        this.mode === "paper" ? "paper" : exchange,
     };
   }
 }
