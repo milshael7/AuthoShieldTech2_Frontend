@@ -6,6 +6,7 @@ import {
   calculateTotalCapital,
 } from "./engines/CapitalAllocator";
 import { evaluateGlobalRisk } from "./engines/GlobalRiskGovernor";
+import { evaluateKillSwitch } from "./engines/KillSwitchEngine";
 
 export default function TradingRoom({
   mode: parentMode = "paper",
@@ -21,6 +22,9 @@ export default function TradingRoom({
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
   const [lastConfidence, setLastConfidence] = useState(null);
+
+  const [consecutiveLosses, setConsecutiveLosses] = useState(0);
+  const [killManual, setKillManual] = useState(false);
 
   const [currentDate, setCurrentDate] = useState(
     new Date().toDateString()
@@ -56,6 +60,7 @@ export default function TradingRoom({
       if (today !== currentDate) {
         setTradesUsed(0);
         setDailyPnL(0);
+        setConsecutiveLosses(0);
         setCurrentDate(today);
 
         setLog((prev) => [
@@ -66,7 +71,7 @@ export default function TradingRoom({
           ...prev,
         ]);
       }
-    }, 60000); // check every minute
+    }, 60000);
 
     return () => clearInterval(interval);
   }, [currentDate]);
@@ -77,6 +82,16 @@ export default function TradingRoom({
     totalCapital,
     peakCapital: peakCapital.current,
     dailyPnL,
+  });
+
+  /* ================= KILL SWITCH ================= */
+
+  const killSwitch = evaluateKillSwitch({
+    totalCapital,
+    peakCapital: peakCapital.current,
+    dailyPnL,
+    consecutiveLosses,
+    manualTrigger: killManual,
   });
 
   if (totalCapital > peakCapital.current) {
@@ -94,7 +109,14 @@ export default function TradingRoom({
     ]);
   }
 
+  /* ================= EXECUTION ================= */
+
   function executeTrade() {
+    if (killSwitch.active) {
+      pushLog(`🚨 KILL SWITCH: ${killSwitch.reason}`);
+      return;
+    }
+
     if (!globalRisk.allowed) {
       pushLog(`Blocked: ${globalRisk.reason}`);
       return;
@@ -145,6 +167,12 @@ export default function TradingRoom({
     setDailyPnL((v) => v + result.pnl);
     setLastConfidence(result.confidenceScore);
 
+    if (result.pnl < 0) {
+      setConsecutiveLosses((v) => v + 1);
+    } else {
+      setConsecutiveLosses(0);
+    }
+
     pushLog(
       `${engineType.toUpperCase()} | ${exchange} | PnL: ${result.pnl.toFixed(
         2
@@ -174,11 +202,18 @@ export default function TradingRoom({
           </span>
         </div>
 
+        {killSwitch.active && (
+          <div className="badge bad" style={{ marginTop: 10 }}>
+            🚨 KILL SWITCH ACTIVE — {killSwitch.reason}
+          </div>
+        )}
+
         <div className="stats">
           <div><b>Total Capital:</b> ${totalCapital.toFixed(2)}</div>
           <div><b>Reserve:</b> ${reserve.toFixed(2)}</div>
           <div><b>Daily PnL:</b> ${dailyPnL.toFixed(2)}</div>
           <div><b>Trades Used:</b> {tradesUsed} / {dailyLimit}</div>
+          <div><b>Consecutive Losses:</b> {consecutiveLosses}</div>
 
           {lastConfidence !== null && (
             <div>
@@ -199,9 +234,23 @@ export default function TradingRoom({
           <button
             className="btn ok"
             onClick={executeTrade}
-            disabled={!globalRisk.allowed}
+            disabled={!globalRisk.allowed || killSwitch.active}
           >
             Execute Trade
+          </button>
+
+          <button
+            className="btn warn"
+            onClick={() => setKillManual(true)}
+          >
+            Emergency Stop
+          </button>
+
+          <button
+            className="btn"
+            onClick={() => setKillManual(false)}
+          >
+            Reset Kill Switch
           </button>
         </div>
       </section>
@@ -213,6 +262,16 @@ export default function TradingRoom({
             <div key={i}>
               <small>{x.t}</small>
               <div>{x.m}</div>
+              {x.confidence !== undefined && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: confidenceColor(x.confidence),
+                  }}
+                >
+                  Confidence: {x.confidence}%
+                </div>
+              )}
             </div>
           ))}
         </div>
