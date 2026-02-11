@@ -1,39 +1,36 @@
-export function checkVolatility() {
-  // Simulated volatility reading (replace with real feed later)
-  const volatility = Math.random() * 100;
+// VolatilityGovernor.js
+// Dynamically adjusts leverage + risk during high volatility
 
-  if (volatility < 15) {
-    return {
-      approved: false,
-      reason: "Volatility too low — market stagnant.",
-      riskModifier: 0,
-    };
+export function evaluateVolatility({
+  engineType,
+  baseRisk,
+  leverage,
+}) {
+  // Simulated volatility score (replace with real ATR later)
+  const volatilityScore = Math.random(); // 0 → 1
+
+  let adjustedRisk = baseRisk;
+  let adjustedLeverage = leverage;
+  let regime = "normal";
+
+  // Moderate volatility
+  if (volatilityScore > 0.6 && volatilityScore <= 0.8) {
+    adjustedRisk = baseRisk * 0.85;
+    adjustedLeverage = leverage * 0.8;
+    regime = "elevated";
   }
 
-  if (volatility > 85) {
-    return {
-      approved: false,
-      reason: "Volatility spike detected — protection active.",
-      riskModifier: 0,
-    };
-  }
-
-  if (volatility > 65) {
-    return {
-      approved: true,
-      riskModifier: 0.7,
-    };
-  }
-
-  if (volatility < 30) {
-    return {
-      approved: true,
-      riskModifier: 0.8,
-    };
+  // High volatility
+  if (volatilityScore > 0.8) {
+    adjustedRisk = baseRisk * 0.6;
+    adjustedLeverage = leverage * 0.6;
+    regime = "high";
   }
 
   return {
-    approved: true,
-    riskModifier: 1,
+    volatilityScore: Number(volatilityScore.toFixed(2)),
+    adjustedRisk: Number(adjustedRisk.toFixed(3)),
+    adjustedLeverage: Number(adjustedLeverage.toFixed(2)),
+    regime,
   };
 }
