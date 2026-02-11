@@ -1,14 +1,11 @@
 import { PaperExchange } from "./PaperExchange";
 import { CoinbaseExchange } from "./CoinbaseExchange";
 import { KrakenExchange } from "./KrakenExchange";
+import { keyVault } from "../engines/KeyVault";
 
 export class ExchangeManager {
-  constructor({
-    mode = "paper", // paper | live
-    enabledExchanges = ["coinbase", "kraken"],
-  }) {
+  constructor({ mode = "paper" }) {
     this.mode = mode;
-    this.enabledExchanges = enabledExchanges;
 
     this.exchanges = {
       paper: new PaperExchange(),
@@ -17,62 +14,42 @@ export class ExchangeManager {
     };
   }
 
-  /* ================= MODE CONTROL ================= */
-
-  setMode(mode) {
-    if (!["paper", "live"].includes(mode)) {
-      throw new Error("Invalid trading mode");
-    }
-
-    this.mode = mode;
+  getExchange(name) {
+    return this.exchanges[name];
   }
-
-  /* ================= EXCHANGE RESOLUTION ================= */
-
-  resolveExchange(name) {
-    if (this.mode === "paper") {
-      return this.exchanges.paper;
-    }
-
-    if (!this.enabledExchanges.includes(name)) {
-      throw new Error(`Exchange ${name} not enabled`);
-    }
-
-    const ex = this.exchanges[name];
-
-    if (!ex) {
-      throw new Error(`Exchange ${name} not found`);
-    }
-
-    return ex;
-  }
-
-  /* ================= SAFE EXECUTION ================= */
 
   async executeOrder({
     exchange,
     symbol,
     side,
     size,
-    metadata = {},
   }) {
-    const ex = this.resolveExchange(exchange);
+    /* ================= PAPER MODE ================= */
+    if (this.mode === "paper") {
+      return this.exchanges.paper.placeOrder({
+        symbol,
+        side,
+        size,
+      });
+    }
 
-    const orderPayload = {
+    /* ================= LIVE MODE ================= */
+
+    // Require key before execution
+    const key = keyVault.getKey(exchange);
+
+    const ex = this.getExchange(exchange);
+
+    if (!ex) {
+      throw new Error(`Exchange ${exchange} not found`);
+    }
+
+    return ex.placeOrder({
       symbol,
       side,
       size,
-      timestamp: Date.now(),
-      metadata,
-    };
-
-    const result = await ex.placeOrder(orderPayload);
-
-    return {
-      ...result,
-      mode: this.mode,
-      exchange:
-        this.mode === "paper" ? "paper" : exchange,
-    };
+      apiKey: key.apiKey,
+      secret: key.secret,
+    });
   }
 }
