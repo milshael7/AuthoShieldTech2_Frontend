@@ -11,7 +11,12 @@ export function executeEngine({
   balance,
   riskPct,
   leverage,
-  performance = { wins: 0, losses: 0, peak: balance },
+  performance = {
+    wins: 0,
+    losses: 0,
+    peak: balance,
+    losingStreak: 0,
+  },
   humanCaps = {
     maxRiskPct: 2,
     maxLeverage: 10,
@@ -24,7 +29,6 @@ export function executeEngine({
   const priceHistory = generateSyntheticPrices(60);
 
   const regime = detectRegime(priceHistory);
-
   const volatility = calculateVolatility(priceHistory);
   const volatilityModifier =
     volatilityPositionModifier(volatility);
@@ -62,10 +66,30 @@ export function executeEngine({
     drawdownPct,
   });
 
+  /* ================= LOSING STREAK PROTECTION ================= */
+
+  let streakModifier = 1;
+
+  if (performance.losingStreak >= 3) {
+    streakModifier = 0.7; // reduce risk 30%
+  }
+
+  if (performance.losingStreak >= 5) {
+    streakModifier = 0.5; // cut risk in half
+  }
+
+  if (performance.losingStreak >= 7) {
+    return {
+      blocked: true,
+      reason: "Circuit breaker — excessive losing streak",
+    };
+  }
+
   const effectiveRisk =
     cappedRisk *
     adaptiveConfidence *
-    volatilityModifier;
+    volatilityModifier *
+    streakModifier;
 
   const positionSize =
     (balance * effectiveRisk * cappedLeverage) / 100;
