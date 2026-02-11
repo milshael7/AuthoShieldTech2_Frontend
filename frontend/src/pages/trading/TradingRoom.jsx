@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { executeEngine } from "./engines/ExecutionEngine";
 import { isTradingWindowOpen } from "./engines/TimeGovernor";
 
@@ -6,26 +6,23 @@ export default function TradingRoom({
   mode: parentMode = "paper",
   dailyLimit = 5,
 }) {
-  /* ================= CORE STATE ================= */
-
   const [mode, setMode] = useState(parentMode.toUpperCase());
   const [engineType, setEngineType] = useState("scalp");
 
-  const [baseRiskPct, setBaseRiskPct] = useState(2);
-  const [riskMultiplier, setRiskMultiplier] = useState(1); // 🔥 THROTTLE SYSTEM
+  // Human Control (10%)
+  const [humanRiskAdjust, setHumanRiskAdjust] = useState(1);
+  const [baseRiskPct, setBaseRiskPct] = useState(1);
   const [leverage, setLeverage] = useState(1);
 
   const [tradesUsed, setTradesUsed] = useState(0);
-  const [log, setLog] = useState([]);
   const [learningCycles, setLearningCycles] = useState(0);
+  const [log, setLog] = useState([]);
 
   const [allocation, setAllocation] = useState({
     scalp: 500,
     session: 500,
     total: 1000,
   });
-
-  const [peakEquity, setPeakEquity] = useState(1000);
 
   const [performance, setPerformance] = useState({
     scalp: { wins: 0, losses: 0, pnl: 0 },
@@ -36,35 +33,11 @@ export default function TradingRoom({
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
 
-  /* ================= HELPERS ================= */
-
   function pushLog(message) {
     setLog((prev) => [
       { t: new Date().toLocaleTimeString(), m: message },
       ...prev,
     ]);
-  }
-
-  const effectiveRisk = baseRiskPct * riskMultiplier;
-
-  function calculateDrawdown(totalEquity) {
-    if (totalEquity > peakEquity) {
-      setPeakEquity(totalEquity);
-      return 0;
-    }
-    return ((peakEquity - totalEquity) / peakEquity) * 100;
-  }
-
-  function autoThrottle(drawdown) {
-    if (drawdown >= 8 && riskMultiplier !== 0.5) {
-      setRiskMultiplier(0.5);
-      pushLog("Auto Defensive Mode Activated (Drawdown Protection)");
-    }
-
-    if (drawdown === 0 && riskMultiplier < 1) {
-      setRiskMultiplier(1);
-      pushLog("Equity Restored — Risk Normalized");
-    }
   }
 
   function rebalanceCapital(updated) {
@@ -90,8 +63,6 @@ export default function TradingRoom({
     };
   }
 
-  /* ================= EXECUTION ================= */
-
   function executeTrade() {
     if (!isTradingWindowOpen()) {
       pushLog("Execution blocked — Weekend protection active.");
@@ -107,6 +78,10 @@ export default function TradingRoom({
       engineType === "scalp"
         ? allocation.scalp
         : allocation.session;
+
+    // AI influence 80%
+    const effectiveRisk =
+      baseRiskPct * 0.8 * humanRiskAdjust;
 
     const result = executeEngine({
       engineType,
@@ -128,9 +103,6 @@ export default function TradingRoom({
     setAllocation(rebalanced);
     setTradesUsed((v) => v + 1);
 
-    const drawdown = calculateDrawdown(rebalanced.total);
-    autoThrottle(drawdown);
-
     setPerformance((prev) => {
       const enginePerf = prev[engineType];
       const isWin = pnl > 0;
@@ -146,22 +118,22 @@ export default function TradingRoom({
     });
 
     pushLog(
-      `${engineType.toUpperCase()} trade | Risk ${effectiveRisk.toFixed(
+      `${engineType.toUpperCase()} | Confidence ${result.confidence.toFixed(
+        1
+      )}% | Risk ${effectiveRisk.toFixed(
         2
-      )}% | PnL: ${pnl.toFixed(2)}`
+      )}% | PnL ${pnl.toFixed(2)}`
     );
   }
 
-  /* ================= CONTINUOUS LEARNING ================= */
-
+  // Continuous learning (background)
   useEffect(() => {
     const interval = setInterval(() => {
       setLearningCycles((v) => v + 1);
     }, 5000);
+
     return () => clearInterval(interval);
   }, []);
-
-  /* ================= UI ================= */
 
   return (
     <div className="postureWrap">
@@ -169,8 +141,9 @@ export default function TradingRoom({
         <div className="postureTop">
           <div>
             <h2>Trading Control Room</h2>
-            <small>Dual Engine Governance + Adaptive Risk</small>
+            <small>Dual Engine + AI Confidence Model</small>
           </div>
+
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
             {mode}
           </span>
@@ -183,11 +156,16 @@ export default function TradingRoom({
         )}
 
         <div className="stats">
-          <div><b>Total Capital:</b> ${allocation.total.toFixed(2)}</div>
-          <div><b>Scalp:</b> ${allocation.scalp.toFixed(2)}</div>
-          <div><b>Session:</b> ${allocation.session.toFixed(2)}</div>
-          <div><b>Trades:</b> {tradesUsed} / {dailyLimit}</div>
-          <div><b>Effective Risk:</b> {effectiveRisk.toFixed(2)}%</div>
+          <div><b>Total:</b> ${allocation.total.toFixed(2)}</div>
+          <div style={{ color: "#5EC6FF" }}>
+            <b>Scalp:</b> ${allocation.scalp.toFixed(2)}
+          </div>
+          <div>
+            <b>Session:</b> ${allocation.session.toFixed(2)}
+          </div>
+          <div>
+            <b>Trades:</b> {tradesUsed} / {dailyLimit}
+          </div>
         </div>
 
         <div className="ctrlRow">
@@ -211,22 +189,22 @@ export default function TradingRoom({
             <input
               type="number"
               value={baseRiskPct}
+              min="0.1"
               step="0.1"
               onChange={(e) => setBaseRiskPct(Number(e.target.value))}
             />
           </label>
 
           <label>
-            Risk Multiplier
-            <select
-              value={riskMultiplier}
-              onChange={(e) => setRiskMultiplier(Number(e.target.value))}
-            >
-              <option value={1}>Normal (1.0x)</option>
-              <option value={0.5}>Defensive (0.5x)</option>
-              <option value={0.3}>Recovery (0.3x)</option>
-              <option value={1.2}>Aggressive (1.2x)</option>
-            </select>
+            Human Adjust (0.5 - 1.5)
+            <input
+              type="number"
+              value={humanRiskAdjust}
+              min="0.5"
+              max="1.5"
+              step="0.1"
+              onChange={(e) => setHumanRiskAdjust(Number(e.target.value))}
+            />
           </label>
 
           <label>
@@ -252,15 +230,17 @@ export default function TradingRoom({
         </div>
 
         <div style={{ marginTop: 15, fontSize: 12, opacity: 0.7 }}>
-          Continuous Learning Cycles: {learningCycles}
+          Learning Cycles: {learningCycles}
         </div>
       </section>
 
       <aside className="postureCard">
         <h3>Engine Performance</h3>
+
         <div>
           <b>Scalp:</b> W {performance.scalp.wins} | L {performance.scalp.losses} | PnL {performance.scalp.pnl.toFixed(2)}
         </div>
+
         <div style={{ marginBottom: 20 }}>
           <b>Session:</b> W {performance.session.wins} | L {performance.session.losses} | PnL {performance.session.pnl.toFixed(2)}
         </div>
