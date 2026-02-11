@@ -1,31 +1,25 @@
-// frontend/src/components/AuthoDevPanel.jsx
-// AuthoDev 6.5 — Universal AI Text + Speech Panel (HARDENED)
-//
-// RESPONSIBILITY:
-// - Text-based advisory assistant
-// - Optional click-to-speak (TTS)
-// - Role + page aware context
-//
-// ENFORCEMENT:
-// - NO microphone
-// - NO auto speech
-// - NO execution
-// - NO UI layout changes
-// - Speech is USER-INITIATED ONLY
-
 import React, { useEffect, useRef, useState } from "react";
 import { readAloud } from "./ReadAloud";
 import { getSavedUser } from "../lib/api";
 
-/* ================= HELPERS ================= */
+/* ================= SAFE HELPERS ================= */
 
-async function copyText(text) {
+function safeLocalGet(key) {
   try {
-    await navigator.clipboard.writeText(text);
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
   } catch {}
 }
 
 function getRoomId() {
+  if (typeof window === "undefined") return "root";
   const path = window.location.pathname.replace(/\/+$/, "");
   return path || "root";
 }
@@ -41,19 +35,17 @@ function buildSystemContext(user, pageContext = {}) {
   const role = String(user?.role || "user").toLowerCase();
   const page = pageContext?.page || getRoomId();
 
+  const toneMap = {
+    admin: "SOC advisor. Concise and technical.",
+    manager: "Risk-focused advisor.",
+    company: "Clear security guidance.",
+    user: "Simple practical assistance.",
+  };
+
   return {
     role,
     page,
-    tone: {
-      admin:
-        "SOC advisor. Concise, technical, decisive. Assume expertise.",
-      manager:
-        "Risk-focused advisor. Highlight trends and decisions.",
-      company:
-        "Security guidance. Clear explanations, minimal jargon.",
-      user:
-        "Simple security assistance. Practical and calm.",
-    }[role],
+    tone: toneMap[role] || toneMap.user,
   };
 }
 
@@ -64,28 +56,32 @@ export default function AuthoDevPanel({
   endpoint = "/api/ai/chat",
   getContext,
 }) {
-  const storageKey = getStorageKey();
   const user = getSavedUser();
+  const storageKey = getStorageKey();
 
-  const [messages, setMessages] = useState(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      return raw ? JSON.parse(raw).messages || [] : [];
-    } catch {
-      return [];
-    }
-  });
-
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
 
-  /* ================= PERSIST ================= */
+  /* ================= SAFE LOAD ================= */
 
   useEffect(() => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ messages }));
-    } catch {}
+      const raw = safeLocalGet(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setMessages(Array.isArray(parsed?.messages) ? parsed.messages : []);
+      }
+    } catch {
+      setMessages([]);
+    }
+  }, [storageKey]);
+
+  /* ================= SAFE SAVE ================= */
+
+  useEffect(() => {
+    safeLocalSet(storageKey, JSON.stringify({ messages }));
   }, [messages, storageKey]);
 
   /* ================= SEND ================= */
@@ -122,7 +118,7 @@ export default function AuthoDevPanel({
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       const aiText = data?.reply || "No response available.";
 
@@ -139,10 +135,8 @@ export default function AuthoDevPanel({
         ...m,
         {
           role: "ai",
-          text:
-            "The assistant is temporarily unavailable. Please retry shortly.",
-          speakText:
-            "The assistant is temporarily unavailable. Please retry shortly.",
+          text: "Assistant temporarily unavailable.",
+          speakText: "Assistant temporarily unavailable.",
           ts: new Date().toLocaleTimeString(),
         },
       ]);
@@ -174,26 +168,7 @@ export default function AuthoDevPanel({
 
             {m.role === "ai" && (
               <div className="ad-actions">
-                <button
-                  title="Read aloud"
-                  onClick={() => readAloud(m.speakText)}
-                >
-                  🔊
-                </button>
-                <button title="Copy" onClick={() => copyText(m.text)}>
-                  📋
-                </button>
-                <button title="Helpful">👍</button>
-                <button title="Not helpful">👎</button>
-                <button
-                  title="Share"
-                  onClick={() =>
-                    navigator.share?.({ text: m.text }) ||
-                    copyText(m.text)
-                  }
-                >
-                  🔗
-                </button>
+                <button onClick={() => readAloud(m.speakText)}>🔊</button>
               </div>
             )}
 
@@ -203,7 +178,6 @@ export default function AuthoDevPanel({
         <div ref={bottomRef} />
       </div>
 
-      {/* INPUT — TEXT ONLY */}
       <div className="ad-input">
         <textarea
           placeholder="Ask about risks, posture, or actions…"
