@@ -1,12 +1,4 @@
-// PHASE 4 — Intelligent Adaptive Execution Engine
-// AI = full decision autonomy
-// Human = safety rails + override limits
-// Adds:
-// - Confidence drift
-// - Loss streak dampening
-// - Performance acceleration
-// - Capital pressure scaling
-// - Engine health state
+// Institutional Adaptive Execution Engine (PHASE 6)
 
 export function executeEngine({
   engineType,
@@ -23,78 +15,72 @@ export function executeEngine({
     capitalFloor: 100,
   },
 }) {
-  /* ================= HUMAN SAFETY CAPS ================= */
 
-  const cappedRisk = Math.min(riskPct, humanCaps.maxRiskPct);
-  const cappedLeverage = Math.min(leverage, humanCaps.maxLeverage);
-
-  /* ================= PERFORMANCE METRICS ================= */
+  /* ================= PERFORMANCE ANALYSIS ================= */
 
   const totalTrades = performance.wins + performance.losses;
   const winRate =
     totalTrades > 0 ? performance.wins / totalTrades : 0.5;
 
-  const lossStreakPressure =
-    performance.losses > performance.wins
-      ? 1 - (performance.losses - performance.wins) * 0.03
-      : 1;
+  const losingStreak = performance.losses >= 3;
 
   /* ================= ADAPTIVE CONFIDENCE ================= */
 
   let adaptiveConfidence = confidence;
 
-  if (totalTrades > 10) {
-    if (winRate > 0.6) adaptiveConfidence += 0.05;
-    if (winRate < 0.45) adaptiveConfidence -= 0.07;
+  if (winRate > 0.6) adaptiveConfidence += 0.05;
+  if (winRate < 0.45) adaptiveConfidence -= 0.1;
+  if (losingStreak) adaptiveConfidence -= 0.15;
+
+  adaptiveConfidence = clamp(adaptiveConfidence, 0.4, 1);
+
+  /* ================= RISK CONTRACTION ================= */
+
+  let adjustedRisk = riskPct;
+  let adjustedLeverage = leverage;
+
+  if (losingStreak) {
+    adjustedRisk *= 0.6;
+    adjustedLeverage *= 0.7;
   }
 
-  adaptiveConfidence *= lossStreakPressure;
+  if (winRate > 0.65) {
+    adjustedRisk *= 1.05;
+  }
 
-  adaptiveConfidence = clamp(adaptiveConfidence, 0.55, 0.95);
+  adjustedRisk = Math.min(adjustedRisk, humanCaps.maxRiskPct);
+  adjustedLeverage = Math.min(adjustedLeverage, humanCaps.maxLeverage);
 
-  /* ================= CAPITAL PRESSURE ================= */
-
-  const capitalPressure =
-    balance < 500
-      ? 0.75
-      : balance < 300
-      ? 0.6
-      : 1;
-
-  /* ================= VOLATILITY MODEL ================= */
+  /* ================= POSITION SIZING ================= */
 
   const volatilityFactor =
     engineType === "scalp"
-      ? randomBetween(0.85, 1.25)
-      : randomBetween(0.9, 1.15);
+      ? randomBetween(0.8, 1.2)
+      : randomBetween(0.9, 1.1);
 
   const effectiveRisk =
-    cappedRisk *
+    adjustedRisk *
     adaptiveConfidence *
     humanMultiplier *
-    volatilityFactor *
-    capitalPressure;
+    volatilityFactor;
 
   const positionSize =
-    (balance * effectiveRisk * cappedLeverage) / 100;
+    (balance * effectiveRisk * adjustedLeverage) / 100;
 
-  /* ================= OUTCOME EDGE MODEL ================= */
+  /* ================= OUTCOME MODEL ================= */
 
-  const baseEdge =
-    engineType === "scalp" ? 0.52 : 0.55;
-
-  const outcomeBias =
-    baseEdge + (adaptiveConfidence - 0.8) * 0.12;
+  const baseBias = engineType === "scalp" ? 0.52 : 0.55;
+  const outcomeBias = baseBias + (winRate - 0.5) * 0.05;
 
   const isWin = Math.random() < outcomeBias;
 
   const pnl = isWin
-    ? positionSize * randomBetween(0.4, 1.0)
-    : -positionSize * randomBetween(0.3, 0.8);
+    ? positionSize * randomBetween(0.4, 0.9)
+    : -positionSize * randomBetween(0.3, 0.7);
 
   const newBalance = balance + pnl;
 
-  /* ================= DRAW DOWN PROTECTION ================= */
+  /* ================= DRAWDOWN PROTECTION ================= */
 
   const drawdownPct =
     ((balance - newBalance) / balance) * 100;
@@ -105,7 +91,8 @@ export function executeEngine({
       newBalance: balance,
       blocked: true,
       reason: "Drawdown cap exceeded",
-      engineHealth: "guarded",
+      engineHealth: "critical",
+      adaptiveConfidence,
     };
   }
 
@@ -115,19 +102,21 @@ export function executeEngine({
     return {
       pnl,
       newBalance: humanCaps.capitalFloor,
+      blocked: false,
       floorTriggered: true,
-      isWin,
+      engineHealth: "recovering",
       adaptiveConfidence,
-      engineHealth: "critical",
+      isWin,
     };
   }
 
-  /* ================= ENGINE HEALTH ================= */
+  /* ================= ENGINE HEALTH STATE ================= */
 
   let engineHealth = "stable";
 
+  if (losingStreak) engineHealth = "recovering";
   if (winRate > 0.65) engineHealth = "aggressive";
-  if (winRate < 0.4) engineHealth = "recovering";
+  if (winRate < 0.4) engineHealth = "critical";
 
   return {
     pnl,
@@ -135,18 +124,16 @@ export function executeEngine({
     blocked: false,
     effectiveRisk,
     positionSize,
-    isWin,
     adaptiveConfidence,
     engineHealth,
+    isWin,
   };
 }
-
-/* ================= HELPERS ================= */
 
 function randomBetween(min, max) {
   return Math.random() * (max - min) + min;
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
 }
