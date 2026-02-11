@@ -1,107 +1,106 @@
-import React, { useState } from "react";
+// KeyVault.js
+// Secure Exchange Credential Manager (Persistent + Hardened)
 
-export default function ApiVault() {
-  const [exchange, setExchange] = useState("binance");
-  const [apiKey, setApiKey] = useState("");
-  const [secretKey, setSecretKey] = useState("");
-  const [accounts, setAccounts] = useState([]);
+class KeyVault {
+  constructor() {
+    this.storageKey = "trading.exchange.keys";
+    this.keys = this.load();
+  }
 
-  function addAccount() {
-    if (!apiKey || !secretKey) return;
+  /* ================= LOAD / SAVE ================= */
 
-    const newAccount = {
-      id: Date.now(),
-      exchange,
-      status: "connected", // simulated
+  load() {
+    try {
+      const raw = localStorage.getItem(this.storageKey);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  persist() {
+    try {
+      localStorage.setItem(
+        this.storageKey,
+        JSON.stringify(this.keys)
+      );
+    } catch {
+      // fail silently
+    }
+  }
+
+  /* ================= ADD KEY ================= */
+
+  addKey(exchange, { apiKey, secret }) {
+    if (!exchange || !apiKey || !secret) {
+      throw new Error("Invalid key payload");
+    }
+
+    this.keys[exchange] = {
+      apiKey,
+      secret,
+      enabled: true,
+      addedAt: Date.now(),
     };
 
-    setAccounts((prev) => [...prev, newAccount]);
-    setApiKey("");
-    setSecretKey("");
+    this.persist();
+    return true;
   }
 
-  function removeAccount(id) {
-    setAccounts((prev) => prev.filter((a) => a.id !== id));
+  /* ================= REMOVE KEY ================= */
+
+  removeKey(exchange) {
+    if (!this.keys[exchange]) return false;
+
+    delete this.keys[exchange];
+    this.persist();
+    return true;
   }
 
-  return (
-    <div className="postureWrap">
-      <section className="postureCard">
-        <div className="postureTop">
-          <div>
-            <h2>Exchange API Vault</h2>
-            <small>Secure Exchange Connections</small>
-          </div>
-        </div>
+  /* ================= ENABLE / DISABLE ================= */
 
-        <div className="ctrl">
-          <label>
-            Exchange
-            <select
-              value={exchange}
-              onChange={(e) => setExchange(e.target.value)}
-            >
-              <option value="binance">Binance</option>
-              <option value="coinbase">Coinbase</option>
-              <option value="kraken">Kraken</option>
-              <option value="bybit">Bybit</option>
-            </select>
-          </label>
+  setEnabled(exchange, state) {
+    if (!this.keys[exchange]) return false;
 
-          <label>
-            API Key
-            <input
-              type="text"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
-          </label>
+    this.keys[exchange].enabled = !!state;
+    this.persist();
+    return true;
+  }
 
-          <label>
-            Secret Key
-            <input
-              type="password"
-              value={secretKey}
-              onChange={(e) => setSecretKey(e.target.value)}
-            />
-          </label>
-        </div>
+  /* ================= GET KEY (LIVE USE) ================= */
 
-        <div className="actions">
-          <button className="btn ok" onClick={addAccount}>
-            Connect Exchange
-          </button>
-        </div>
-      </section>
+  getKey(exchange) {
+    const key = this.keys[exchange];
 
-      <aside className="postureCard">
-        <h3>Connected Accounts</h3>
+    if (!key) {
+      throw new Error(`No key configured for ${exchange}`);
+    }
 
-        {accounts.length === 0 && (
-          <p className="muted">No exchanges connected.</p>
-        )}
+    if (!key.enabled) {
+      throw new Error(`Exchange ${exchange} disabled`);
+    }
 
-        {accounts.map((acc) => (
-          <div key={acc.id} className="stats">
-            <div>
-              <b>{acc.exchange.toUpperCase()}</b>
-            </div>
-            <div>
-              <span className="badge ok">
-                {acc.status.toUpperCase()}
-              </span>
-            </div>
-            <div>
-              <button
-                className="btn warn"
-                onClick={() => removeAccount(acc.id)}
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        ))}
-      </aside>
-    </div>
-  );
+    return key;
+  }
+
+  /* ================= SAFE LIST (UI ONLY) ================= */
+
+  listExchanges() {
+    return Object.keys(this.keys).map((ex) => ({
+      exchange: ex,
+      enabled: this.keys[ex].enabled,
+      addedAt: this.keys[ex].addedAt,
+      maskedKey:
+        this.keys[ex].apiKey.slice(0, 4) + "****",
+    }));
+  }
+
+  /* ================= CLEAR ALL ================= */
+
+  clearAll() {
+    this.keys = {};
+    this.persist();
+  }
 }
+
+export const keyVault = new KeyVault();
