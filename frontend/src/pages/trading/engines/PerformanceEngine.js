@@ -1,5 +1,68 @@
 // PerformanceEngine.js
-// Institutional performance analytics engine
+// Institutional Performance Memory + Analytics Engine
+
+/* =========================================================
+   INTERNAL MEMORY (Per Engine)
+========================================================= */
+
+const performanceMemory = {
+  scalp: [],
+  session: [],
+};
+
+/* =========================================================
+   TRADE REGISTRATION
+========================================================= */
+
+export function updatePerformance(engineType, pnl, isWin) {
+  if (!performanceMemory[engineType]) {
+    performanceMemory[engineType] = [];
+  }
+
+  performanceMemory[engineType].push({
+    pnl,
+    isWin,
+    timestamp: Date.now(),
+  });
+
+  // Keep last 500 trades only (memory safety)
+  if (performanceMemory[engineType].length > 500) {
+    performanceMemory[engineType].shift();
+  }
+}
+
+/* =========================================================
+   ENGINE STATS
+========================================================= */
+
+export function getPerformanceStats(engineType) {
+  const trades = performanceMemory[engineType] || [];
+
+  const wins = trades.filter(t => t.isWin).length;
+  const losses = trades.filter(t => !t.isWin).length;
+
+  const lossStreak = calculateLossStreak(trades);
+  const winStreak = calculateWinStreak(trades);
+
+  return {
+    wins,
+    losses,
+    total: trades.length,
+    lossStreak,
+    winStreak,
+  };
+}
+
+export function getAllPerformanceStats() {
+  return {
+    scalp: getPerformanceStats("scalp"),
+    session: getPerformanceStats("session"),
+  };
+}
+
+/* =========================================================
+   FULL ANALYTICS ENGINE (Institutional Metrics)
+========================================================= */
 
 export function evaluatePerformance(trades = []) {
   if (!trades.length) {
@@ -23,20 +86,11 @@ export function evaluatePerformance(trades = []) {
 
   const winRate = wins.length / trades.length;
 
-  const averageWin =
-    wins.length > 0
-      ? grossProfit / wins.length
-      : 0;
-
-  const averageLoss =
-    losses.length > 0
-      ? grossLoss / losses.length
-      : 0;
+  const averageWin = wins.length ? grossProfit / wins.length : 0;
+  const averageLoss = losses.length ? grossLoss / losses.length : 0;
 
   const profitFactor =
-    grossLoss > 0
-      ? grossProfit / grossLoss
-      : grossProfit;
+    grossLoss > 0 ? grossProfit / grossLoss : grossProfit;
 
   const expectancy =
     winRate * averageWin -
@@ -55,10 +109,9 @@ export function evaluatePerformance(trades = []) {
     if (dd > maxDrawdown) maxDrawdown = dd;
   });
 
-  /* ================= SHARPE (simplified) ================= */
+  /* ================= SHARPE (Simplified) ================= */
 
-  const mean =
-    totalPnL / trades.length;
+  const mean = totalPnL / trades.length;
 
   const variance =
     trades.reduce((sum, t) => {
@@ -68,9 +121,7 @@ export function evaluatePerformance(trades = []) {
   const stdDev = Math.sqrt(variance);
 
   const sharpe =
-    stdDev !== 0
-      ? mean / stdDev
-      : 0;
+    stdDev !== 0 ? mean / stdDev : 0;
 
   return {
     winRate,
@@ -81,4 +132,36 @@ export function evaluatePerformance(trades = []) {
     maxDrawdown,
     sharpe,
   };
+}
+
+/* =========================================================
+   STREAK CALCULATIONS
+========================================================= */
+
+function calculateLossStreak(trades) {
+  let streak = 0;
+
+  for (let i = trades.length - 1; i >= 0; i--) {
+    if (!trades[i].isWin) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+}
+
+function calculateWinStreak(trades) {
+  let streak = 0;
+
+  for (let i = trades.length - 1; i >= 0; i--) {
+    if (trades[i].isWin) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+
+  return streak;
 }
