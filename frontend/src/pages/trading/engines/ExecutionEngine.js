@@ -1,6 +1,5 @@
 // ExecutionEngine.js
-// Institutional Adaptive Execution Engine
-// AI full control | Human caps | Regime aware | Cooldown enabled
+// Institutional Regime-Adaptive Execution Engine
 
 import { evaluateConfidence } from "./ConfidenceEngine";
 import { detectMarketRegime, getRegimeBias } from "./MarketRegimeEngine";
@@ -10,7 +9,7 @@ export function executeEngine({
   balance,
   riskPct,
   leverage,
-  recentPerformance = { wins: 0, losses: 0, pnl: 0 },
+  recentPerformance = { wins: 0, losses: 0 },
   humanMultiplier = 1,
   humanCaps = {
     maxRiskPct: 2,
@@ -27,21 +26,10 @@ export function executeEngine({
     };
   }
 
-  const lossStreak = recentPerformance.losses || 0;
-  const winStreak = recentPerformance.wins || 0;
-  const cumulativePnL = recentPerformance.pnl || 0;
+  /* ================= MARKET REGIME ================= */
 
-  /* ================= COOLDOWN MODE ================= */
-
-  const cooldownActive = lossStreak >= 4;
-
-  if (cooldownActive) {
-    return {
-      blocked: true,
-      reason: "Cooldown active after consecutive losses",
-      confidenceScore: 0,
-    };
-  }
+  const regime = detectMarketRegime();
+  const regimeBias = getRegimeBias(engineType, regime);
 
   /* ================= CONFIDENCE ================= */
 
@@ -55,15 +43,13 @@ export function executeEngine({
       blocked: true,
       reason: confidenceData.reason,
       confidenceScore: confidenceData.score,
+      regime,
     };
   }
 
-  /* ================= REGIME DETECTION ================= */
+  /* ================= PERFORMANCE ADAPTATION ================= */
 
-  const regime = detectMarketRegime();
-  const regimeBias = getRegimeBias(engineType, regime);
-
-  /* ================= ADAPTIVE RISK ================= */
+  const lossStreak = recentPerformance.losses || 0;
 
   const adaptiveRiskReduction =
     lossStreak >= 3 ? 0.6 :
@@ -71,13 +57,12 @@ export function executeEngine({
     lossStreak === 1 ? 0.9 :
     1;
 
-  const winBoost =
-    winStreak >= 3 ? 1.15 :
-    winStreak === 2 ? 1.08 :
+  const adaptiveLeverageReduction =
+    lossStreak >= 3 ? 0.5 :
+    lossStreak === 2 ? 0.7 :
     1;
 
-  const recoveryMode =
-    cumulativePnL < 0 ? 0.85 : 1;
+  /* ================= HUMAN CAPS ================= */
 
   const cappedRisk = Math.min(riskPct, humanCaps.maxRiskPct);
   const cappedLeverage = Math.min(leverage, humanCaps.maxLeverage);
@@ -85,29 +70,34 @@ export function executeEngine({
   const finalRisk =
     cappedRisk *
     adaptiveRiskReduction *
-    winBoost *
-    recoveryMode *
     confidenceData.modifier *
     humanMultiplier;
 
+  const finalLeverage =
+    cappedLeverage * adaptiveLeverageReduction;
+
+  /* ================= VOLATILITY FACTOR ================= */
+
   const volatilityFactor =
-    engineType === "scalp"
-      ? randomBetween(0.8, 1.2)
-      : randomBetween(0.9, 1.1);
+    regime === "high_volatility"
+      ? 0.8
+      : regime === "ranging"
+      ? 1.05
+      : 1;
 
   const effectiveRisk = finalRisk * volatilityFactor;
 
   const positionSize =
-    (balance * effectiveRisk * cappedLeverage) / 100;
+    (balance * effectiveRisk * finalLeverage) / 100;
 
-  /* ================= PROBABILITY MODEL ================= */
+  /* ================= ADAPTIVE WIN PROBABILITY ================= */
 
   const confidenceBoost =
     (confidenceData.score - 50) / 1000;
 
   const adjustedBias = Math.min(
-    0.7,
-    Math.max(0.4, regimeBias + confidenceBoost)
+    0.70,
+    Math.max(0.40, regimeBias + confidenceBoost)
   );
 
   const isWin = Math.random() < adjustedBias;
@@ -117,6 +107,8 @@ export function executeEngine({
     : -positionSize * randomBetween(0.3, 0.7);
 
   const newBalance = balance + pnl;
+
+  /* ================= DRAWDOWN PROTECTION ================= */
 
   const drawdownPct =
     balance > 0
@@ -128,6 +120,7 @@ export function executeEngine({
       blocked: true,
       reason: "Drawdown cap exceeded",
       confidenceScore: confidenceData.score,
+      regime,
     };
   }
 
@@ -144,12 +137,11 @@ export function executeEngine({
     effectiveRisk,
     positionSize,
     isWin,
+    regime,
     metadata: {
-      regime,
       adjustedBias,
-      cooldownActive,
       lossStreak,
-      winStreak,
+      regime,
     },
   };
 }
