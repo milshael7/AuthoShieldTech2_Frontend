@@ -29,7 +29,6 @@ export default function TradingRoom({
   const [lastConfidence, setLastConfidence] = useState(null);
 
   const initialCapital = 1000;
-  const profitLockPercent = 0.5; // 🔒 50% profit lock
 
   const initialDistribution = allocateCapital({
     totalCapital: initialCapital,
@@ -69,33 +68,6 @@ export default function TradingRoom({
       },
       ...prev,
     ]);
-  }
-
-  /* ================= PROFIT LOCK SYSTEM ================= */
-
-  function lockProfitsIfNeeded(updatedAllocation) {
-    const currentTotal = calculateTotalCapital(updatedAllocation, reserve);
-
-    if (currentTotal > peakCapital.current) {
-      const profit = currentTotal - peakCapital.current;
-      const lockedAmount = profit * profitLockPercent;
-
-      peakCapital.current = currentTotal;
-
-      pushLog(
-        `🔒 Profit Locked: $${lockedAmount.toFixed(2)} moved to reserve`
-      );
-
-      return {
-        allocation: updatedAllocation,
-        reserve: reserve + lockedAmount,
-      };
-    }
-
-    return {
-      allocation: updatedAllocation,
-      reserve,
-    };
   }
 
   /* ================= EXECUTION ================= */
@@ -150,10 +122,8 @@ export default function TradingRoom({
       performanceStats: getAllPerformanceStats(),
     });
 
-    const locked = lockProfitsIfNeeded(rotated);
-
-    setAllocation(locked.allocation);
-    setReserve(locked.reserve);
+    setAllocation(rotated);
+    setReserve(rebalanced.reserve);
 
     setTradesUsed((v) => v + 1);
     setDailyPnL((v) => v + result.pnl);
@@ -172,80 +142,142 @@ export default function TradingRoom({
     return "#5EC6FF";
   }
 
+  /* ================= UI ================= */
+
   return (
     <div className="postureWrap">
-      <section className="postureCard">
-        <div className="postureTop">
-          <div>
-            <h2>Institutional Trading Control</h2>
-            <small>Adaptive AI + Capital Lock Protection</small>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 1fr",
+          gap: 20,
+        }}
+      >
+        {/* ===== LEFT SIDE ===== */}
+        <section className="postureCard">
+          <div className="postureTop">
+            <div>
+              <h2>Institutional Trading Desk</h2>
+              <small>Adaptive AI Execution + Capital Rotation</small>
+            </div>
+
+            <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
+              {mode}
+            </span>
           </div>
 
-          <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
-            {mode}
-          </span>
-        </div>
+          {!globalRisk.allowed && (
+            <div className="badge bad" style={{ marginTop: 10 }}>
+              Trading Locked — {globalRisk.reason}
+            </div>
+          )}
 
-        {!globalRisk.allowed && (
-          <div className="badge bad" style={{ marginTop: 10 }}>
-            Trading Locked — {globalRisk.reason}
+          {/* CAPITAL PANEL */}
+          <div className="stats" style={{ marginTop: 20 }}>
+            <div><b>Total Capital:</b> ${totalCapital.toFixed(2)}</div>
+            <div><b>Reserve:</b> ${reserve.toFixed(2)}</div>
+            <div><b>Daily PnL:</b> ${dailyPnL.toFixed(2)}</div>
+            <div><b>Trades Used:</b> {tradesUsed} / {dailyLimit}</div>
           </div>
-        )}
 
-        <div className="stats">
-          <div><b>Total Capital:</b> ${totalCapital.toFixed(2)}</div>
-          <div><b>Reserve:</b> ${reserve.toFixed(2)}</div>
-          <div><b>Peak Capital:</b> ${peakCapital.current.toFixed(2)}</div>
-          <div><b>Daily PnL:</b> ${dailyPnL.toFixed(2)}</div>
-          <div><b>Trades Used:</b> {tradesUsed} / {dailyLimit}</div>
+          {/* CONTROL PANEL */}
+          <div className="ctrl" style={{ marginTop: 25 }}>
+            <label>
+              Risk %
+              <input
+                type="number"
+                value={baseRisk}
+                min="0.1"
+                step="0.1"
+                onChange={(e) => setBaseRisk(Number(e.target.value))}
+              />
+            </label>
+
+            <label>
+              Leverage
+              <input
+                type="number"
+                value={leverage}
+                min="1"
+                max="20"
+                onChange={(e) => setLeverage(Number(e.target.value))}
+              />
+            </label>
+
+            <label>
+              Human Override
+              <input
+                type="range"
+                min="0.5"
+                max="1"
+                step="0.05"
+                value={humanMultiplier}
+                onChange={(e) =>
+                  setHumanMultiplier(Number(e.target.value))
+                }
+              />
+              <div style={{ fontSize: 12 }}>
+                Multiplier: {(humanMultiplier * 100).toFixed(0)}%
+              </div>
+            </label>
+          </div>
+
+          <div className="actions" style={{ marginTop: 30 }}>
+            <button
+              className="btn ok"
+              onClick={executeTrade}
+              disabled={!globalRisk.allowed}
+              style={{
+                fontSize: 16,
+                padding: "14px 20px",
+              }}
+            >
+              Execute Trade
+            </button>
+          </div>
+        </section>
+
+        {/* ===== RIGHT SIDE ===== */}
+        <aside className="postureCard">
+          <h3>AI Signal Monitor</h3>
 
           {lastConfidence !== null && (
-            <div>
+            <div style={{ marginBottom: 15 }}>
               <b>Last Confidence:</b>{" "}
               <span
                 style={{
                   color: confidenceColor(lastConfidence),
                   fontWeight: 700,
+                  fontSize: 18,
                 }}
               >
                 {lastConfidence}%
               </span>
             </div>
           )}
-        </div>
 
-        <div className="actions">
-          <button
-            className="btn ok"
-            onClick={executeTrade}
-            disabled={!globalRisk.allowed}
-          >
-            Execute Trade
-          </button>
-        </div>
-      </section>
+          <h3 style={{ marginTop: 20 }}>Execution Log</h3>
 
-      <aside className="postureCard">
-        <h3>Execution Log</h3>
-        <div style={{ maxHeight: 400, overflowY: "auto" }}>
-          {log.map((x, i) => (
-            <div key={i} style={{ marginBottom: 8 }}>
-              <small>{x.t}</small>
-              <div>{x.m}</div>
-              {x.confidence !== undefined && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: confidenceColor(x.confidence),
-                  }}
-                >
-                  Confidence: {x.confidence}%
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </aside>
+          <div style={{ maxHeight: 420, overflowY: "auto" }}>
+            {log.map((x, i) => (
+              <div key={i} style={{ marginBottom: 12 }}>
+                <small>{x.t}</small>
+                <div>{x.m}</div>
+                {x.confidence !== undefined && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: confidenceColor(x.confidence),
+                    }}
+                  >
+                    Confidence: {x.confidence}%
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
