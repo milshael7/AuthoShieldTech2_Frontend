@@ -1,12 +1,11 @@
 // ExecutionEngine.js
 // Institutional Adaptive Execution Engine
-// AI full control | Human caps only | Regime + Adaptive logic
+// AI full control | Human caps only | Adaptive risk logic
+// NOW WITH: Liquidity + Slippage Modeling
 
 import { evaluateConfidence } from "./ConfidenceEngine";
-import {
-  detectMarketRegime,
-  getRegimeBias,
-} from "./MarketRegimeEngine";
+import { applyLiquidityModel } from "./LiquidityEngine";
+import { detectMarketRegime, getRegimeBias } from "./MarketRegimeEngine";
 
 export function executeEngine({
   engineType,
@@ -35,7 +34,7 @@ export function executeEngine({
   const regime = detectMarketRegime();
   const regimeBias = getRegimeBias(engineType, regime);
 
-  /* ================= CONFIDENCE ================= */
+  /* ================= CONFIDENCE ENGINE ================= */
 
   const confidenceData = evaluateConfidence({
     engineType,
@@ -69,10 +68,7 @@ export function executeEngine({
   /* ================= HUMAN CAPS ================= */
 
   const cappedRisk = Math.min(riskPct, humanCaps.maxRiskPct);
-  const cappedLeverage = Math.min(
-    leverage,
-    humanCaps.maxLeverage
-  );
+  const cappedLeverage = Math.min(leverage, humanCaps.maxLeverage);
 
   const finalRisk =
     cappedRisk *
@@ -100,19 +96,26 @@ export function executeEngine({
   const confidenceBoost =
     (confidenceData.score - 50) / 1000;
 
-  const combinedBias =
-    regimeBias + confidenceBoost;
-
   const adjustedBias = Math.min(
-    0.68,
-    Math.max(0.42, combinedBias)
+    0.65,
+    Math.max(0.45, regimeBias + confidenceBoost)
   );
 
   const isWin = Math.random() < adjustedBias;
 
-  const pnl = isWin
+  const rawPnl = isWin
     ? positionSize * randomBetween(0.4, 0.9)
     : -positionSize * randomBetween(0.3, 0.7);
+
+  /* ================= LIQUIDITY IMPACT ================= */
+
+  const liquidity = applyLiquidityModel({
+    positionSize,
+    leverage: finalLeverage,
+    marketRegime: regime,
+  });
+
+  const pnl = rawPnl - liquidity.slippageCost;
 
   const newBalance = balance + pnl;
 
@@ -148,12 +151,12 @@ export function executeEngine({
     positionSize,
     isWin,
     regime,
+    slippagePct: liquidity.slippagePct,
     metadata: {
       adaptiveRiskReduction,
       adaptiveLeverageReduction,
       adjustedBias,
       lossStreak,
-      regimeBias,
     },
   };
 }
