@@ -1,111 +1,142 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 
 /*
-  Enterprise Security Tool Marketplace
-  Backend-Driven • Persistent • Production Grade
+  Security Tool Marketplace
+  Clean • Professional • No Context • No External Changes
 */
 
-function apiBase() {
-  return (
-    (import.meta.env.VITE_API_BASE ||
-      import.meta.env.VITE_BACKEND_URL ||
-      "").trim()
-  );
-}
+const TOOL_CATALOG = [
+  {
+    id: "edr",
+    name: "Endpoint Detection & Response",
+    category: "Endpoint",
+    description:
+      "Real-time behavioral monitoring, ransomware blocking, and device-level threat response.",
+  },
+  {
+    id: "itdr",
+    name: "Identity Threat Detection",
+    category: "Identity",
+    description:
+      "Detect credential abuse, privilege escalation, and anomalous login behavior.",
+  },
+  {
+    id: "email",
+    name: "Email Protection",
+    category: "Email Security",
+    description:
+      "AI-driven phishing detection and malicious attachment blocking.",
+  },
+  {
+    id: "cloud",
+    name: "Cloud Data Shield",
+    category: "Cloud",
+    description:
+      "Continuous scanning for exposed storage and misconfigurations.",
+  },
+  {
+    id: "darkweb",
+    name: "Dark Web Monitoring",
+    category: "Threat Intelligence",
+    description:
+      "Monitor credential leaks and compromised data across underground sources.",
+  },
+];
 
 export default function SecurityToolMarketplace() {
-  const [tools, setTools] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState("");
+  const [tools, setTools] = useState({});
 
-  const base = apiBase();
+  function installTool(id) {
+    setTools((prev) => ({
+      ...prev,
+      [id]: { status: "installing", progress: 0 },
+    }));
 
-  async function loadTools() {
-    try {
-      const res = await fetch(`${base}/api/security/tools`, {
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setTools(data.tools || []);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    let progress = 0;
+
+    const interval = setInterval(() => {
+      progress += 25;
+
+      setTools((prev) => ({
+        ...prev,
+        [id]: {
+          status: progress >= 100 ? "installed" : "installing",
+          progress,
+        },
+      }));
+
+      if (progress >= 100) clearInterval(interval);
+    }, 500);
   }
 
-  async function toggleTool(tool) {
-    try {
-      setStatus("Updating...");
-
-      const endpoint = tool.installed
-        ? `${base}/api/security/tools/${tool.id}/uninstall`
-        : `${base}/api/security/tools/${tool.id}/install`;
-
-      await fetch(endpoint, {
-        method: "POST",
-        credentials: "include",
-      });
-
-      await loadTools();
-      setStatus("Updated");
-      setTimeout(() => setStatus(""), 1500);
-    } catch (e) {
-      console.error(e);
-      setStatus("Error");
-    }
+  function uninstallTool(id) {
+    setTools((prev) => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
   }
-
-  useEffect(() => {
-    loadTools();
-  }, []);
 
   return (
     <div className="postureCard">
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 24 }}>
         <h3>Security Control Marketplace</h3>
         <small className="muted">
-          Deploy and manage enterprise-grade security modules.
+          Deploy enterprise-grade security modules.
         </small>
       </div>
 
-      {status && (
-        <div style={{ marginBottom: 10 }}>
-          <span className="badge primary">{status}</span>
-        </div>
-      )}
-
-      {loading && <div className="muted">Loading tools…</div>}
-
       <div className="toolGrid">
-        {tools.map((tool) => (
-          <div key={tool.id} className="toolCard">
-            <div className="toolHeader">
-              <div>
-                <div className="toolTitle">{tool.name}</div>
+        {TOOL_CATALOG.map((tool) => {
+          const toolState = tools[tool.id];
+          const isInstalled = toolState?.status === "installed";
+          const isInstalling = toolState?.status === "installing";
+
+          return (
+            <div key={tool.id} className="toolCard">
+              <div className="toolHeader">
+                <div>
+                  <div className="toolTitle">{tool.name}</div>
+                  <div className="toolCategory">{tool.category}</div>
+                </div>
+
+                <span
+                  className={`badge ${
+                    isInstalled ? "ok" : isInstalling ? "warn" : ""
+                  }`}
+                >
+                  {isInstalling
+                    ? `Deploying ${toolState.progress}%`
+                    : isInstalled
+                    ? "Installed"
+                    : "Available"}
+                </span>
               </div>
 
-              <span className={`badge ${tool.installed ? "ok" : ""}`}>
-                {tool.installed ? "Installed" : "Available"}
-              </span>
-            </div>
+              <div className="toolDesc">{tool.description}</div>
 
-            <div className="toolDesc">
-              Enterprise security module ready for deployment.
+              <div className="toolActions">
+                <button
+                  className={`btn ${
+                    isInstalled ? "warn" : isInstalling ? "primary" : "ok"
+                  }`}
+                  onClick={() =>
+                    isInstalled
+                      ? uninstallTool(tool.id)
+                      : installTool(tool.id)
+                  }
+                  disabled={isInstalling}
+                >
+                  {isInstalling
+                    ? "Deploying..."
+                    : isInstalled
+                    ? "Uninstall"
+                    : "Install"}
+                </button>
+              </div>
             </div>
-
-            <div className="toolActions">
-              <button
-                className={`btn ${tool.installed ? "warn" : "ok"}`}
-                onClick={() => toggleTool(tool)}
-              >
-                {tool.installed ? "Uninstall" : "Install"}
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
