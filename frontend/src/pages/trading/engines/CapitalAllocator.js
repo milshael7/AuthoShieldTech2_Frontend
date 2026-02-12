@@ -1,9 +1,5 @@
 // CapitalAllocator.js
-// Global Capital Distribution + Smart Rebalancing + Performance Rotation
-
-/* ===========================================
-   INITIAL DISTRIBUTION
-=========================================== */
+// Institutional Capital Allocation + Rotation
 
 export function allocateCapital({
   totalCapital,
@@ -32,25 +28,21 @@ export function allocateCapital({
   };
 }
 
-/* ===========================================
-   TOTAL CAPITAL
-=========================================== */
+/* ================= TOTAL ================= */
 
 export function calculateTotalCapital(allocation, reserve) {
   let total = reserve;
 
-  Object.keys(allocation).forEach((engine) => {
-    Object.keys(allocation[engine]).forEach((exchange) => {
-      total += allocation[engine][exchange];
+  Object.values(allocation).forEach((engine) => {
+    Object.values(engine).forEach((amount) => {
+      total += amount;
     });
   });
 
   return total;
 }
 
-/* ===========================================
-   FLOOR REBALANCE
-=========================================== */
+/* ================= FLOOR REBALANCE ================= */
 
 export function rebalanceCapital({
   allocation,
@@ -59,52 +51,43 @@ export function rebalanceCapital({
   boostAmount = 200,
 }) {
   const updated = JSON.parse(JSON.stringify(allocation));
+  let updatedReserve = reserve;
 
   Object.keys(updated).forEach((engine) => {
     Object.keys(updated[engine]).forEach((exchange) => {
-      if (updated[engine][exchange] < floor && reserve >= boostAmount) {
+      if (updated[engine][exchange] < floor && updatedReserve > boostAmount) {
         updated[engine][exchange] += boostAmount;
-        reserve -= boostAmount;
+        updatedReserve -= boostAmount;
       }
     });
   });
 
   return {
     allocation: updated,
-    reserve,
+    reserve: updatedReserve,
   };
 }
 
-/* ===========================================
-   PERFORMANCE ROTATION
-=========================================== */
+/* ================= PERFORMANCE ROUTING ================= */
 
-export function rotateCapitalByPerformance({
+export function routeToBestExchange({
   allocation,
-  performanceStats,
-  shiftPct = 0.05, // 5% shift
+  engineType,
+  exchangePerformance,
 }) {
-  const updated = JSON.parse(JSON.stringify(allocation));
+  const engineAlloc = allocation[engineType];
 
-  const scalpPnL = performanceStats.scalp.pnl;
-  const sessionPnL = performanceStats.session.pnl;
+  let bestExchange = null;
+  let bestScore = -Infinity;
 
-  if (scalpPnL === sessionPnL) {
-    return updated;
-  }
+  Object.keys(engineAlloc).forEach((exchange) => {
+    const perf = exchangePerformance[exchange] || 0;
 
-  const winner = scalpPnL > sessionPnL ? "scalp" : "session";
-  const loser = winner === "scalp" ? "session" : "scalp";
-
-  Object.keys(updated[winner]).forEach((exchange) => {
-    const loserCapital = updated[loser][exchange];
-    const shiftAmount = loserCapital * shiftPct;
-
-    if (loserCapital > shiftAmount) {
-      updated[loser][exchange] -= shiftAmount;
-      updated[winner][exchange] += shiftAmount;
+    if (perf > bestScore) {
+      bestScore = perf;
+      bestExchange = exchange;
     }
   });
 
-  return updated;
+  return bestExchange;
 }
