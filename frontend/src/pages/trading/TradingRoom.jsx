@@ -65,14 +65,42 @@ export default function TradingRoom({
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
 
+  /* ================= DRAW DOWN ================= */
+
+  if (totalCapital > peakCapital.current) {
+    peakCapital.current = totalCapital;
+  }
+
+  const drawdownPct =
+    peakCapital.current > 0
+      ? ((peakCapital.current - totalCapital) /
+          peakCapital.current) *
+        100
+      : 0;
+
+  /* ================= GLOBAL RISK ================= */
+
   const globalRisk = evaluateGlobalRisk({
     totalCapital,
     peakCapital: peakCapital.current,
     dailyPnL,
   });
 
-  if (totalCapital > peakCapital.current) {
-    peakCapital.current = totalCapital;
+  /* ================= EXPOSURE ================= */
+
+  const exposurePct =
+    reserve > 0
+      ? ((totalCapital - reserve) / totalCapital) * 100
+      : 0;
+
+  /* ================= PERFORMANCE HEAT ================= */
+
+  const performanceHeat = getAllPerformanceStats();
+
+  function heatColor(value) {
+    if (value > 0) return "#2bd576";
+    if (value < 0) return "#ff5a5f";
+    return "#ffd166";
   }
 
   function pushLog(message, confidence) {
@@ -129,7 +157,7 @@ export default function TradingRoom({
 
     const rotated = rotateCapitalByPerformance({
       allocation: rebalanced.allocation,
-      performanceStats: getAllPerformanceStats(),
+      performanceStats: performanceHeat,
     });
 
     setAllocation(rotated);
@@ -152,35 +180,59 @@ export default function TradingRoom({
     );
   }
 
-  function confidenceColor(score) {
-    if (!score && score !== 0) return "";
-    if (score < 50) return "#ff4d4d";
-    if (score < 75) return "#f5b942";
-    return "#5EC6FF";
-  }
-
   return (
     <div className="postureWrap">
       <section className="postureCard">
         <div className="postureTop">
           <div>
-            <h2>Institutional Trading Terminal</h2>
-            <small>Live AI + Equity Curve</small>
+            <h2>Institutional Risk Terminal</h2>
+            <small>Live Risk Intelligence Panel</small>
           </div>
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
             {mode}
           </span>
         </div>
 
+        {/* RISK STRIP */}
         <div className="stats" style={{ marginTop: 16 }}>
           <div><b>Live Price:</b> ${market.price}</div>
-          <div><b>Regime:</b> {market.regime}</div>
           <div><b>Total Capital:</b> ${totalCapital.toFixed(2)}</div>
-          <div><b>Daily PnL:</b> ${dailyPnL.toFixed(2)}</div>
+          <div>
+            <b>Drawdown:</b>{" "}
+            <span style={{ color: heatColor(-drawdownPct) }}>
+              {drawdownPct.toFixed(2)}%
+            </span>
+          </div>
+          <div>
+            <b>Exposure:</b>{" "}
+            <span style={{ color: "#5EC6FF" }}>
+              {exposurePct.toFixed(2)}%
+            </span>
+          </div>
         </div>
 
+        {/* EQUITY CURVE */}
         <div style={{ marginTop: 20 }}>
           <EquityCurve equityHistory={equityHistory} />
+        </div>
+
+        {/* PERFORMANCE HEAT */}
+        <div style={{ marginTop: 20 }}>
+          <h4>Engine Performance Heat</h4>
+          {Object.keys(performanceHeat).map((engine) => (
+            <div key={engine}>
+              {engine.toUpperCase()} :{" "}
+              <span
+                style={{
+                  color: heatColor(
+                    performanceHeat[engine].pnl
+                  ),
+                }}
+              >
+                {performanceHeat[engine].pnl.toFixed(2)}
+              </span>
+            </div>
+          ))}
         </div>
 
         <div className="actions" style={{ marginTop: 20 }}>
@@ -201,16 +253,6 @@ export default function TradingRoom({
             <div key={i} style={{ marginBottom: 8 }}>
               <small>{x.t}</small>
               <div>{x.m}</div>
-              {x.confidence !== undefined && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: confidenceColor(x.confidence),
-                  }}
-                >
-                  Confidence: {x.confidence}%
-                </div>
-              )}
             </div>
           ))}
         </div>
