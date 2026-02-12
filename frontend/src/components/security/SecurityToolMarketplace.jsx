@@ -3,7 +3,8 @@ import React, { useState } from "react";
 /*
   SecurityToolMarketplace
   Enterprise Tool Deployment Panel
-  Professional SOC-grade layout
+  Institutional-grade UI
+  Production-safe (UI only)
 */
 
 const TOOL_CATALOG = [
@@ -13,6 +14,7 @@ const TOOL_CATALOG = [
     category: "Endpoint",
     description:
       "Real-time behavioral monitoring, ransomware blocking, and device-level threat response.",
+    riskLevel: "critical",
   },
   {
     id: "itdr",
@@ -20,6 +22,7 @@ const TOOL_CATALOG = [
     category: "Identity",
     description:
       "Detect credential abuse, privilege escalation, and anomalous login behavior.",
+    riskLevel: "high",
   },
   {
     id: "email",
@@ -27,6 +30,7 @@ const TOOL_CATALOG = [
     category: "Email Security",
     description:
       "AI-driven phishing detection, spoof protection, and malicious attachment blocking.",
+    riskLevel: "high",
   },
   {
     id: "data",
@@ -34,6 +38,7 @@ const TOOL_CATALOG = [
     category: "Cloud",
     description:
       "Continuous scanning for exposed storage, misconfigurations, and data leaks.",
+    riskLevel: "medium",
   },
   {
     id: "sat",
@@ -41,6 +46,7 @@ const TOOL_CATALOG = [
     category: "Training",
     description:
       "Phishing simulations and employee training performance monitoring.",
+    riskLevel: "medium",
   },
   {
     id: "darkweb",
@@ -48,11 +54,13 @@ const TOOL_CATALOG = [
     category: "Threat Intel",
     description:
       "Monitor credential leaks and compromised data across underground sources.",
+    riskLevel: "medium",
   },
 ];
 
 export default function SecurityToolMarketplace() {
   const [installed, setInstalled] = useState({});
+  const [search, setSearch] = useState("");
 
   function toggleInstall(id) {
     setInstalled((prev) => ({
@@ -61,17 +69,40 @@ export default function SecurityToolMarketplace() {
     }));
   }
 
+  const filteredTools = TOOL_CATALOG.filter((tool) =>
+    tool.name.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div className="postureCard">
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 24 }}>
         <h3>Security Control Marketplace</h3>
         <small className="muted">
-          Deploy and manage enterprise-grade security modules.
+          Deploy, activate, and manage enterprise-grade security modules.
         </small>
+
+        {/* Search Bar */}
+        <div style={{ marginTop: 16 }}>
+          <input
+            type="text"
+            placeholder="Search security controls..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.05)",
+              color: "#fff",
+              outline: "none",
+            }}
+          />
+        </div>
       </div>
 
       <div className="toolGrid">
-        {TOOL_CATALOG.map((tool) => {
+        {filteredTools.map((tool) => {
           const isInstalled = installed[tool.id];
 
           return (
@@ -79,10 +110,16 @@ export default function SecurityToolMarketplace() {
               <div className="toolHeader">
                 <div>
                   <b>{tool.name}</b>
-                  <div className="toolCategory">{tool.category}</div>
+                  <div className="toolCategory">
+                    {tool.category}
+                  </div>
                 </div>
 
-                <span className={`badge ${isInstalled ? "ok" : ""}`}>
+                <span
+                  className={`badge ${
+                    isInstalled ? "ok" : ""
+                  }`}
+                >
                   {isInstalled ? "Installed" : "Available"}
                 </span>
               </div>
@@ -91,9 +128,17 @@ export default function SecurityToolMarketplace() {
                 {tool.description}
               </div>
 
+              <div className="toolMeta">
+                <span className={`risk ${tool.riskLevel}`}>
+                  {tool.riskLevel.toUpperCase()} PRIORITY
+                </span>
+              </div>
+
               <div className="toolActions">
                 <button
-                  className={`btn ${isInstalled ? "warn" : "ok"}`}
+                  className={`btn ${
+                    isInstalled ? "warn" : "ok"
+                  }`}
                   onClick={() => toggleInstall(tool.id)}
                 >
                   {isInstalled ? "Uninstall" : "Install"}
@@ -102,6 +147,12 @@ export default function SecurityToolMarketplace() {
             </div>
           );
         })}
+
+        {filteredTools.length === 0 && (
+          <div className="muted">
+            No matching security controls found.
+          </div>
+        )}
       </div>
     </div>
   );
