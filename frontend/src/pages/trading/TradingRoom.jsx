@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { executeEngine } from "./engines/ExecutionEngine";
 import { getMarketSnapshot } from "./engines/MarketFeedEngine";
+import EquityCurve from "./components/EquityCurve";
 import {
   allocateCapital,
   rebalanceCapital,
@@ -19,17 +20,18 @@ export default function TradingRoom({
   dailyLimit = 5,
 }) {
   const [mode, setMode] = useState(parentMode.toUpperCase());
-  const [engineType, setEngineType] = useState("scalp");
-  const [baseRisk, setBaseRisk] = useState(1);
-  const [leverage, setLeverage] = useState(1);
-  const [humanMultiplier, setHumanMultiplier] = useState(1);
+  const [engineType] = useState("scalp");
+
+  const [baseRisk] = useState(1);
+  const [leverage] = useState(1);
+  const [humanMultiplier] = useState(1);
 
   const [dailyPnL, setDailyPnL] = useState(0);
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
   const [lastConfidence, setLastConfidence] = useState(null);
 
-  /* ================= LIVE MARKET ================= */
+  const [equityHistory, setEquityHistory] = useState([]);
 
   const [market, setMarket] = useState({
     price: 100,
@@ -41,11 +43,8 @@ export default function TradingRoom({
     const interval = setInterval(() => {
       setMarket(getMarketSnapshot());
     }, 1500);
-
     return () => clearInterval(interval);
   }, []);
-
-  /* ================= CAPITAL ================= */
 
   const initialCapital = 1000;
 
@@ -66,8 +65,6 @@ export default function TradingRoom({
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
 
-  /* ================= GLOBAL RISK ================= */
-
   const globalRisk = evaluateGlobalRisk({
     totalCapital,
     peakCapital: peakCapital.current,
@@ -80,16 +77,10 @@ export default function TradingRoom({
 
   function pushLog(message, confidence) {
     setLog((prev) => [
-      {
-        t: new Date().toLocaleTimeString(),
-        m: message,
-        confidence,
-      },
+      { t: new Date().toLocaleTimeString(), m: message, confidence },
       ...prev,
     ]);
   }
-
-  /* ================= EXECUTION ================= */
 
   function executeTrade() {
     if (!globalRisk.allowed) {
@@ -148,6 +139,11 @@ export default function TradingRoom({
     setDailyPnL((v) => v + result.pnl);
     setLastConfidence(result.confidenceScore);
 
+    setEquityHistory((prev) => [
+      ...prev,
+      totalCapital + result.pnl,
+    ]);
+
     pushLog(
       `${engineType.toUpperCase()} | ${exchange} | PnL: ${result.pnl.toFixed(
         2
@@ -163,71 +159,28 @@ export default function TradingRoom({
     return "#5EC6FF";
   }
 
-  function regimeColor(r) {
-    if (r.includes("up")) return "#2bd576";
-    if (r.includes("down")) return "#ff5a5f";
-    if (r.includes("volatile")) return "#ffd166";
-    return "#5EC6FF";
-  }
-
   return (
     <div className="postureWrap">
       <section className="postureCard">
-
         <div className="postureTop">
           <div>
             <h2>Institutional Trading Terminal</h2>
-            <small>Live Market + Adaptive AI</small>
+            <small>Live AI + Equity Curve</small>
           </div>
-
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
             {mode}
           </span>
         </div>
 
-        {/* ================= LIVE MARKET PANEL ================= */}
-
         <div className="stats" style={{ marginTop: 16 }}>
-          <div>
-            <b>Live Price:</b> ${market.price}
-          </div>
-          <div>
-            <b>Volatility:</b> {market.volatility.toFixed(2)}
-          </div>
-          <div>
-            <b>Regime:</b>{" "}
-            <span
-              style={{
-                color: regimeColor(market.regime),
-                fontWeight: 700,
-              }}
-            >
-              {market.regime.replace("_", " ").toUpperCase()}
-            </span>
-          </div>
+          <div><b>Live Price:</b> ${market.price}</div>
+          <div><b>Regime:</b> {market.regime}</div>
+          <div><b>Total Capital:</b> ${totalCapital.toFixed(2)}</div>
+          <div><b>Daily PnL:</b> ${dailyPnL.toFixed(2)}</div>
         </div>
 
-        {/* ================= CAPITAL ================= */}
-
-        <div className="stats" style={{ marginTop: 20 }}>
-          <div><b>Total Capital:</b> ${totalCapital.toFixed(2)}</div>
-          <div><b>Reserve:</b> ${reserve.toFixed(2)}</div>
-          <div><b>Daily PnL:</b> ${dailyPnL.toFixed(2)}</div>
-          <div><b>Trades Used:</b> {tradesUsed} / {dailyLimit}</div>
-
-          {lastConfidence !== null && (
-            <div>
-              <b>Last Confidence:</b>{" "}
-              <span
-                style={{
-                  color: confidenceColor(lastConfidence),
-                  fontWeight: 700,
-                }}
-              >
-                {lastConfidence}%
-              </span>
-            </div>
-          )}
+        <div style={{ marginTop: 20 }}>
+          <EquityCurve equityHistory={equityHistory} />
         </div>
 
         <div className="actions" style={{ marginTop: 20 }}>
