@@ -47,8 +47,6 @@ export default function TradingRoom({
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
 
-  /* ================= GLOBAL RISK ================= */
-
   const globalRisk = evaluateGlobalRisk({
     totalCapital,
     peakCapital: peakCapital.current,
@@ -58,6 +56,13 @@ export default function TradingRoom({
   if (totalCapital > peakCapital.current) {
     peakCapital.current = totalCapital;
   }
+
+  const drawdown =
+    peakCapital.current > 0
+      ? ((peakCapital.current - totalCapital) /
+          peakCapital.current) *
+        100
+      : 0;
 
   function pushLog(message, confidence) {
     setLog((prev) => [
@@ -69,8 +74,6 @@ export default function TradingRoom({
       ...prev,
     ]);
   }
-
-  /* ================= EXECUTION ================= */
 
   function executeTrade() {
     if (!globalRisk.allowed) {
@@ -142,7 +145,11 @@ export default function TradingRoom({
     return "#5EC6FF";
   }
 
-  /* ================= UI ================= */
+  function riskColor(value) {
+    if (value < 5) return "#5EC6FF";
+    if (value < 15) return "#f5b942";
+    return "#ff4d4d";
+  }
 
   return (
     <div className="postureWrap">
@@ -153,12 +160,12 @@ export default function TradingRoom({
           gap: 20,
         }}
       >
-        {/* ===== LEFT SIDE ===== */}
+        {/* LEFT SIDE */}
         <section className="postureCard">
           <div className="postureTop">
             <div>
               <h2>Institutional Trading Desk</h2>
-              <small>Adaptive AI Execution + Capital Rotation</small>
+              <small>Adaptive AI Execution + Enterprise Risk</small>
             </div>
 
             <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
@@ -172,7 +179,7 @@ export default function TradingRoom({
             </div>
           )}
 
-          {/* CAPITAL PANEL */}
+          {/* CAPITAL METRICS */}
           <div className="stats" style={{ marginTop: 20 }}>
             <div><b>Total Capital:</b> ${totalCapital.toFixed(2)}</div>
             <div><b>Reserve:</b> ${reserve.toFixed(2)}</div>
@@ -180,7 +187,33 @@ export default function TradingRoom({
             <div><b>Trades Used:</b> {tradesUsed} / {dailyLimit}</div>
           </div>
 
-          {/* CONTROL PANEL */}
+          {/* ENTERPRISE RISK PANEL */}
+          <div style={{ marginTop: 25 }}>
+            <h3>Risk Visualization</h3>
+
+            <div style={{ marginTop: 10 }}>
+              <div>Drawdown: {drawdown.toFixed(2)}%</div>
+              <div
+                style={{
+                  height: 10,
+                  background: "#222",
+                  borderRadius: 4,
+                  marginTop: 4,
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.min(drawdown, 100)}%`,
+                    height: "100%",
+                    background: riskColor(drawdown),
+                    borderRadius: 4,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* EXECUTION CONTROLS */}
           <div className="ctrl" style={{ marginTop: 25 }}>
             <label>
               Risk %
@@ -237,7 +270,7 @@ export default function TradingRoom({
           </div>
         </section>
 
-        {/* ===== RIGHT SIDE ===== */}
+        {/* RIGHT SIDE */}
         <aside className="postureCard">
           <h3>AI Signal Monitor</h3>
 
