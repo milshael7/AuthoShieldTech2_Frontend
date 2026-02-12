@@ -1,5 +1,6 @@
 // ExecutionEngine.js
-// Institutional Regime-Adaptive Execution Engine
+// Institutional Adaptive Execution Engine
+// AI full control | Human caps only | Regime aware
 
 import { evaluateConfidence } from "./ConfidenceEngine";
 import { detectMarketRegime, getRegimeBias } from "./MarketRegimeEngine";
@@ -65,7 +66,10 @@ export function executeEngine({
   /* ================= HUMAN CAPS ================= */
 
   const cappedRisk = Math.min(riskPct, humanCaps.maxRiskPct);
-  const cappedLeverage = Math.min(leverage, humanCaps.maxLeverage);
+  const cappedLeverage = Math.min(
+    leverage,
+    humanCaps.maxLeverage
+  );
 
   const finalRisk =
     cappedRisk *
@@ -76,14 +80,14 @@ export function executeEngine({
   const finalLeverage =
     cappedLeverage * adaptiveLeverageReduction;
 
-  /* ================= VOLATILITY FACTOR ================= */
+  /* ================= POSITION SIZING ================= */
 
   const volatilityFactor =
     regime === "high_volatility"
-      ? 0.8
-      : regime === "ranging"
-      ? 1.05
-      : 1;
+      ? randomBetween(0.7, 1.4)
+      : engineType === "scalp"
+      ? randomBetween(0.8, 1.2)
+      : randomBetween(0.9, 1.1);
 
   const effectiveRisk = finalRisk * volatilityFactor;
 
@@ -96,8 +100,11 @@ export function executeEngine({
     (confidenceData.score - 50) / 1000;
 
   const adjustedBias = Math.min(
-    0.70,
-    Math.max(0.40, regimeBias + confidenceBoost)
+    0.7,
+    Math.max(
+      0.4,
+      regimeBias + confidenceBoost
+    )
   );
 
   const isWin = Math.random() < adjustedBias;
@@ -124,6 +131,8 @@ export function executeEngine({
     };
   }
 
+  /* ================= CAPITAL FLOOR ================= */
+
   const finalBalance =
     newBalance < humanCaps.capitalFloor
       ? humanCaps.capitalFloor
@@ -139,12 +148,15 @@ export function executeEngine({
     isWin,
     regime,
     metadata: {
+      adaptiveRiskReduction,
+      adaptiveLeverageReduction,
       adjustedBias,
       lossStreak,
-      regime,
     },
   };
 }
+
+/* ================= UTILITY ================= */
 
 function randomBetween(min, max) {
   return Math.random() * (max - min) + min;
