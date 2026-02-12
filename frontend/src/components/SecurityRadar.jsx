@@ -19,10 +19,23 @@ function fmtPct(n) {
 }
 
 function gradeFromScore(score) {
-  if (score >= 90) return { grade: "A", label: "Excellent", color: "#2bd576" };
-  if (score >= 75) return { grade: "B", label: "Strong", color: "#5EC6FF" };
-  if (score >= 60) return { grade: "C", label: "Moderate", color: "#ffd166" };
+  if (score >= 90)
+    return { grade: "A", label: "Excellent", color: "#2bd576" };
+  if (score >= 75)
+    return { grade: "B", label: "Strong", color: "#5EC6FF" };
+  if (score >= 60)
+    return { grade: "C", label: "Moderate", color: "#ffd166" };
   return { grade: "D", label: "At Risk", color: "#ff5a5f" };
+}
+
+function riskTier(score) {
+  if (score >= 90)
+    return { level: "LOW", desc: "Hardened posture", color: "#2bd576" };
+  if (score >= 75)
+    return { level: "MODERATE", desc: "Stable with minor gaps", color: "#5EC6FF" };
+  if (score >= 60)
+    return { level: "ELEVATED", desc: "Security gaps detected", color: "#ffd166" };
+  return { level: "CRITICAL", desc: "Immediate action required", color: "#ff5a5f" };
 }
 
 export default function SecurityRadar() {
@@ -54,7 +67,6 @@ export default function SecurityRadar() {
     return () => clearInterval(t);
   }, []);
 
-  // 🔥 Instant refresh when marketplace installs tools
   useEffect(() => {
     const handler = () => load();
     window.addEventListener("security:refresh", handler);
@@ -64,6 +76,7 @@ export default function SecurityRadar() {
   const domains = useMemo(() => posture?.domains || [], [posture]);
   const score = posture?.score || 0;
   const gradeInfo = gradeFromScore(score);
+  const tier = riskTier(score);
 
   const maxIssues = useMemo(
     () => Math.max(1, ...domains.map((d) => Number(d.issues) || 0)),
@@ -155,12 +168,13 @@ export default function SecurityRadar() {
 
   return (
     <div className="card">
-      {/* ===== SCORE RING ===== */}
+      {/* ===== SCORE ===== */}
       <div style={{ display: "flex", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: 14, opacity: 0.7 }}>
             Overall Security Score
           </div>
+
           <div
             style={{
               fontSize: 48,
@@ -171,8 +185,26 @@ export default function SecurityRadar() {
           >
             {score}
           </div>
+
           <div style={{ fontSize: 14 }}>
             Grade {gradeInfo.grade} — {gradeInfo.label}
+          </div>
+
+          {/* 🔥 RISK TIER */}
+          <div
+            style={{
+              marginTop: 10,
+              padding: "6px 12px",
+              borderRadius: 999,
+              fontSize: 12,
+              fontWeight: 700,
+              display: "inline-block",
+              background: tier.color + "22",
+              color: tier.color,
+              border: `1px solid ${tier.color}55`,
+            }}
+          >
+            {tier.level} RISK — {tier.desc}
           </div>
         </div>
 
