@@ -1,18 +1,16 @@
 // frontend/src/pages/admin/AdminOverview.jsx
-// EXECUTIVE SOC COMMAND CENTER
-// Company-grade layout
-// Clean. Structured. Investor ready.
+// Executive SOC Command Center Layout
 
 import React, { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 
-import SecurityRadar from "../../components/SecurityRadar";
+import SecurityPostureDashboard from "../../components/SecurityPostureDashboard";
 import SecurityFeedPanel from "../../components/SecurityFeedPanel";
 import SecurityPipeline from "../../components/SecurityPipeline";
-import SecurityPostureDashboard from "../../components/SecurityPostureDashboard";
+import SecurityRadar from "../../components/SecurityRadar";
+import IncidentBoard from "../../components/IncidentBoard";
 
 import "../../styles/platform.css";
-import "../../styles/dashboard.css";
 
 export default function AdminOverview() {
   const [data, setData] = useState(null);
@@ -33,19 +31,11 @@ export default function AdminOverview() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="dashboard-loading">
-        Loading Executive Security Overview…
-      </div>
-    );
+    return <div className="dashboard-loading">Loading SOC Command Center…</div>;
   }
 
   if (!data) {
-    return (
-      <div className="dashboard-error">
-        Unable to load security platform overview.
-      </div>
-    );
+    return <div className="dashboard-error">Unable to load platform data.</div>;
   }
 
   const { totals } = data;
@@ -53,81 +43,51 @@ export default function AdminOverview() {
   return (
     <div className="postureWrap">
 
-      {/* ================= LEFT MAIN COLUMN ================= */}
+      {/* LEFT COLUMN — CORE COMMAND */}
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
 
-        {/* Executive Header */}
-        <div className="postureCard">
-          <div className="postureTop">
-            <div>
-              <h2 style={{ margin: 0 }}>Executive SOC Command Center</h2>
-              <small>
-                Global visibility across platform security, detection coverage, and active threat intelligence.
-              </small>
-            </div>
-
-            <span className="badge ok">
-              LIVE
-            </span>
-          </div>
-        </div>
-
-        {/* Platform Totals */}
-        <div className="kpiGrid">
-          <Kpi label="Users" value={totals.users} />
-          <Kpi label="Companies" value={totals.companies} />
-          <Kpi label="Audit Events" value={totals.auditEvents} />
-          <Kpi label="Notifications" value={totals.notifications} />
-        </div>
-
-        {/* Security Posture Overview */}
         <SecurityPostureDashboard />
 
-        {/* Coverage Radar */}
+        <SecurityPipeline />
+
         <SecurityRadar />
 
-        {/* Protection Pipeline */}
-        <div className="postureCard">
-          <h3>Security Control Pipeline</h3>
-          <small className="muted">
-            Defensive layers deployed across customer environments
-          </small>
-          <div style={{ marginTop: 16 }}>
-            <SecurityPipeline />
-          </div>
-        </div>
+        <IncidentBoard />
+
       </div>
 
-      {/* ================= RIGHT SIDE INTELLIGENCE FEED ================= */}
+      {/* RIGHT COLUMN — LIVE INTEL + KPIs */}
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
 
         <div className="postureCard">
-          <h3>Live Threat Intelligence</h3>
-          <small className="muted">
-            Real-time detection feed across all monitored environments
-          </small>
+          <h3>Platform Totals</h3>
 
-          <div style={{ marginTop: 16 }}>
-            <SecurityFeedPanel />
+          <div className="kpiGrid">
+            <div className="kpiCard">
+              <small>Users</small>
+              <b>{totals.users}</b>
+            </div>
+
+            <div className="kpiCard">
+              <small>Companies</small>
+              <b>{totals.companies}</b>
+            </div>
+
+            <div className="kpiCard">
+              <small>Audit Events</small>
+              <b>{totals.auditEvents}</b>
+            </div>
+
+            <div className="kpiCard">
+              <small>Notifications</small>
+              <b>{totals.notifications}</b>
+            </div>
           </div>
         </div>
 
+        <SecurityFeedPanel />
+
       </div>
-
-    </div>
-  );
-}
-
-/* ================= KPI COMPONENT ================= */
-
-function Kpi({ label, value }) {
-  return (
-    <div className="kpiCard">
-      <small>{label}</small>
-      <b>{value}</b>
-      <span className="trend">
-        Enterprise scope
-      </span>
     </div>
   );
 }
