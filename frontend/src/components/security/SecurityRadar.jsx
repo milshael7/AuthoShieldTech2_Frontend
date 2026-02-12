@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 
 function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
 
@@ -14,49 +14,67 @@ function fmtPct(n){
 
 export default function SecurityRadar(){
 
+  const base = apiBase();
+
   const [status, setStatus] = useState("Loading…");
   const [posture, setPosture] = useState(null);
   const [history, setHistory] = useState([]);
   const canvasRef = useRef(null);
+  const intervalRef = useRef(null);
 
   /* ================= LOAD DATA ================= */
 
-  useEffect(() => {
-    let t;
-    const base = apiBase();
-    if(!base){ setStatus("Missing API"); return; }
+  const load = useCallback(async () => {
 
-    async function load(){
-      try{
-        const [pRes, hRes] = await Promise.all([
-          fetch(`${base}/api/security/posture`, { credentials: "include" }),
-          fetch(`${base}/api/security/score-history`, { credentials: "include" })
-        ]);
-
-        const pData = await pRes.json().catch(()=>({}));
-        const hData = await hRes.json().catch(()=>({}));
-
-        if(!pRes.ok) throw new Error();
-
-        setPosture(pData.posture);
-        setHistory(hData.history || []);
-        setStatus("LIVE");
-
-      }catch{
-        setStatus("ERROR");
-      }
+    if(!base){
+      setStatus("Missing API");
+      return;
     }
 
+    try{
+      const [pRes, hRes] = await Promise.all([
+        fetch(`${base}/api/security/posture`, { credentials: "include" }),
+        fetch(`${base}/api/security/score-history`, { credentials: "include" })
+      ]);
+
+      if(!pRes.ok) throw new Error();
+
+      const pData = await pRes.json().catch(()=>({}));
+      const hData = await hRes.json().catch(()=>({}));
+
+      setPosture(pData.posture || null);
+      setHistory(hData.history || []);
+      setStatus("LIVE");
+
+    }catch{
+      setStatus("ERROR");
+    }
+
+  }, [base]);
+
+  useEffect(() => {
+
     load();
-    t = setInterval(load, 10000);
-    return () => clearInterval(t);
-  }, []);
+
+    intervalRef.current = setInterval(load, 10000);
+
+    // 🔥 Listen for marketplace refresh
+    const refreshListener = () => load();
+    window.addEventListener("security:refresh", refreshListener);
+
+    return () => {
+      clearInterval(intervalRef.current);
+      window.removeEventListener("security:refresh", refreshListener);
+    };
+
+  }, [load]);
 
   const domains = useMemo(() => posture?.domains || [], [posture]);
   const score   = posture?.score ?? 0;
   const tier    = posture?.tier ?? "—";
   const risk    = posture?.risk ?? "—";
   const trend   = posture?.trend ?? "—";
+  const volatility = posture?.volatility ?? "low";
 
   const maxIssues = useMemo(
     () => Math.max(1, ...domains.map(d => Number(d.issues)||0)),
@@ -81,7 +99,6 @@ export default function SecurityRadar(){
 
     ctx.clearRect(0,0,cssW,cssH);
 
-    /* Background depth */
     const bg = ctx.createLinearGradient(0,0,0,cssH);
     bg.addColorStop(0,"rgba(15,20,30,0.8)");
     bg.addColorStop(1,"rgba(5,8,12,0.95)");
@@ -96,7 +113,6 @@ export default function SecurityRadar(){
     ctx.strokeStyle = "rgba(255,255,255,0.07)";
     ctx.lineWidth = 1;
 
-    /* Grid */
     for(let k=1;k<=5;k++){
       const r = (R*k)/5;
       ctx.beginPath();
@@ -112,7 +128,6 @@ export default function SecurityRadar(){
 
     if(!domains.length) return;
 
-    /* Coverage Shape */
     ctx.fillStyle = "rgba(94,198,255,0.28)";
     ctx.strokeStyle = "rgba(94,198,255,0.95)";
     ctx.lineWidth = 2;
@@ -130,7 +145,6 @@ export default function SecurityRadar(){
     ctx.fill();
     ctx.stroke();
 
-    /* Issue Dots */
     for(let i=0;i<n;i++){
       const d = domains[i];
       const cov = clamp((Number(d.coverage)||0)/100, 0, 1);
@@ -149,8 +163,6 @@ export default function SecurityRadar(){
 
   }, [domains, maxIssues]);
 
-  /* ================= TREND MINI CHART ================= */
-
   const lastTrend = history.slice(-12);
 
   /* ================= UI ================= */
@@ -158,7 +170,6 @@ export default function SecurityRadar(){
   return (
     <div className="card">
 
-      {/* ===== EXECUTIVE HEADER ===== */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
 
         <div>
@@ -177,6 +188,8 @@ export default function SecurityRadar(){
             }}>
               {trend.toUpperCase()}
             </b>
+            {" • "}
+            Volatility: <b>{volatility.toUpperCase()}</b>
           </div>
         </div>
 
@@ -186,7 +199,6 @@ export default function SecurityRadar(){
 
       </div>
 
-      {/* ===== RADAR ===== */}
       <div style={{height:380}}>
         <canvas
           ref={canvasRef}
@@ -199,7 +211,6 @@ export default function SecurityRadar(){
         />
       </div>
 
-      {/* ===== SCORE HISTORY MINI TREND ===== */}
       {lastTrend.length > 0 && (
         <div style={{marginTop:20}}>
           <div style={{fontSize:12,opacity:.6,marginBottom:6}}>
@@ -221,7 +232,6 @@ export default function SecurityRadar(){
         </div>
       )}
 
-      {/* ===== DOMAIN TABLE ===== */}
       <div style={{marginTop:22}}>
         <table className="table">
           <thead>
