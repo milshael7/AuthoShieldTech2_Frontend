@@ -1,41 +1,95 @@
 // GlobalRiskGovernor.js
-// Institutional Global Risk Controller
+// Institutional Circuit Breaker System
+
+let circuitState = {
+  locked: false,
+  reason: null,
+  cooldownUntil: null,
+};
 
 export function evaluateGlobalRisk({
   totalCapital,
   peakCapital,
   dailyPnL,
+  volatility = 0.5,
   maxDailyLossPct = 5,
-  maxTotalDrawdownPct = 25,
+  maxDrawdownPct = 20,
+  volatilityLimit = 0.85,
+  cooldownMinutes = 30,
 }) {
+  const now = Date.now();
+
+  /* ================= COOLDOWN CHECK ================= */
+
+  if (circuitState.cooldownUntil && now < circuitState.cooldownUntil) {
+    return {
+      allowed: false,
+      reason: `Cooldown active until ${new Date(
+        circuitState.cooldownUntil
+      ).toLocaleTimeString()}`,
+    };
+  }
+
+  /* ================= DAILY LOSS LIMIT ================= */
+
   const dailyLossPct =
-    dailyPnL < 0
-      ? (Math.abs(dailyPnL) / totalCapital) * 100
+    peakCapital > 0
+      ? (-dailyPnL / peakCapital) * 100
       : 0;
 
-  const totalDrawdownPct =
+  if (dailyLossPct > maxDailyLossPct) {
+    lockSystem("Daily loss limit exceeded", cooldownMinutes);
+  }
+
+  /* ================= MAX DRAWDOWN ================= */
+
+  const drawdownPct =
     peakCapital > 0
       ? ((peakCapital - totalCapital) / peakCapital) * 100
       : 0;
 
-  if (dailyLossPct > maxDailyLossPct) {
+  if (drawdownPct > maxDrawdownPct) {
+    lockSystem("Max drawdown exceeded", cooldownMinutes);
+  }
+
+  /* ================= VOLATILITY SPIKE ================= */
+
+  if (volatility > volatilityLimit) {
+    lockSystem("Extreme market volatility", 15);
+  }
+
+  if (circuitState.locked) {
     return {
       allowed: false,
-      reason: "Daily loss limit exceeded",
-      level: "daily",
+      reason: circuitState.reason,
     };
   }
 
-  if (totalDrawdownPct > maxTotalDrawdownPct) {
-    return {
-      allowed: false,
-      reason: "Max portfolio drawdown exceeded",
-      level: "portfolio",
-    };
-  }
+  return { allowed: true };
+}
 
-  return {
-    allowed: true,
-    level: "normal",
-  };
+/* ================= MANUAL EMERGENCY LOCK ================= */
+
+export function emergencyLock(reason = "Manual emergency stop") {
+  circuitState.locked = true;
+  circuitState.reason = reason;
+  circuitState.cooldownUntil = null;
+}
+
+/* ================= RESET ================= */
+
+export function resetCircuit() {
+  circuitState.locked = false;
+  circuitState.reason = null;
+  circuitState.cooldownUntil = null;
+}
+
+/* ================= INTERNAL ================= */
+
+function lockSystem(reason, cooldownMinutes) {
+  circuitState.locked = true;
+  circuitState.reason = reason;
+
+  circuitState.cooldownUntil =
+    Date.now() + cooldownMinutes * 60 * 1000;
 }
