@@ -12,26 +12,22 @@ import {
   getPerformanceStats,
   getAllPerformanceStats,
 } from "./engines/PerformanceEngine";
+import { detectMarketRegime } from "./engines/MarketRegimeEngine";
 
 export default function TradingRoom({
   mode: parentMode = "paper",
   dailyLimit = 5,
 }) {
-  /* ================= STATE ================= */
-
   const [mode, setMode] = useState(parentMode.toUpperCase());
   const [engineType, setEngineType] = useState("scalp");
   const [baseRisk, setBaseRisk] = useState(1);
   const [leverage, setLeverage] = useState(1);
   const [humanMultiplier, setHumanMultiplier] = useState(1);
-  const [productionMode] = useState(true);
 
   const [dailyPnL, setDailyPnL] = useState(0);
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
   const [lastConfidence, setLastConfidence] = useState(null);
-
-  /* ================= INITIAL CAPITAL ================= */
 
   const initialCapital = 1000;
 
@@ -45,15 +41,20 @@ export default function TradingRoom({
   );
 
   const peakCapital = useRef(initialCapital);
+  const totalCapital = calculateTotalCapital(allocation, reserve);
 
-  const totalCapital = calculateTotalCapital(
-    allocation,
-    reserve
-  );
+  const [marketRegime, setMarketRegime] = useState("neutral");
 
   useEffect(() => {
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMarketRegime(detectMarketRegime());
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   /* ================= GLOBAL RISK ================= */
 
@@ -78,95 +79,67 @@ export default function TradingRoom({
     ]);
   }
 
-  /* ================= EXECUTION ================= */
-
   function executeTrade() {
-    try {
-      if (!productionMode) {
-        pushLog("Production mode disabled.");
-        return;
-      }
-
-      if (!globalRisk.allowed) {
-        pushLog(`Blocked: ${globalRisk.reason}`);
-        return;
-      }
-
-      if (tradesUsed >= dailyLimit) {
-        pushLog("Daily trade count limit reached.");
-        return;
-      }
-
-      const exchange = "coinbase";
-
-      const engineCapital =
-        allocation[engineType][exchange];
-
-      const performanceStats =
-        getPerformanceStats(engineType);
-
-      const result = executeEngine({
-        engineType,
-        balance: engineCapital,
-        riskPct: baseRisk,
-        leverage,
-        humanMultiplier,
-        recentPerformance: performanceStats,
-      });
-
-      if (result.blocked) {
-        pushLog(
-          `Blocked: ${result.reason}`,
-          result.confidenceScore
-        );
-        return;
-      }
-
-      /* ===== Update Performance ===== */
-      updatePerformance(
-        engineType,
-        result.pnl,
-        result.isWin
-      );
-
-      /* ===== Update Capital ===== */
-      const updatedAllocation = {
-        ...allocation,
-        [engineType]: {
-          ...allocation[engineType],
-          [exchange]: result.newBalance,
-        },
-      };
-
-      /* ===== Rebalance ===== */
-      const rebalanced = rebalanceCapital({
-        allocation: updatedAllocation,
-        reserve,
-      });
-
-      /* ===== Rotate by Performance ===== */
-      const rotated = rotateCapitalByPerformance({
-        allocation: rebalanced.allocation,
-        performanceStats: getAllPerformanceStats(),
-      });
-
-      setAllocation(rotated);
-      setReserve(rebalanced.reserve);
-
-      setTradesUsed((v) => v + 1);
-      setDailyPnL((v) => v + result.pnl);
-      setLastConfidence(result.confidenceScore);
-
-      pushLog(
-        `${engineType.toUpperCase()} | ${exchange} | PnL: ${result.pnl.toFixed(
-          2
-        )}`,
-        result.confidenceScore
-      );
-    } catch (error) {
-      console.error("Execution Failure:", error);
-      pushLog("System protected against execution failure.");
+    if (!globalRisk.allowed) {
+      pushLog(`Blocked: ${globalRisk.reason}`);
+      return;
     }
+
+    if (tradesUsed >= dailyLimit) {
+      pushLog("Daily trade count limit reached.");
+      return;
+    }
+
+    const exchange = "coinbase";
+    const engineCapital = allocation[engineType][exchange];
+
+    const performanceStats = getPerformanceStats(engineType);
+
+    const result = executeEngine({
+      engineType,
+      balance: engineCapital,
+      riskPct: baseRisk,
+      leverage,
+      humanMultiplier,
+      recentPerformance: performanceStats,
+    });
+
+    if (result.blocked) {
+      pushLog(`Blocked: ${result.reason}`, result.confidenceScore);
+      return;
+    }
+
+    updatePerformance(engineType, result.pnl, result.isWin);
+
+    const updatedAllocation = {
+      ...allocation,
+      [engineType]: {
+        ...allocation[engineType],
+        [exchange]: result.newBalance,
+      },
+    };
+
+    const rebalanced = rebalanceCapital({
+      allocation: updatedAllocation,
+      reserve,
+    });
+
+    const rotated = rotateCapitalByPerformance({
+      allocation: rebalanced.allocation,
+      performanceStats: getAllPerformanceStats(),
+    });
+
+    setAllocation(rotated);
+    setReserve(rebalanced.reserve);
+
+    setTradesUsed((v) => v + 1);
+    setDailyPnL((v) => v + result.pnl);
+    setLastConfidence(result.confidenceScore);
+
+    pushLog(
+      `${engineType.toUpperCase()} | ${exchange} | PnL: ${result.pnl.toFixed(2)}`,
+      result.confidenceScore
+    );
   }
 
   function confidenceColor(score) {
@@ -176,17 +149,13 @@ export default function TradingRoom({
     return "#5EC6FF";
   }
 
-  /* ================= UI ================= */
-
   return (
     <div className="postureWrap">
       <section className="postureCard">
         <div className="postureTop">
           <div>
             <h2>Institutional Trading Control</h2>
-            <small>
-              Adaptive AI + Capital Rotation + Risk Lock
-            </small>
+            <small>Adaptive AI | Capital Rotation | Regime Aware</small>
           </div>
 
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
@@ -194,18 +163,19 @@ export default function TradingRoom({
           </span>
         </div>
 
-        {!globalRisk.allowed && (
-          <div className="badge bad" style={{ marginTop: 10 }}>
-            Trading Locked — {globalRisk.reason}
-          </div>
-        )}
-
+        {/* STATUS STRIP */}
         <div className="stats">
           <div><b>Total Capital:</b> ${totalCapital.toFixed(2)}</div>
           <div><b>Reserve:</b> ${reserve.toFixed(2)}</div>
           <div><b>Daily PnL:</b> ${dailyPnL.toFixed(2)}</div>
           <div><b>Trades Used:</b> {tradesUsed} / {dailyLimit}</div>
-
+          <div><b>Market Regime:</b> {marketRegime}</div>
+          <div>
+            <b>Global Risk:</b>{" "}
+            <span className={`badge ${globalRisk.allowed ? "ok" : "bad"}`}>
+              {globalRisk.allowed ? "ACTIVE" : "LOCKED"}
+            </span>
+          </div>
           {lastConfidence !== null && (
             <div>
               <b>Last Confidence:</b>{" "}
@@ -225,7 +195,7 @@ export default function TradingRoom({
           <button
             className="btn ok"
             onClick={executeTrade}
-            disabled={!globalRisk.allowed || !productionMode}
+            disabled={!globalRisk.allowed}
           >
             Execute Trade
           </button>
