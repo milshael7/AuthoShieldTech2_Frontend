@@ -1,6 +1,8 @@
 // CapitalAllocator.js
 // Institutional Capital Allocation + Rotation
 
+/* ================= INITIAL ALLOCATION ================= */
+
 export function allocateCapital({
   totalCapital,
   engines = ["scalp", "session"],
@@ -68,7 +70,37 @@ export function rebalanceCapital({
   };
 }
 
-/* ================= PERFORMANCE ROUTING ================= */
+/* ================= PERFORMANCE ROTATION ================= */
+/* THIS WAS MISSING — THIS CAUSED BUILD FAILURE */
+
+export function rotateCapitalByPerformance({
+  allocation,
+  performanceStats = {},
+  boostPct = 0.1,
+}) {
+  const updated = JSON.parse(JSON.stringify(allocation));
+
+  Object.keys(updated).forEach((engine) => {
+    const stats = performanceStats[engine];
+
+    if (!stats || !stats.trades || stats.trades.length === 0) return;
+
+    const wins = stats.trades.filter(t => t.isWin).length;
+    const winRate = wins / stats.trades.length;
+
+    Object.keys(updated[engine]).forEach((exchange) => {
+      if (winRate > 0.6) {
+        updated[engine][exchange] *= (1 + boostPct);
+      } else if (winRate < 0.4) {
+        updated[engine][exchange] *= (1 - boostPct);
+      }
+    });
+  });
+
+  return updated;
+}
+
+/* ================= ROUTE TO BEST EXCHANGE ================= */
 
 export function routeToBestExchange({
   allocation,
@@ -81,7 +113,7 @@ export function routeToBestExchange({
   let bestScore = -Infinity;
 
   Object.keys(engineAlloc).forEach((exchange) => {
-    const perf = exchangePerformance[exchange] || 0;
+    const perf = exchangePerformance?.[exchange] || 0;
 
     if (perf > bestScore) {
       bestScore = perf;
