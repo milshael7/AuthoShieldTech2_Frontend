@@ -20,8 +20,20 @@ export default function TradingRoom({
   dailyLimit = 5,
 }) {
   const [mode, setMode] = useState(parentMode.toUpperCase());
-  const [engineType] = useState("scalp");
 
+  /* ================= EXCHANGE ROUTING ================= */
+
+  const [activeExchange, setActiveExchange] = useState("coinbase");
+
+  const exchangeStatus = {
+    coinbase: { online: true, latency: 42 },
+    kraken: { online: true, latency: 55 },
+    paper: { online: true, latency: 5 },
+  };
+
+  /* ================= ENGINE SETTINGS ================= */
+
+  const [engineType] = useState("scalp");
   const [baseRisk] = useState(1);
   const [leverage] = useState(1);
   const [humanMultiplier] = useState(1);
@@ -29,8 +41,6 @@ export default function TradingRoom({
   const [dailyPnL, setDailyPnL] = useState(0);
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
-  const [lastConfidence, setLastConfidence] = useState(null);
-
   const [equityHistory, setEquityHistory] = useState([]);
 
   const [market, setMarket] = useState({
@@ -65,7 +75,7 @@ export default function TradingRoom({
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
 
-  /* ================= DRAW DOWN ================= */
+  /* ================= DRAWDOWN ================= */
 
   if (totalCapital > peakCapital.current) {
     peakCapital.current = totalCapital;
@@ -86,14 +96,7 @@ export default function TradingRoom({
     dailyPnL,
   });
 
-  /* ================= EXPOSURE ================= */
-
-  const exposurePct =
-    reserve > 0
-      ? ((totalCapital - reserve) / totalCapital) * 100
-      : 0;
-
-  /* ================= PERFORMANCE HEAT ================= */
+  /* ================= PERFORMANCE ================= */
 
   const performanceHeat = getAllPerformanceStats();
 
@@ -103,28 +106,37 @@ export default function TradingRoom({
     return "#ffd166";
   }
 
-  function pushLog(message, confidence) {
+  function pushLog(message) {
     setLog((prev) => [
-      { t: new Date().toLocaleTimeString(), m: message, confidence },
+      { t: new Date().toLocaleTimeString(), m: message },
       ...prev,
     ]);
   }
 
+  /* ================= EXECUTION ================= */
+
   function executeTrade() {
+    if (!exchangeStatus[activeExchange].online) {
+      pushLog(`Blocked: ${activeExchange} offline`);
+      return;
+    }
+
     if (!globalRisk.allowed) {
       pushLog(`Blocked: ${globalRisk.reason}`);
       return;
     }
 
     if (tradesUsed >= dailyLimit) {
-      pushLog("Daily trade count limit reached.");
+      pushLog("Daily trade limit reached.");
       return;
     }
 
-    const exchange = "coinbase";
-    const engineCapital = allocation[engineType][exchange];
+    const engineCapital =
+      allocation[engineType][activeExchange] ||
+      allocation[engineType]["coinbase"];
 
-    const performanceStats = getPerformanceStats(engineType);
+    const performanceStats =
+      getPerformanceStats(engineType);
 
     const result = executeEngine({
       engineType,
@@ -136,7 +148,7 @@ export default function TradingRoom({
     });
 
     if (result.blocked) {
-      pushLog(`Blocked: ${result.reason}`, result.confidenceScore);
+      pushLog(`Blocked: ${result.reason}`);
       return;
     }
 
@@ -146,7 +158,7 @@ export default function TradingRoom({
       ...allocation,
       [engineType]: {
         ...allocation[engineType],
-        [exchange]: result.newBalance,
+        [activeExchange]: result.newBalance,
       },
     };
 
@@ -165,7 +177,6 @@ export default function TradingRoom({
 
     setTradesUsed((v) => v + 1);
     setDailyPnL((v) => v + result.pnl);
-    setLastConfidence(result.confidenceScore);
 
     setEquityHistory((prev) => [
       ...prev,
@@ -173,28 +184,67 @@ export default function TradingRoom({
     ]);
 
     pushLog(
-      `${engineType.toUpperCase()} | ${exchange} | PnL: ${result.pnl.toFixed(
+      `${engineType.toUpperCase()} | ${activeExchange.toUpperCase()} | PnL: ${result.pnl.toFixed(
         2
-      )}`,
-      result.confidenceScore
+      )}`
     );
   }
+
+  /* ================= UI ================= */
 
   return (
     <div className="postureWrap">
       <section className="postureCard">
         <div className="postureTop">
           <div>
-            <h2>Institutional Risk Terminal</h2>
-            <small>Live Risk Intelligence Panel</small>
+            <h2>Execution Routing Terminal</h2>
+            <small>Multi-Venue Institutional Execution</small>
           </div>
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
             {mode}
           </span>
         </div>
 
+        {/* EXCHANGE SELECTOR */}
+        <div style={{ marginTop: 20 }}>
+          <b>Active Exchange:</b>
+          <div style={{ marginTop: 10 }}>
+            {["coinbase", "kraken", "paper"].map((ex) => (
+              <button
+                key={ex}
+                className={`pill ${
+                  activeExchange === ex ? "active" : ""
+                }`}
+                onClick={() => setActiveExchange(ex)}
+                style={{ marginRight: 8 }}
+              >
+                {ex.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* EXCHANGE STATUS */}
+        <div style={{ marginTop: 15 }}>
+          <b>Status:</b>{" "}
+          <span
+            style={{
+              color: exchangeStatus[activeExchange].online
+                ? "#2bd576"
+                : "#ff5a5f",
+            }}
+          >
+            {exchangeStatus[activeExchange].online
+              ? "Online"
+              : "Offline"}
+          </span>
+          {" | "}
+          Latency:{" "}
+          {exchangeStatus[activeExchange].latency}ms
+        </div>
+
         {/* RISK STRIP */}
-        <div className="stats" style={{ marginTop: 16 }}>
+        <div className="stats" style={{ marginTop: 20 }}>
           <div><b>Live Price:</b> ${market.price}</div>
           <div><b>Total Capital:</b> ${totalCapital.toFixed(2)}</div>
           <div>
@@ -203,39 +253,13 @@ export default function TradingRoom({
               {drawdownPct.toFixed(2)}%
             </span>
           </div>
-          <div>
-            <b>Exposure:</b>{" "}
-            <span style={{ color: "#5EC6FF" }}>
-              {exposurePct.toFixed(2)}%
-            </span>
-          </div>
         </div>
 
-        {/* EQUITY CURVE */}
         <div style={{ marginTop: 20 }}>
           <EquityCurve equityHistory={equityHistory} />
         </div>
 
-        {/* PERFORMANCE HEAT */}
         <div style={{ marginTop: 20 }}>
-          <h4>Engine Performance Heat</h4>
-          {Object.keys(performanceHeat).map((engine) => (
-            <div key={engine}>
-              {engine.toUpperCase()} :{" "}
-              <span
-                style={{
-                  color: heatColor(
-                    performanceHeat[engine].pnl
-                  ),
-                }}
-              >
-                {performanceHeat[engine].pnl.toFixed(2)}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <div className="actions" style={{ marginTop: 20 }}>
           <button
             className="btn ok"
             onClick={executeTrade}
