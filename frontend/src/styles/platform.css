@@ -1,42 +1,48 @@
 /* =========================================================
-   AUTOSHIELD PLATFORM UI — SOC BASELINE (FINAL HARDENED)
+   AUTOSHIELD PLATFORM UI — ENTERPRISE AUTHORITY EDITION
    File: frontend/src/styles/platform.css
-
-   PURPOSE:
-   - SOC dashboards (Posture, Threats, Assets, Incidents)
-   - Trading oversight cards & shared UI
-   - Visual harmony with global background + trading terminal
-
-   HARD RULES:
-   - NO layout ownership
-   - NO routing assumptions
-   - NO AI positioning
    ========================================================= */
 
 /* =============================
    BASE VARIABLES
    ============================= */
 :root{
-  --p-bg: rgba(255,255,255,.06);
-  --p-bg-soft: rgba(0,0,0,.32);
-  --p-border: rgba(255,255,255,.14);
+  --p-bg: rgba(255,255,255,.05);
+  --p-bg-soft: rgba(0,0,0,.45);
+  --p-border: rgba(255,255,255,.12);
 
-  --p-accent: rgba(122,167,255,.9);
-  --p-accent-soft: rgba(122,167,255,.24);
+  --p-accent: #5EC6FF;
+  --p-accent-strong: #3aa6ff;
+  --p-accent-soft: rgba(94,198,255,.18);
 
   --p-ok: #2bd576;
   --p-warn: #ffd166;
   --p-bad: #ff5a5f;
 
   --p-text: rgba(255,255,255,.96);
-  --p-muted: rgba(255,255,255,.65);
+  --p-muted: rgba(255,255,255,.6);
 
   --p-radius: 18px;
   --p-radius-sm: 12px;
+
+  --p-glow: 0 0 22px rgba(94,198,255,.25);
 }
 
 /* =============================
-   PLATFORM CARDS (GLOBAL)
+   GLOBAL TEXT POLISH
+   ============================= */
+body{
+  color:var(--p-text);
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  letter-spacing:.2px;
+}
+
+small{
+  color:var(--p-muted);
+}
+
+/* =============================
+   PLATFORM CARDS
    ============================= */
 .platformCard,
 .postureCard,
@@ -44,17 +50,24 @@
   background:
     linear-gradient(
       180deg,
-      rgba(255,255,255,.06),
-      rgba(0,0,0,.32)
+      rgba(255,255,255,.05),
+      rgba(0,0,0,.45)
     );
   border:1px solid var(--p-border);
   border-radius:var(--p-radius);
   padding:22px;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
+  transition:all .25s ease;
+}
+
+.platformCard:hover,
+.postureCard:hover{
+  border-color:rgba(94,198,255,.35);
+  box-shadow:var(--p-glow);
 }
 
 /* =============================
-   SOC GRID STRUCTURE
+   GRID STRUCTURE
    ============================= */
 .postureWrap{
   display:grid;
@@ -63,16 +76,8 @@
   align-items:start;
 }
 
-.postureGrid{
-  display:grid;
-  grid-template-columns:minmax(0,1fr) 420px;
-  gap:24px;
-  margin-top:24px;
-}
-
 @media (max-width:1100px){
-  .postureWrap,
-  .postureGrid{
+  .postureWrap{
     grid-template-columns:1fr;
   }
 }
@@ -82,8 +87,8 @@
    ============================= */
 .kpiGrid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
-  gap:16px;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:18px;
   margin-bottom:24px;
 }
 
@@ -91,35 +96,29 @@
   background:
     linear-gradient(
       180deg,
-      rgba(255,255,255,.10),
+      rgba(255,255,255,.08),
       rgba(0,0,0,.35)
     );
   border:1px solid var(--p-border);
   border-radius:var(--p-radius-sm);
-  padding:14px 16px;
+  padding:16px;
+  transition:all .25s ease;
 }
 
-.kpiCard small{
-  font-size:12px;
-  color:var(--p-muted);
+.kpiCard:hover{
+  border-color:var(--p-accent);
+  box-shadow:var(--p-glow);
 }
 
 .kpiCard b{
   display:block;
-  margin-top:4px;
-  font-size:20px;
+  margin-top:6px;
+  font-size:22px;
   font-weight:900;
 }
 
-.kpiCard .trend{
-  display:block;
-  margin-top:4px;
-  font-size:11px;
-  color:var(--p-accent);
-}
-
 /* =============================
-   POSTURE HEADER
+   HEADER STRIP
    ============================= */
 .postureTop{
   display:flex;
@@ -130,45 +129,81 @@
 }
 
 /* =============================
-   SCORE RING
+   BADGES
    ============================= */
-.postureScore{
-  display:flex;
-  gap:14px;
-  align-items:center;
-}
-
-.scoreRing{
-  width:72px;
-  height:72px;
-  border-radius:50%;
-  background:
-    radial-gradient(circle at center, #0b0e14 56%, transparent 57%),
-    conic-gradient(
-      var(--p-accent) calc(var(--val, 75) * 1%),
-      rgba(255,255,255,.14) 0
-    );
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-weight:900;
-  font-size:16px;
-}
-
-.scoreMeta b{
-  display:block;
-}
-
-.scoreMeta span{
+.badge{
+  padding:5px 12px;
+  border-radius:999px;
   font-size:12px;
-  color:var(--p-muted);
+  font-weight:800;
+  border:1px solid var(--p-border);
+  background:rgba(0,0,0,.45);
+}
+
+.badge.ok{
+  background:rgba(43,213,118,.18);
+  color:var(--p-ok);
+  border-color:rgba(43,213,118,.4);
+}
+
+.badge.warn{
+  background:rgba(255,209,102,.18);
+  color:var(--p-warn);
+  border-color:rgba(255,209,102,.4);
+}
+
+.badge.bad{
+  background:rgba(255,90,95,.15);
+  color:var(--p-bad);
+  border-color:rgba(255,90,95,.4);
 }
 
 /* =============================
-   METERS & BARS
+   BUTTON SYSTEM
    ============================= */
-.meter,
-.coverBar{
+.btn{
+  border:none;
+  border-radius:12px;
+  padding:10px 18px;
+  font-weight:800;
+  cursor:pointer;
+  transition:all .2s ease;
+}
+
+.btn.ok{
+  background:linear-gradient(
+    90deg,
+    var(--p-accent),
+    var(--p-accent-strong)
+  );
+  color:#000;
+}
+
+.btn.ok:hover{
+  transform:translateY(-2px);
+  box-shadow:0 6px 20px rgba(94,198,255,.4);
+}
+
+.pill{
+  padding:6px 14px;
+  border-radius:999px;
+  border:1px solid var(--p-border);
+  background:rgba(255,255,255,.05);
+  cursor:pointer;
+  font-weight:700;
+  transition:all .2s ease;
+}
+
+.pill.active{
+  background:var(--p-accent-soft);
+  border-color:var(--p-accent);
+  color:var(--p-accent);
+}
+
+/* =============================
+   METERS
+   ============================= */
+.meter{
   width:100%;
   height:10px;
   border-radius:999px;
@@ -177,8 +212,7 @@
   margin:14px 0;
 }
 
-.meter > div,
-.coverBar > div{
+.meter > div{
   height:100%;
   background:
     linear-gradient(
@@ -189,24 +223,7 @@
 }
 
 /* =============================
-   COVERAGE GRID
-   ============================= */
-.coverGrid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:18px;
-  margin-top:20px;
-}
-
-.coverItemTop{
-  display:flex;
-  justify-content:space-between;
-  font-size:13px;
-  margin-bottom:6px;
-}
-
-/* =============================
-   LISTS (STATUS / ACTIONS)
+   LISTS
    ============================= */
 .list{
   list-style:none;
@@ -236,30 +253,7 @@
 .dot.bad{ background:var(--p-bad); }
 
 /* =============================
-   BADGES
-   ============================= */
-.badge{
-  display:inline-block;
-  padding:4px 10px;
-  border-radius:999px;
-  font-size:12px;
-  font-weight:900;
-  border:1px solid var(--p-border);
-  background:rgba(0,0,0,.35);
-}
-
-.badge.warn{
-  background:rgba(255,209,102,.18);
-  color:var(--p-warn);
-}
-
-.badge.ok{
-  background:rgba(43,213,118,.18);
-  color:var(--p-ok);
-}
-
-/* =============================
-   ERRORS
+   ERROR STATE
    ============================= */
 .error{
   color:var(--p-bad);
@@ -270,20 +264,13 @@
    MOBILE TUNING
    ============================= */
 @media (max-width:768px){
-  .postureWrap,
-  .postureGrid{
-    gap:16px;
-  }
-
   .platformCard,
   .postureCard,
   .card{
     padding:16px;
   }
 
-  .scoreRing{
-    width:64px;
-    height:64px;
-    font-size:14px;
+  .kpiCard b{
+    font-size:18px;
   }
 }
