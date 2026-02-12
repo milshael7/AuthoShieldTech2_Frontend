@@ -25,7 +25,6 @@ export function updatePerformance(engineType, pnl, isWin) {
     timestamp: Date.now(),
   });
 
-  // Keep last 500 trades only (memory safety)
   if (performanceMemory[engineType].length > 500) {
     performanceMemory[engineType].shift();
   }
@@ -41,15 +40,11 @@ export function getPerformanceStats(engineType) {
   const wins = trades.filter(t => t.isWin).length;
   const losses = trades.filter(t => !t.isWin).length;
 
-  const lossStreak = calculateLossStreak(trades);
-  const winStreak = calculateWinStreak(trades);
-
   return {
     wins,
     losses,
     total: trades.length,
-    lossStreak,
-    winStreak,
+    trades, // ✅ CRITICAL FIX — expose trades
   };
 }
 
@@ -61,11 +56,11 @@ export function getAllPerformanceStats() {
 }
 
 /* =========================================================
-   FULL ANALYTICS ENGINE (Institutional Metrics)
+   FULL ANALYTICS ENGINE
 ========================================================= */
 
 export function evaluatePerformance(trades = []) {
-  if (!trades.length) {
+  if (!Array.isArray(trades) || trades.length === 0) {
     return {
       winRate: 0,
       profitFactor: 0,
@@ -96,8 +91,6 @@ export function evaluatePerformance(trades = []) {
     winRate * averageWin -
     (1 - winRate) * averageLoss;
 
-  /* ================= MAX DRAWDOWN ================= */
-
   let peak = 0;
   let maxDrawdown = 0;
   let equity = 0;
@@ -108,8 +101,6 @@ export function evaluatePerformance(trades = []) {
     const dd = peak - equity;
     if (dd > maxDrawdown) maxDrawdown = dd;
   });
-
-  /* ================= SHARPE (Simplified) ================= */
 
   const mean = totalPnL / trades.length;
 
@@ -132,36 +123,4 @@ export function evaluatePerformance(trades = []) {
     maxDrawdown,
     sharpe,
   };
-}
-
-/* =========================================================
-   STREAK CALCULATIONS
-========================================================= */
-
-function calculateLossStreak(trades) {
-  let streak = 0;
-
-  for (let i = trades.length - 1; i >= 0; i--) {
-    if (!trades[i].isWin) {
-      streak++;
-    } else {
-      break;
-    }
-  }
-
-  return streak;
-}
-
-function calculateWinStreak(trades) {
-  let streak = 0;
-
-  for (let i = trades.length - 1; i >= 0; i--) {
-    if (trades[i].isWin) {
-      streak++;
-    } else {
-      break;
-    }
-  }
-
-  return streak;
 }
