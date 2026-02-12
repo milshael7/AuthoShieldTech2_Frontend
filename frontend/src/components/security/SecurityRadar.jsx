@@ -13,9 +13,13 @@ function fmtPct(n){
 }
 
 export default function SecurityRadar(){
+
   const [status, setStatus] = useState("Loading…");
   const [posture, setPosture] = useState(null);
+  const [history, setHistory] = useState([]);
   const canvasRef = useRef(null);
+
+  /* ================= LOAD DATA ================= */
 
   useEffect(() => {
     let t;
@@ -24,26 +28,35 @@ export default function SecurityRadar(){
 
     async function load(){
       try{
-        const res = await fetch(`${base}/api/security/posture`, { credentials: "include" });
-        const data = await res.json().catch(() => ({}));
-        if(!res.ok) throw new Error();
-        setPosture(data.posture);
+        const [pRes, hRes] = await Promise.all([
+          fetch(`${base}/api/security/posture`, { credentials: "include" }),
+          fetch(`${base}/api/security/score-history`, { credentials: "include" })
+        ]);
+
+        const pData = await pRes.json().catch(()=>({}));
+        const hData = await hRes.json().catch(()=>({}));
+
+        if(!pRes.ok) throw new Error();
+
+        setPosture(pData.posture);
+        setHistory(hData.history || []);
         setStatus("LIVE");
+
       }catch{
         setStatus("ERROR");
       }
     }
 
     load();
-    t = setInterval(load, 8000);
+    t = setInterval(load, 10000);
     return () => clearInterval(t);
   }, []);
 
   const domains = useMemo(() => posture?.domains || [], [posture]);
-  const score = posture?.score ?? 0;
-  const tier = posture?.tier ?? "—";
-  const risk = posture?.risk ?? "—";
-  const trend = posture?.trend ?? "—";
+  const score   = posture?.score ?? 0;
+  const tier    = posture?.tier ?? "—";
+  const risk    = posture?.risk ?? "—";
+  const trend   = posture?.trend ?? "—";
 
   const maxIssues = useMemo(
     () => Math.max(1, ...domains.map(d => Number(d.issues)||0)),
@@ -53,6 +66,7 @@ export default function SecurityRadar(){
   /* ================= RADAR DRAW ================= */
 
   useEffect(() => {
+
     const canvas = canvasRef.current;
     if(!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -67,9 +81,10 @@ export default function SecurityRadar(){
 
     ctx.clearRect(0,0,cssW,cssH);
 
+    /* Background depth */
     const bg = ctx.createLinearGradient(0,0,0,cssH);
-    bg.addColorStop(0,"rgba(20,25,35,0.7)");
-    bg.addColorStop(1,"rgba(10,14,20,0.9)");
+    bg.addColorStop(0,"rgba(15,20,30,0.8)");
+    bg.addColorStop(1,"rgba(5,8,12,0.95)");
     ctx.fillStyle = bg;
     ctx.fillRect(0,0,cssW,cssH);
 
@@ -78,9 +93,10 @@ export default function SecurityRadar(){
     const cy = cssH * 0.55;
     const R  = Math.min(cssW, cssH) * 0.34;
 
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.strokeStyle = "rgba(255,255,255,0.07)";
     ctx.lineWidth = 1;
 
+    /* Grid */
     for(let k=1;k<=5;k++){
       const r = (R*k)/5;
       ctx.beginPath();
@@ -96,8 +112,9 @@ export default function SecurityRadar(){
 
     if(!domains.length) return;
 
-    ctx.fillStyle = "rgba(122,167,255,0.25)";
-    ctx.strokeStyle = "rgba(122,167,255,0.95)";
+    /* Coverage Shape */
+    ctx.fillStyle = "rgba(94,198,255,0.28)";
+    ctx.strokeStyle = "rgba(94,198,255,0.95)";
     ctx.lineWidth = 2;
 
     ctx.beginPath();
@@ -113,26 +130,60 @@ export default function SecurityRadar(){
     ctx.fill();
     ctx.stroke();
 
-  }, [domains]);
+    /* Issue Dots */
+    for(let i=0;i<n;i++){
+      const d = domains[i];
+      const cov = clamp((Number(d.coverage)||0)/100, 0, 1);
+      const issues = clamp(Number(d.issues)||0, 0, 999);
+      const a = (Math.PI*2*i)/n - Math.PI/2;
+
+      const x = cx + Math.cos(a)*R*cov;
+      const y = cy + Math.sin(a)*R*cov;
+      const sz = 3 + (issues/maxIssues)*6;
+
+      ctx.fillStyle = issues > 0 ? "#ff5a5f" : "#2bd576";
+      ctx.beginPath();
+      ctx.arc(x,y,sz,0,Math.PI*2);
+      ctx.fill();
+    }
+
+  }, [domains, maxIssues]);
+
+  /* ================= TREND MINI CHART ================= */
+
+  const lastTrend = history.slice(-12);
 
   /* ================= UI ================= */
 
   return (
     <div className="card">
 
-      {/* ===== EXECUTIVE SCORE HEADER ===== */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+      {/* ===== EXECUTIVE HEADER ===== */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
+
         <div>
-          <div style={{fontSize:12,opacity:.6}}>Security Posture Score</div>
-          <div style={{fontSize:32,fontWeight:900}}>{score}</div>
-          <div style={{fontSize:13,marginTop:4}}>
-            Tier: <b>{tier}</b> • Risk: <b>{risk}</b> • Trend: {trend}
+          <div style={{fontSize:12,opacity:.6}}>Enterprise Security Score</div>
+          <div style={{fontSize:36,fontWeight:900,letterSpacing:1}}>
+            {score}
+          </div>
+
+          <div style={{fontSize:13,marginTop:6}}>
+            Tier: <b>{tier}</b> • Risk: <b>{risk}</b> • Trend:{" "}
+            <b style={{
+              color:
+                trend==="up" ? "#2bd576" :
+                trend==="down" ? "#ff5a5f" :
+                "#ffd166"
+            }}>
+              {trend.toUpperCase()}
+            </b>
           </div>
         </div>
 
         <span className={`badge ${status==="LIVE"?"ok":""}`}>
           {status}
         </span>
+
       </div>
 
       {/* ===== RADAR ===== */}
@@ -148,14 +199,36 @@ export default function SecurityRadar(){
         />
       </div>
 
-      {/* ===== TABLE ===== */}
-      <div style={{marginTop:18}}>
+      {/* ===== SCORE HISTORY MINI TREND ===== */}
+      {lastTrend.length > 0 && (
+        <div style={{marginTop:20}}>
+          <div style={{fontSize:12,opacity:.6,marginBottom:6}}>
+            Recent Score Movement
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            {lastTrend.map((h,i)=>(
+              <div
+                key={i}
+                style={{
+                  flex:1,
+                  height:6 + (h.score/5),
+                  background:"rgba(94,198,255,0.6)",
+                  borderRadius:4
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ===== DOMAIN TABLE ===== */}
+      <div style={{marginTop:22}}>
         <table className="table">
           <thead>
             <tr>
-              <th>Control</th>
+              <th>Control Domain</th>
               <th>Coverage</th>
-              <th>Issues</th>
+              <th>Open Gaps</th>
             </tr>
           </thead>
           <tbody>
@@ -166,6 +239,13 @@ export default function SecurityRadar(){
                 <td>{d.issues}</td>
               </tr>
             ))}
+            {!domains.length && (
+              <tr>
+                <td colSpan="3" style={{opacity:.6}}>
+                  No posture data available.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
