@@ -27,6 +27,7 @@ export default function TradingRoom({
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
   const [lastConfidence, setLastConfidence] = useState(null);
+  const [currentRegime, setCurrentRegime] = useState("neutral");
 
   const initialCapital = 1000;
 
@@ -40,7 +41,6 @@ export default function TradingRoom({
   );
 
   const peakCapital = useRef(initialCapital);
-
   const totalCapital = calculateTotalCapital(allocation, reserve);
 
   useEffect(() => {
@@ -85,7 +85,6 @@ export default function TradingRoom({
 
     const exchange = "coinbase";
     const engineCapital = allocation[engineType][exchange];
-
     const performanceStats = getPerformanceStats(engineType);
 
     const result = executeEngine({
@@ -102,10 +101,8 @@ export default function TradingRoom({
       return;
     }
 
-    /* ===== Update Performance Memory ===== */
     updatePerformance(engineType, result.pnl, result.isWin);
 
-    /* ===== Update Capital ===== */
     const updatedAllocation = {
       ...allocation,
       [engineType]: {
@@ -114,13 +111,11 @@ export default function TradingRoom({
       },
     };
 
-    /* ===== Floor Rebalance ===== */
     const rebalanced = rebalanceCapital({
       allocation: updatedAllocation,
       reserve,
     });
 
-    /* ===== Performance Rotation ===== */
     const rotated = rotateCapitalByPerformance({
       allocation: rebalanced.allocation,
       performanceStats: getAllPerformanceStats(),
@@ -128,15 +123,14 @@ export default function TradingRoom({
 
     setAllocation(rotated);
     setReserve(rebalanced.reserve);
-
     setTradesUsed((v) => v + 1);
     setDailyPnL((v) => v + result.pnl);
     setLastConfidence(result.confidenceScore);
+    setCurrentRegime(result.regime || "neutral");
 
-    /* 🔥 UPGRADED LOG WITH REGIME */
     pushLog(
       `${engineType.toUpperCase()} | ${exchange} | Regime: ${
-        result.regime || "N/A"
+        result.regime
       } | PnL: ${result.pnl.toFixed(2)}`,
       result.confidenceScore
     );
@@ -149,6 +143,13 @@ export default function TradingRoom({
     return "#5EC6FF";
   }
 
+  function regimeColor(regime) {
+    if (regime === "trending") return "#5EC6FF";
+    if (regime === "ranging") return "#f5b942";
+    if (regime === "high_volatility") return "#ff4d4d";
+    return "#999";
+  }
+
   /* ================= UI ================= */
 
   return (
@@ -157,7 +158,7 @@ export default function TradingRoom({
         <div className="postureTop">
           <div>
             <h2>Institutional Trading Control</h2>
-            <small>Adaptive AI + Capital Rotation</small>
+            <small>Adaptive AI + Capital Rotation + Regime Intelligence</small>
           </div>
 
           <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
@@ -176,6 +177,18 @@ export default function TradingRoom({
           <div><b>Reserve:</b> ${reserve.toFixed(2)}</div>
           <div><b>Daily PnL:</b> ${dailyPnL.toFixed(2)}</div>
           <div><b>Trades Used:</b> {tradesUsed} / {dailyLimit}</div>
+
+          <div>
+            <b>Market Regime:</b>{" "}
+            <span
+              style={{
+                color: regimeColor(currentRegime),
+                fontWeight: 700,
+              }}
+            >
+              {currentRegime.toUpperCase()}
+            </span>
+          </div>
 
           {lastConfidence !== null && (
             <div>
