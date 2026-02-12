@@ -6,7 +6,11 @@ import {
   calculateTotalCapital,
 } from "./engines/CapitalAllocator";
 import { evaluateGlobalRisk } from "./engines/GlobalRiskGovernor";
-import { updatePerformance, getPerformanceStats } from "./engines/PerformanceEngine";
+import {
+  updatePerformance,
+  getPerformanceStats,
+} from "./engines/PerformanceEngine";
+import { updateEquity } from "./engines/EquityTracker"; // ✅ ADDED
 
 export default function TradingRoom({
   mode: parentMode = "paper",
@@ -31,7 +35,8 @@ export default function TradingRoom({
   });
 
   const [reserve, setReserve] = useState(initialDistribution.reserve);
-  const [allocation, setAllocation] = useState(initialDistribution.allocation);
+  const [allocation, setAllocation] =
+    useState(initialDistribution.allocation);
 
   const peakCapital = useRef(initialCapital);
 
@@ -95,9 +100,11 @@ export default function TradingRoom({
     }
 
     const exchange = "coinbase";
-    const engineCapital = allocation[engineType][exchange];
+    const engineCapital =
+      allocation[engineType][exchange];
 
-    const performanceStats = getPerformanceStats(engineType);
+    const performanceStats =
+      getPerformanceStats(engineType);
 
     const result = executeEngine({
       engineType,
@@ -109,12 +116,22 @@ export default function TradingRoom({
     });
 
     if (result.blocked) {
-      pushLog(`Blocked: ${result.reason}`, result.confidenceScore);
+      pushLog(
+        `Blocked: ${result.reason}`,
+        result.confidenceScore
+      );
       return;
     }
 
     /* ===== Update Performance Memory ===== */
-    updatePerformance(engineType, result.pnl, result.isWin);
+    updatePerformance(
+      engineType,
+      result.pnl,
+      result.isWin
+    );
+
+    /* ===== Update Equity Curve ===== */
+    updateEquity(totalCapital + result.pnl); // ✅ ADDED
 
     const updatedAllocation = {
       ...allocation,
@@ -137,7 +154,9 @@ export default function TradingRoom({
     setLastConfidence(result.confidenceScore);
 
     pushLog(
-      `${engineType.toUpperCase()} | ${exchange} | PnL: ${result.pnl.toFixed(2)}`,
+      `${engineType.toUpperCase()} | ${exchange} | PnL: ${result.pnl.toFixed(
+        2
+      )}`,
       result.confidenceScore
     );
   }
