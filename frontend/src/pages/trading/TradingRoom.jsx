@@ -6,11 +6,11 @@ import {
   calculateTotalCapital,
 } from "./engines/CapitalAllocator";
 import { evaluateGlobalRisk } from "./engines/GlobalRiskGovernor";
+import { updatePerformance, getPerformanceStats } from "./engines/PerformanceEngine";
 import {
-  updatePerformance,
-  getPerformanceStats,
-} from "./engines/PerformanceEngine";
-import { updateEquity } from "./engines/EquityTracker"; // ✅ ADDED
+  evaluateSystemState,
+  resetSystemLock,
+} from "./engines/SystemGovernor";
 
 export default function TradingRoom({
   mode: parentMode = "paper",
@@ -26,7 +26,6 @@ export default function TradingRoom({
   const [tradesUsed, setTradesUsed] = useState(0);
   const [log, setLog] = useState([]);
   const [lastConfidence, setLastConfidence] = useState(null);
-  const [currentDate, setCurrentDate] = useState(new Date().toDateString());
 
   const initialCapital = 1000;
 
@@ -35,33 +34,31 @@ export default function TradingRoom({
   });
 
   const [reserve, setReserve] = useState(initialDistribution.reserve);
-  const [allocation, setAllocation] =
-    useState(initialDistribution.allocation);
+  const [allocation, setAllocation] = useState(
+    initialDistribution.allocation
+  );
 
   const peakCapital = useRef(initialCapital);
-
   const totalCapital = calculateTotalCapital(allocation, reserve);
 
   useEffect(() => {
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
 
-  /* ================= DAILY RESET ================= */
+  /* ================= SYSTEM GOVERNOR ================= */
 
+  const systemState = evaluateSystemState({
+    totalCapital,
+    peakCapital: peakCapital.current,
+    dailyPnL,
+  });
+
+  /* Auto reduce risk if needed */
   useEffect(() => {
-    const interval = setInterval(() => {
-      const today = new Date().toDateString();
-      if (today !== currentDate) {
-        setTradesUsed(0);
-        setDailyPnL(0);
-        setCurrentDate(today);
-
-        pushLog("🔄 Daily reset executed.");
-      }
-    }, 60000);
-
-    return () => clearInterval(interval);
-  }, [currentDate]);
+    if (systemState.status === "reduced") {
+      setHumanMultiplier(0.7);
+    }
+  }, [systemState.status]);
 
   /* ================= GLOBAL RISK ================= */
 
@@ -89,6 +86,11 @@ export default function TradingRoom({
   /* ================= EXECUTION ================= */
 
   function executeTrade() {
+    if (systemState.status === "locked") {
+      pushLog(`SYSTEM LOCKED: ${systemState.lockReason}`);
+      return;
+    }
+
     if (!globalRisk.allowed) {
       pushLog(`Blocked: ${globalRisk.reason}`);
       return;
@@ -100,11 +102,9 @@ export default function TradingRoom({
     }
 
     const exchange = "coinbase";
-    const engineCapital =
-      allocation[engineType][exchange];
+    const engineCapital = allocation[engineType][exchange];
 
-    const performanceStats =
-      getPerformanceStats(engineType);
+    const performanceStats = getPerformanceStats(engineType);
 
     const result = executeEngine({
       engineType,
@@ -116,22 +116,11 @@ export default function TradingRoom({
     });
 
     if (result.blocked) {
-      pushLog(
-        `Blocked: ${result.reason}`,
-        result.confidenceScore
-      );
+      pushLog(`Blocked: ${result.reason}`, result.confidenceScore);
       return;
     }
 
-    /* ===== Update Performance Memory ===== */
-    updatePerformance(
-      engineType,
-      result.pnl,
-      result.isWin
-    );
-
-    /* ===== Update Equity Curve ===== */
-    updateEquity(totalCapital + result.pnl); // ✅ ADDED
+    updatePerformance(engineType, result.pnl, result.isWin);
 
     const updatedAllocation = {
       ...allocation,
@@ -168,6 +157,19 @@ export default function TradingRoom({
     return "#5EC6FF";
   }
 
+  function systemColor() {
+    switch (systemState.status) {
+      case "warning":
+        return "#f5b942";
+      case "reduced":
+        return "#ff884d";
+      case "locked":
+        return "#ff4d4d";
+      default:
+        return "#5EC6FF";
+    }
+  }
+
   return (
     <div className="postureWrap">
       <section className="postureCard">
@@ -177,15 +179,25 @@ export default function TradingRoom({
             <small>Adaptive AI + Capital Governance</small>
           </div>
 
-          <span className={`badge ${mode === "LIVE" ? "warn" : ""}`}>
-            {mode}
+          <span
+            className="badge"
+            style={{ backgroundColor: systemColor() }}
+          >
+            SYSTEM: {systemState.status.toUpperCase()}
           </span>
         </div>
 
-        {!globalRisk.allowed && (
-          <div className="badge bad" style={{ marginTop: 10 }}>
-            Trading Locked — {globalRisk.reason}
-          </div>
+        {systemState.status === "locked" && (
+          <button
+            className="btn warn"
+            onClick={() => {
+              resetSystemLock();
+              pushLog("System manually reset.");
+            }}
+            style={{ marginBottom: 15 }}
+          >
+            Manual Unlock
+          </button>
         )}
 
         <div className="stats">
@@ -213,7 +225,10 @@ export default function TradingRoom({
           <button
             className="btn ok"
             onClick={executeTrade}
-            disabled={!globalRisk.allowed}
+            disabled={
+              systemState.status === "locked" ||
+              !globalRisk.allowed
+            }
           >
             Execute Trade
           </button>
