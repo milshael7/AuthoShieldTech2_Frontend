@@ -14,6 +14,7 @@ import {
   updatePerformance,
   getPerformanceStats,
   getAllPerformanceStats,
+  evaluatePerformance,
 } from "./engines/PerformanceEngine";
 
 export default function TradingRoom({
@@ -44,14 +45,11 @@ export default function TradingRoom({
   );
 
   const peakCapital = useRef(initialCapital);
-
   const totalCapital = calculateTotalCapital(allocation, reserve);
 
   useEffect(() => {
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
-
-  /* ================= GLOBAL RISK ================= */
 
   const globalRisk = evaluateGlobalRisk({
     totalCapital,
@@ -74,8 +72,6 @@ export default function TradingRoom({
     ]);
   }
 
-  /* ================= MANUAL LOCK ================= */
-
   function handleLock() {
     setManualLock(true);
     setSystemLocked(true);
@@ -87,8 +83,6 @@ export default function TradingRoom({
     setSystemLocked(false);
     pushLog("✅ Manual system lock released.");
   }
-
-  /* ================= EXECUTION ================= */
 
   function executeTrade() {
     if (!globalRisk.allowed) {
@@ -155,14 +149,16 @@ export default function TradingRoom({
     );
   }
 
+  const allStats = evaluatePerformance(
+    Object.values(getAllPerformanceStats()).flatMap((e) => e.trades || [])
+  );
+
   function confidenceColor(score) {
     if (!score && score !== 0) return "";
     if (score < 50) return "#ff4d4d";
     if (score < 75) return "#f5b942";
     return "#5EC6FF";
   }
-
-  /* ================= UI ================= */
 
   return (
     <div className="postureWrap">
@@ -178,17 +174,32 @@ export default function TradingRoom({
           </span>
         </div>
 
-        {!globalRisk.allowed && (
-          <div className="badge bad" style={{ marginTop: 10 }}>
-            Trading Locked — {globalRisk.reason}
+        <div className="kpiGrid">
+          <div className="kpiCard">
+            <small>Win Rate</small>
+            <b>{(allStats.winRate * 100).toFixed(1)}%</b>
           </div>
-        )}
 
-        {systemLocked && (
-          <div className="badge bad" style={{ marginTop: 10 }}>
-            🚨 MANUAL LOCK ACTIVE
+          <div className="kpiCard">
+            <small>Profit Factor</small>
+            <b>{allStats.profitFactor.toFixed(2)}</b>
           </div>
-        )}
+
+          <div className="kpiCard">
+            <small>Expectancy</small>
+            <b>{allStats.expectancy.toFixed(2)}</b>
+          </div>
+
+          <div className="kpiCard">
+            <small>Sharpe Ratio</small>
+            <b>{allStats.sharpe.toFixed(2)}</b>
+          </div>
+
+          <div className="kpiCard">
+            <small>Max Drawdown</small>
+            <b>{allStats.maxDrawdown.toFixed(2)}</b>
+          </div>
+        </div>
 
         <div className="stats">
           <div><b>Total Capital:</b> ${totalCapital.toFixed(2)}</div>
