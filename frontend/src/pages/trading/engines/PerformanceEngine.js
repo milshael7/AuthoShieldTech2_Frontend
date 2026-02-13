@@ -48,7 +48,6 @@ export function getPerformanceStats(engineType) {
     wins,
     losses,
     total: trades.length,
-    trades, // ✅ CRITICAL — required by TradingRoom
     lossStreak,
     winStreak,
   };
@@ -62,11 +61,22 @@ export function getAllPerformanceStats() {
 }
 
 /* =========================================================
+   🔥 NEW — GET ALL TRADES (FOR ANALYTICS)
+========================================================= */
+
+export function getAllTrades() {
+  return [
+    ...(performanceMemory.scalp || []),
+    ...(performanceMemory.session || []),
+  ];
+}
+
+/* =========================================================
    FULL ANALYTICS ENGINE (Institutional Metrics)
 ========================================================= */
 
 export function evaluatePerformance(trades = []) {
-  if (!Array.isArray(trades) || trades.length === 0) {
+  if (!Array.isArray(trades) || !trades.length) {
     return {
       winRate: 0,
       profitFactor: 0,
