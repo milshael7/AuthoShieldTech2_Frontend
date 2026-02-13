@@ -2,9 +2,15 @@
 
 import React from "react";
 import ReactDOM from "react-dom/client";
+import App from "./App.jsx";
+import AppShell from "./shell/AppShell.jsx";
+
+// Global styles
+import "./styles/main.css";
+import "./styles/layout.css";
 
 /* =========================================================
-   FORCE GLOBAL ERROR CAPTURE (EARLY)
+   🔥 FORCE GLOBAL ERROR CAPTURE (EARLIEST POSSIBLE)
 ========================================================= */
 
 window.onerror = function (message, source, lineno, colno, error) {
@@ -40,32 +46,82 @@ window.onunhandledrejection = function (event) {
 };
 
 /* =========================================================
-   TEST BOOT
+   ROOT ERROR BOUNDARY
 ========================================================= */
 
-document.body.innerHTML = `
-  <div style="
-    background:#0b1220;
-    color:white;
-    min-height:100vh;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-family:system-ui;
-  ">
-    BOOTING...
-  </div>
-`;
+class RootErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
-import App from "./App.jsx";
-import AppShell from "./shell/AppShell.jsx";
-import "./styles/main.css";
-import "./styles/layout.css";
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("🔥 Runtime Crash:", error, info);
+
+    // Force mobile to show stack
+    alert("RUNTIME STACK:\n\n" + (error?.stack || error));
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            minHeight: "100svh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 40,
+            background: "#0b1220",
+            color: "#ffffff",
+            fontFamily:
+              "system-ui,-apple-system,Segoe UI,Roboto,Arial",
+          }}
+        >
+          <div style={{ maxWidth: 640 }}>
+            <h1 style={{ marginBottom: 14 }}>
+              🔥 AutoShield Runtime Crash
+            </h1>
+
+            <p style={{ opacity: 0.8, marginBottom: 18 }}>
+              Full stack trace below:
+            </p>
+
+            <pre
+              style={{
+                whiteSpace: "pre-wrap",
+                fontSize: 13,
+                opacity: 0.85,
+                background: "#111827",
+                padding: 16,
+                borderRadius: 8,
+              }}
+            >
+              {this.state.error?.stack ||
+                JSON.stringify(this.state.error, null, 2)}
+            </pre>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+/* =========================================================
+   BOOTSTRAP
+========================================================= */
 
 const rootEl = document.getElementById("root");
 
 if (!rootEl) {
-  document.body.innerHTML = "<h1>Root element missing</h1>";
+  document.body.innerHTML =
+    "<h1 style='color:white;background:black;padding:40px'>Root element #root not found</h1>";
   throw new Error("Root element #root not found");
 }
 
@@ -73,8 +129,10 @@ const root = ReactDOM.createRoot(rootEl);
 
 root.render(
   <React.StrictMode>
-    <AppShell>
-      <App />
-    </AppShell>
+    <RootErrorBoundary>
+      <AppShell>
+        <App />
+      </AppShell>
+    </RootErrorBoundary>
   </React.StrictMode>
 );
