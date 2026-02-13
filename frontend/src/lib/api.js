@@ -1,5 +1,5 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — STABLE PRODUCTION VERSION
+   AUTOSHIELD FRONTEND API LAYER — FIXED EXPORT VERSION
    ========================================================= */
 
 const API_BASE = (
@@ -20,31 +20,33 @@ const REQUEST_TIMEOUT = 15000;
    STORAGE HELPERS
    ============================= */
 
-export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
 
-export const setToken = (token) => {
+export function setToken(token) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
-};
+}
 
-export const clearToken = () => {
+export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
-};
+}
 
-export const getSavedUser = () => {
+export function getSavedUser() {
   try {
     return JSON.parse(localStorage.getItem(USER_KEY) || "null");
   } catch {
     return null;
   }
-};
+}
 
-export const saveUser = (user) => {
+export function saveUser(user) {
   if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
-};
+}
 
-export const clearUser = () => {
+export function clearUser() {
   localStorage.removeItem(USER_KEY);
-};
+}
 
 /* =============================
    URL HELPER
@@ -109,7 +111,6 @@ async function req(
       data = {};
     }
 
-    /* ---------- TOKEN REFRESH ---------- */
     if (res.status === 401 && auth && retry) {
       try {
         const refreshRes = await withTimeout(
@@ -172,7 +173,6 @@ async function req(
    ============================= */
 
 export const api = {
-  /* AUTH */
   login: (email, password) =>
     req("/api/auth/login", {
       method: "POST",
@@ -187,24 +187,20 @@ export const api = {
       auth: false,
     }),
 
-  /* USER */
   meNotifications: () => req("/api/me/notifications"),
   markMyNotificationRead: (id) =>
     req(`/api/me/notifications/${id}/read`, { method: "POST" }),
 
-  /* ADMIN */
   adminUsers: () => req("/api/admin/users"),
   adminCompanies: () => req("/api/admin/companies"),
   adminNotifications: () => req("/api/admin/notifications"),
 
-  /* MANAGER */
   managerOverview: () => req("/api/manager/overview"),
   managerUsers: () => req("/api/manager/users"),
   managerCompanies: () => req("/api/manager/companies"),
   managerAudit: (limit = 200) =>
     req(`/api/manager/audit?limit=${encodeURIComponent(limit)}`),
 
-  /* COMPANY */
   companyMe: () => req("/api/company/me"),
   companyNotifications: () => req("/api/company/notifications"),
   companyMarkRead: (id) =>
@@ -212,7 +208,6 @@ export const api = {
       method: "POST",
     }),
 
-  /* AI */
   aiChat: (message, context) =>
     req("/api/ai/chat", {
       method: "POST",
