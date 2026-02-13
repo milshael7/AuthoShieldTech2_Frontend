@@ -24,13 +24,8 @@ import Pricing from "./pages/public/Pricing.jsx";
 import Signup from "./pages/public/Signup.jsx";
 import Login from "./pages/Login.jsx";
 
-/* ================= ADMIN ================= */
-
-import AdminPricing from "./pages/admin/AdminPricing.jsx";
-
 /* ================= APP PAGES ================= */
 
-import Trading from "./pages/Trading.jsx";
 import Posture from "./pages/Posture.jsx";
 import Assets from "./pages/Assets.jsx";
 import Threats from "./pages/Threats.jsx";
@@ -42,9 +37,7 @@ import Reports from "./pages/Reports.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
-/* =========================================================
-   ROLE UTILITIES
-   ========================================================= */
+/* ========================================================= */
 
 function normalizeRole(role) {
   return String(role || "").toLowerCase();
@@ -63,13 +56,8 @@ function RoleGuard({ user, allow, children }) {
   return children;
 }
 
-/* =========================================================
-   ROUTER CORE
-   ========================================================= */
-
 function AppRoutes({ user }) {
   const location = useLocation();
-  const role = normalizeRole(user?.role);
 
   const isPublicPath = useMemo(() => {
     return (
@@ -79,6 +67,8 @@ function AppRoutes({ user }) {
       location.pathname.startsWith("/login")
     );
   }, [location.pathname]);
+
+  const role = normalizeRole(user?.role);
 
   function defaultRedirect() {
     if (!user) return "/login";
@@ -100,106 +90,61 @@ function AppRoutes({ user }) {
   return (
     <Routes>
 
-      {/* ================= PUBLIC ================= */}
-
+      {/* PUBLIC */}
       <Route path="/" element={<Landing />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/login" element={<Login />} />
 
-      {/* ================= ADMIN ================= */}
-
+      {/* ADMIN */}
       <Route
         path="/admin/*"
         element={
           <RoleGuard user={user} allow={["admin"]}>
-            <AdminLayout />
+            <AdminLayout user={user} />
           </RoleGuard>
         }
-      >
-        <Route index element={<Posture scope="global" />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="threats" element={<Threats />} />
-        <Route path="incidents" element={<Incidents />} />
-        <Route path="vulnerabilities" element={<Vulnerabilities />} />
-        <Route path="compliance" element={<Compliance />} />
-        <Route path="policies" element={<Policies />} />
-        <Route path="reports" element={<Reports />} />
-        <Route path="trading" element={<Trading mode="admin" />} />
-        <Route path="notifications" element={<Notifications />} />
-        <Route path="pricing" element={<AdminPricing />} />
-      </Route>
+      />
 
-      {/* ================= MANAGER ================= */}
-
+      {/* MANAGER */}
       <Route
         path="/manager/*"
         element={
           <RoleGuard user={user} allow={["admin", "manager"]}>
-            <ManagerLayout />
+            <ManagerLayout user={user} />
           </RoleGuard>
         }
-      >
-        <Route index element={<Posture scope="manager" />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="threats" element={<Threats />} />
-        <Route path="incidents" element={<Incidents />} />
-        <Route path="vulnerabilities" element={<Vulnerabilities />} />
-        <Route path="reports" element={<Reports />} />
-        <Route path="notifications" element={<Notifications />} />
-      </Route>
+      />
 
-      {/* ================= COMPANY ================= */}
-
+      {/* COMPANY */}
       <Route
         path="/company/*"
         element={
           <RoleGuard user={user} allow={["admin", "company"]}>
-            <CompanyLayout />
+            <CompanyLayout user={user} />
           </RoleGuard>
         }
-      >
-        <Route index element={<Posture scope="company" />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="threats" element={<Threats />} />
-        <Route path="incidents" element={<Incidents />} />
-        <Route path="reports" element={<Reports />} />
-        <Route path="notifications" element={<Notifications />} />
-      </Route>
+      />
 
-      {/* ================= SMALL COMPANY ================= */}
-
+      {/* SMALL COMPANY */}
       <Route
         path="/small-company/*"
         element={
           <RoleGuard user={user} allow={["small_company"]}>
-            <SmallCompanyLayout />
+            <SmallCompanyLayout user={user} />
           </RoleGuard>
         }
-      >
-        <Route index element={<Posture scope="small_company" />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="threats" element={<Threats />} />
-        <Route path="incidents" element={<Incidents />} />
-        <Route path="reports" element={<Reports />} />
-        <Route path="notifications" element={<Notifications />} />
-      </Route>
+      />
 
-      {/* ================= USER ================= */}
-
+      {/* USER */}
       <Route
         path="/user/*"
         element={
           <RoleGuard user={user} allow={["individual", "user"]}>
-            <UserLayout />
+            <UserLayout user={user} />
           </RoleGuard>
         }
-      >
-        <Route index element={<Posture scope="individual" />} />
-        <Route path="notifications" element={<Notifications />} />
-      </Route>
-
-      {/* ================= FALLBACK ================= */}
+      />
 
       <Route path="/404" element={<NotFound />} />
 
@@ -211,22 +156,21 @@ function AppRoutes({ user }) {
             : <Navigate to={defaultRedirect()} replace />
         }
       />
-
     </Routes>
   );
 }
 
-/* =========================================================
-   APP ROOT
-   ========================================================= */
-
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(undefined); // 👈 IMPORTANT
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const u = getSavedUser();
-    setUser(u);
+    try {
+      const u = getSavedUser();
+      setUser(u || null);
+    } catch {
+      setUser(null);
+    }
     setReady(true);
   }, []);
 
