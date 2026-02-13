@@ -15,6 +15,7 @@ import {
   getPerformanceStats,
   getAllPerformanceStats,
   evaluatePerformance,
+  getAllTrades,
 } from "./engines/PerformanceEngine";
 
 export default function TradingRoom({
@@ -39,7 +40,7 @@ export default function TradingRoom({
 
   const initialCapital = 1000;
 
-  /* ================= CAPITAL INIT (SAFE) ================= */
+  /* ================= CAPITAL INIT ================= */
 
   const initialDistribution = useMemo(() => {
     return allocateCapital({ totalCapital: initialCapital });
@@ -60,7 +61,7 @@ export default function TradingRoom({
     setMode(parentMode.toUpperCase());
   }, [parentMode]);
 
-  /* ================= PEAK UPDATE SAFE ================= */
+  /* ================= PEAK TRACK ================= */
 
   useEffect(() => {
     if (totalCapital > peakCapital.current) {
@@ -90,7 +91,7 @@ export default function TradingRoom({
         },
         ...prev,
       ];
-      return next.slice(0, 200); // limit memory
+      return next.slice(0, 200);
     });
   }, []);
 
@@ -194,10 +195,7 @@ export default function TradingRoom({
   /* ================= PERFORMANCE SUMMARY ================= */
 
   const allStats = useMemo(() => {
-    return evaluatePerformance(
-      Object.values(getAllPerformanceStats())
-        .flatMap((e) => e.trades || [])
-    );
+    return evaluatePerformance(getAllTrades());
   }, [tradesUsed]);
 
   function confidenceColor(score) {
@@ -223,8 +221,6 @@ export default function TradingRoom({
             {mode}
           </span>
         </div>
-
-        {/* ===== KPIs ===== */}
 
         <div className="kpiGrid">
           <div className="kpiCard">
@@ -253,8 +249,6 @@ export default function TradingRoom({
           </div>
         </div>
 
-        {/* ===== CAPITAL ===== */}
-
         <div className="stats">
           <div><b>Total Capital:</b> ${totalCapital.toFixed(2)}</div>
           <div><b>Reserve:</b> ${reserve.toFixed(2)}</div>
@@ -275,8 +269,6 @@ export default function TradingRoom({
             </div>
           )}
         </div>
-
-        {/* ===== ACTIONS ===== */}
 
         <div className="actions" style={{ marginTop: 20 }}>
           <button
@@ -311,8 +303,6 @@ export default function TradingRoom({
         </div>
 
       </section>
-
-      {/* ===== LOG PANEL ===== */}
 
       <aside className="postureCard">
         <h3>Execution Log</h3>
