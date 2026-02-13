@@ -1,5 +1,3 @@
-// frontend/src/pages/Login.jsx
-
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, setToken, saveUser } from "../lib/api.js";
@@ -23,7 +21,6 @@ export default function Login() {
 
       console.log("LOGIN RESPONSE:", result);
 
-      // Flexible token detection
       const token =
         result?.token ||
         result?.jwt ||
