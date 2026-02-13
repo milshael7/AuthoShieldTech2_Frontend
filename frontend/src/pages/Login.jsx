@@ -2,13 +2,19 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, setToken, saveUser } from "../lib/api.js";
 
+/* =========================================================
+   TOKEN EXTRACTION (RESILIENT)
+========================================================= */
+
 function extractToken(result) {
   if (!result) return "";
+
   return (
     result.token ||
     result.jwt ||
     result.access_token ||
     result.accessToken ||
+    result?.data?.token ||
     ""
   );
 }
@@ -23,6 +29,10 @@ export default function Login() {
   const [resetPass, setResetPass] = useState("");
   const [loading, setLoading] = useState(false);
 
+  /* =========================================================
+     LOGIN SUBMIT
+  ========================================================= */
+
   const submit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -30,13 +40,26 @@ export default function Login() {
     try {
       const result = await api.login(email, password);
 
+      console.log("Login response:", result);
+
       const token = extractToken(result);
-      if (!token) throw new Error("No token returned");
 
-      setToken(token);
-      if (result.user) saveUser(result.user);
+      // ✅ If token exists → store it
+      if (token) {
+        setToken(token);
+      }
 
-      const role = String(result.user?.role || "").toLowerCase();
+      // ✅ If user exists → store it
+      if (result?.user) {
+        saveUser(result.user);
+      }
+
+      // 🚨 If neither token nor user returned
+      if (!token && !result?.user) {
+        throw new Error("Invalid login response from server");
+      }
+
+      const role = String(result?.user?.role || "").toLowerCase();
 
       if (role === "admin") navigate("/admin");
       else if (role === "manager") navigate("/manager");
@@ -50,6 +73,10 @@ export default function Login() {
     }
   };
 
+  /* =========================================================
+     RESET PASSWORD
+  ========================================================= */
+
   const reset = async (e) => {
     e.preventDefault();
     try {
@@ -61,6 +88,10 @@ export default function Login() {
     }
   };
 
+  /* =========================================================
+     UI
+  ========================================================= */
+
   return (
     <div
       className="row"
@@ -69,7 +100,6 @@ export default function Login() {
         alignItems: "center",
       }}
     >
-      {/* ---------- Login Card ---------- */}
       <div className="col" style={{ maxWidth: 420, margin: "0 auto" }}>
         <div className="card">
           <h2 style={{ marginTop: 0 }}>
@@ -152,7 +182,6 @@ export default function Login() {
         </div>
       </div>
 
-      {/* ---------- Info Card (hidden on phone via CSS stacking) ---------- */}
       <div className="col" style={{ maxWidth: 420 }}>
         <div className="card">
           <h3 style={{ marginTop: 0 }}>Trial ($19.99 / 30 days)</h3>
