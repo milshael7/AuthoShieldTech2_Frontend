@@ -1,5 +1,3 @@
-// frontend/src/main.jsx
-
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
@@ -10,24 +8,24 @@ import "./styles/main.css";
 import "./styles/layout.css";
 
 /* =========================================================
-   GLOBAL ERROR LISTENERS (RUNTIME DETECTION)
-========================================================= */
+   GLOBAL RUNTIME ERROR CAPTURE (PRODUCTION SAFE)
+   ========================================================= */
 
 window.addEventListener("error", (e) => {
-  const message = e?.error?.message || e?.message || "Unknown error";
-  alert("JS ERROR: " + message);
+  const message = e?.error?.message || e.message || "Unknown error";
+  alert("RUNTIME ERROR: " + message);
   console.error("Global Error:", e);
 });
 
 window.addEventListener("unhandledrejection", (e) => {
-  const message = e?.reason?.message || e?.reason || "Unknown promise error";
+  const message = e?.reason?.message || e.reason || "Unknown promise error";
   alert("PROMISE ERROR: " + message);
-  console.error("Unhandled Promise Rejection:", e);
+  console.error("Unhandled Rejection:", e);
 });
 
 /* =========================================================
    ROOT ERROR BOUNDARY
-========================================================= */
+   ========================================================= */
 
 class RootErrorBoundary extends React.Component {
   constructor(props) {
@@ -40,7 +38,7 @@ class RootErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
-    console.error("🔥 React Crash:", error, info);
+    console.error("React Error Boundary:", error, info);
   }
 
   render() {
@@ -68,15 +66,17 @@ class RootErrorBoundary extends React.Component {
               A runtime error occurred. Details below:
             </p>
 
-            <pre
+            <div
               style={{
-                whiteSpace: "pre-wrap",
-                fontSize: 12,
-                opacity: 0.8,
+                background: "#111827",
+                padding: 12,
+                borderRadius: 8,
+                fontSize: 13,
+                wordBreak: "break-word",
               }}
             >
               {String(this.state.error)}
-            </pre>
+            </div>
           </div>
         </div>
       );
@@ -88,7 +88,7 @@ class RootErrorBoundary extends React.Component {
 
 /* =========================================================
    BOOTSTRAP
-========================================================= */
+   ========================================================= */
 
 const rootEl = document.getElementById("root");
 
