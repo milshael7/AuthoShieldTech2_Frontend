@@ -96,55 +96,84 @@ function AppRoutes({ user }) {
       <Route path="/signup" element={<Signup />} />
       <Route path="/login" element={<Login />} />
 
-      {/* ADMIN */}
+      {/* ================= ADMIN ================= */}
       <Route
-        path="/admin/*"
+        path="/admin"
         element={
           <RoleGuard user={user} allow={["admin"]}>
-            <AdminLayout user={user} />
+            <AdminLayout />
           </RoleGuard>
         }
-      />
+      >
+        <Route index element={<Posture />} />
+        <Route path="assets" element={<Assets />} />
+        <Route path="threats" element={<Threats />} />
+        <Route path="incidents" element={<Incidents />} />
+        <Route path="vulnerabilities" element={<Vulnerabilities />} />
+        <Route path="compliance" element={<Compliance />} />
+        <Route path="policies" element={<Policies />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="notifications" element={<Notifications />} />
+      </Route>
 
-      {/* MANAGER */}
+      {/* ================= MANAGER ================= */}
       <Route
-        path="/manager/*"
+        path="/manager"
         element={
           <RoleGuard user={user} allow={["admin", "manager"]}>
-            <ManagerLayout user={user} />
+            <ManagerLayout />
           </RoleGuard>
         }
-      />
+      >
+        <Route index element={<Posture />} />
+        <Route path="assets" element={<Assets />} />
+        <Route path="threats" element={<Threats />} />
+        <Route path="incidents" element={<Incidents />} />
+        <Route path="vulnerabilities" element={<Vulnerabilities />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="notifications" element={<Notifications />} />
+      </Route>
 
-      {/* COMPANY */}
+      {/* ================= COMPANY ================= */}
       <Route
-        path="/company/*"
+        path="/company"
         element={
           <RoleGuard user={user} allow={["admin", "company"]}>
-            <CompanyLayout user={user} />
+            <CompanyLayout />
           </RoleGuard>
         }
-      />
+      >
+        <Route index element={<Posture />} />
+        <Route path="assets" element={<Assets />} />
+        <Route path="incidents" element={<Incidents />} />
+        <Route path="notifications" element={<Notifications />} />
+      </Route>
 
-      {/* SMALL COMPANY */}
+      {/* ================= SMALL COMPANY ================= */}
       <Route
-        path="/small-company/*"
+        path="/small-company"
         element={
           <RoleGuard user={user} allow={["small_company"]}>
-            <SmallCompanyLayout user={user} />
+            <SmallCompanyLayout />
           </RoleGuard>
         }
-      />
+      >
+        <Route index element={<Posture />} />
+        <Route path="notifications" element={<Notifications />} />
+      </Route>
 
-      {/* USER */}
+      {/* ================= USER ================= */}
       <Route
-        path="/user/*"
+        path="/user"
         element={
           <RoleGuard user={user} allow={["individual", "user"]}>
-            <UserLayout user={user} />
+            <UserLayout />
           </RoleGuard>
         }
-      />
+      >
+        <Route index element={<Posture />} />
+        <Route path="notifications" element={<Notifications />} />
+      </Route>
 
       <Route path="/404" element={<NotFound />} />
 
@@ -161,7 +190,7 @@ function AppRoutes({ user }) {
 }
 
 export default function App() {
-  const [user, setUser] = useState(undefined); // 👈 IMPORTANT
+  const [user, setUser] = useState(undefined);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
