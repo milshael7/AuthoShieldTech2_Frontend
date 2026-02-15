@@ -1,8 +1,8 @@
 // frontend/src/layouts/CompanyLayout.jsx
-// Company Layout — Institutional Visibility SOC (HARDENED)
-// Standard / Focus / Command modes
-// Structural parity with Admin & Manager
-// Trading-aware
+// Company Layout — Institutional Visibility SOC (STABILIZED)
+// Clean relative routing
+// No cross-role leakage
+// Standard / Focus / Command modes preserved
 // Scroll-safe
 
 import React, { useState } from "react";
@@ -17,7 +17,6 @@ export default function CompanyLayout() {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [advisorOpen, setAdvisorOpen] = useState(false);
-
   const [layoutMode, setLayoutMode] = useState("standard");
   // standard | focus | command
 
@@ -28,6 +27,10 @@ export default function CompanyLayout() {
     clearToken();
     clearUser();
     navigate("/login");
+  }
+
+  function closeMenu() {
+    setMenuOpen(false);
   }
 
   function cycleLayoutMode() {
@@ -44,11 +47,12 @@ export default function CompanyLayout() {
         menuOpen ? "sidebar-open" : ""
       } layout-${layoutMode}`}
     >
+
       {/* ================= MOBILE OVERLAY ================= */}
       {menuOpen && !isCommand && (
         <div
           className="sidebar-overlay"
-          onClick={() => setMenuOpen(false)}
+          onClick={closeMenu}
         />
       )}
 
@@ -67,37 +71,31 @@ export default function CompanyLayout() {
           </div>
 
           <nav className="layout-nav">
-            <NavLink to="/company" end onClick={() => setMenuOpen(false)}>
+
+            <NavLink to="." end onClick={closeMenu}>
               Security Overview
             </NavLink>
 
-            <NavLink to="/company/assets" onClick={() => setMenuOpen(false)}>
+            <NavLink to="assets" onClick={closeMenu}>
               Assets
             </NavLink>
 
-            <NavLink to="/company/threats" onClick={() => setMenuOpen(false)}>
+            <NavLink to="threats" onClick={closeMenu}>
               Threats
             </NavLink>
 
-            <NavLink to="/company/incidents" onClick={() => setMenuOpen(false)}>
+            <NavLink to="incidents" onClick={closeMenu}>
               Incidents
             </NavLink>
 
-            <NavLink to="/company/reports" onClick={() => setMenuOpen(false)}>
+            <NavLink to="reports" onClick={closeMenu}>
               Reports
             </NavLink>
 
-            {/* 🔥 Trading visibility (view-only) */}
-            <NavLink to="/admin/trading" onClick={() => setMenuOpen(false)}>
-              Trading Oversight
-            </NavLink>
-
-            <NavLink
-              to="/company/notifications"
-              onClick={() => setMenuOpen(false)}
-            >
+            <NavLink to="notifications" onClick={closeMenu}>
               Notifications
             </NavLink>
+
           </nav>
 
           <button className="btn logout-btn" onClick={logout}>
@@ -112,8 +110,9 @@ export default function CompanyLayout() {
           isCommand ? "command-main" : ""
         }`}
       >
+
         {/* ===== MODE SWITCHER ===== */}
-        <div className="layout-mode-toggle">
+        <div className="layout-mode-toggle" style={{ padding: 16 }}>
           <button className="btn small" onClick={cycleLayoutMode}>
             {layoutMode === "standard" && "Switch to Focus"}
             {layoutMode === "focus" && "Switch to Command"}
@@ -140,7 +139,7 @@ export default function CompanyLayout() {
             <div className="ai-drawer-handle">
               <button
                 className="ai-toggle"
-                onClick={() => setAdvisorOpen((v) => !v)}
+                onClick={() => setAdvisorOpen(v => !v)}
               >
                 {advisorOpen
                   ? "▼ Hide Advisor"
@@ -160,6 +159,7 @@ export default function CompanyLayout() {
             </div>
           </section>
         )}
+
       </main>
     </div>
   );
