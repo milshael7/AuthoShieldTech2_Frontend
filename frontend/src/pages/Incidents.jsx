@@ -1,289 +1,210 @@
-// frontend/src/pages/Incidents.jsx
-// SOC Incidents & Response — SOC BASELINE (UPGRADED)
-// Timeline-driven • Priority-aware • Human-in-the-loop
-//
-// SAFE:
-// - Full file replacement
-// - UI only
-// - No automation
-// - No AI wording
-// - AutoDev 6.5 compatible (observe + report, not act)
-
 import React, { useEffect, useMemo, useState } from "react";
+import { api } from "../lib/api.js";
 
 /* ================= HELPERS ================= */
 
-function sevDot(sev) {
-  if (sev === "critical") return "bad";
-  if (sev === "high") return "warn";
-  if (sev === "medium") return "warn";
-  return "ok";
+function safeArray(v) {
+  return Array.isArray(v) ? v : [];
+}
+
+function safeStr(v, fallback = "—") {
+  return typeof v === "string" && v.trim() ? v : fallback;
+}
+
+function statusColor(status) {
+  switch (String(status).toLowerCase()) {
+    case "open":
+      return "#ff4d4d";
+    case "investigating":
+      return "#ffd166";
+    case "contained":
+      return "#5EC6FF";
+    case "resolved":
+      return "#2bd576";
+    default:
+      return "#999";
+  }
 }
 
 /* ================= PAGE ================= */
 
 export default function Incidents() {
-  const [items, setItems] = useState([]);
+  const [incidents, setIncidents] = useState([]);
+  const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await api.incidents().catch(() => ({}));
+      setIncidents(safeArray(res?.incidents));
+    } catch {
+      setIncidents([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    // Placeholder until backend feed is wired
-    setTimeout(() => {
-      setItems([
-        {
-          id: "INC-10421",
-          title: "Suspicious Login Detected",
-          severity: "high",
-          asset: "Admin Account",
-          time: "2 minutes ago",
-          status: "Investigating",
-          scope: "company",
-        },
-        {
-          id: "INC-10420",
-          title: "Malware Execution Blocked",
-          severity: "critical",
-          asset: "Workstation-014",
-          time: "18 minutes ago",
-          status: "Contained",
-          scope: "company",
-        },
-        {
-          id: "INC-10418",
-          title: "Unusual Data Transfer",
-          severity: "medium",
-          asset: "Finance Server",
-          time: "1 hour ago",
-          status: "Open",
-          scope: "small-company",
-        },
-        {
-          id: "INC-10411",
-          title: "Phishing Email Detected",
-          severity: "low",
-          asset: "User Mailbox",
-          time: "3 hours ago",
-          status: "Resolved",
-          scope: "individual",
-        },
-      ]);
-      setLoading(false);
-    }, 600);
+    load();
   }, []);
 
-  /* ================= DERIVED ================= */
-
-  const stats = useMemo(
-    () => ({
-      total: items.length,
-      critical: items.filter((i) => i.severity === "critical").length,
-      investigating: items.filter(
-        (i) => i.status === "Investigating"
-      ).length,
-      open: items.filter((i) => i.status === "Open").length,
-    }),
-    [items]
-  );
-
-  const prioritized = useMemo(() => {
-    const order = { critical: 3, high: 2, medium: 1, low: 0 };
-    return [...items].sort(
-      (a, b) =>
-        (order[b.severity] || 0) - (order[a.severity] || 0)
-    );
-  }, [items]);
+  const summary = useMemo(() => {
+    const list = safeArray(incidents);
+    return {
+      total: list.length,
+      open: list.filter(i => i?.status === "open").length,
+      investigating: list.filter(i => i?.status === "investigating").length,
+      resolved: list.filter(i => i?.status === "resolved").length,
+    };
+  }, [incidents]);
 
   /* ================= UI ================= */
 
   return (
-    <div className="postureWrap">
-      {/* ================= KPI STRIP ================= */}
-      <div className="kpiGrid">
-        <div className="kpiCard">
-          <small>Total Incidents</small>
-          <b>{stats.total}</b>
+    <div style={{ padding: 32, display: "flex", flexDirection: "column", gap: 28 }}>
+
+      {/* ================= HEADER ================= */}
+      <div>
+        <h2 style={{ margin: 0 }}>Incident Response War Room</h2>
+        <div style={{ fontSize: 13, opacity: 0.6 }}>
+          Active investigations and containment status
         </div>
-        <div className="kpiCard">
-          <small>Critical</small>
-          <b>{stats.critical}</b>
+      </div>
+
+      {/* ================= SUMMARY ================= */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+          gap: 20,
+        }}
+      >
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Total Incidents</div>
+          <div style={{ fontSize: 26, fontWeight: 800 }}>{summary.total}</div>
         </div>
-        <div className="kpiCard">
-          <small>Investigating</small>
-          <b>{stats.investigating}</b>
+
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Open</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#ff4d4d" }}>
+            {summary.open}
+          </div>
         </div>
-        <div className="kpiCard">
-          <small>Open</small>
-          <b>{stats.open}</b>
+
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Investigating</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#ffd166" }}>
+            {summary.investigating}
+          </div>
+        </div>
+
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Resolved</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#2bd576" }}>
+            {summary.resolved}
+          </div>
         </div>
       </div>
 
       {/* ================= MAIN GRID ================= */}
-      <div className="postureGrid">
-        {/* ===== LEFT: INCIDENT TIMELINE ===== */}
-        <section className="postureCard">
-          <div className="postureTop">
-            <div>
-              <h2>Incidents & Response</h2>
-              <small>
-                Security events requiring review or human action
-              </small>
-            </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 1fr",
+          gap: 24,
+        }}
+      >
 
-            <div className="scoreMeta">
-              <b>{stats.total} Active</b>
-              <span>
-                {stats.critical} Critical •{" "}
-                {stats.investigating} Investigating
-              </span>
-            </div>
-          </div>
+        {/* ================= LEFT PANEL ================= */}
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ maxHeight: 500, overflowY: "auto" }}>
 
-          <div className="list" style={{ marginTop: 20 }}>
-            {loading && (
-              <p className="muted">Loading incidents…</p>
-            )}
+            {loading ? (
+              <div style={{ padding: 20 }}>Loading incidents...</div>
+            ) : incidents.length === 0 ? (
+              <div style={{ padding: 20 }}>No incidents reported.</div>
+            ) : (
+              safeArray(incidents).map((incident, i) => (
+                <div
+                  key={incident?.id || i}
+                  onClick={() => setSelected(incident)}
+                  style={{
+                    padding: 18,
+                    borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    cursor: "pointer",
+                    background:
+                      selected?.id === incident?.id
+                        ? "rgba(94,198,255,0.08)"
+                        : "transparent",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <strong>{safeStr(incident?.title, "Security Incident")}</strong>
 
-            {!loading &&
-              prioritized.map((i) => (
-                <div key={i.id} className="card" style={{ padding: 16 }}>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "auto 1fr auto",
-                      gap: 14,
-                      cursor: "pointer",
-                    }}
-                    onClick={() =>
-                      setExpanded(
-                        expanded === i.id ? null : i.id
-                      )
-                    }
-                  >
                     <span
-                      className={`dot ${sevDot(i.severity)}`}
-                    />
-
-                    <div>
-                      <b>{i.title}</b>
-                      <small
-                        style={{
-                          display: "block",
-                          marginTop: 4,
-                          color: "var(--p-muted)",
-                        }}
-                      >
-                        Asset: {i.asset}
-                      </small>
-                      <small
-                        style={{
-                          display: "block",
-                          marginTop: 2,
-                          fontSize: 12,
-                          color: "var(--p-muted)",
-                        }}
-                      >
-                        {i.id} • Scope: {i.scope}
-                      </small>
-                    </div>
-
-                    <div style={{ textAlign: "right" }}>
-                      <small style={{ fontSize: 12 }}>
-                        {i.time}
-                      </small>
-                      <small
-                        style={{
-                          display: "block",
-                          marginTop: 6,
-                          fontSize: 12,
-                          fontWeight: 700,
-                        }}
-                      >
-                        {i.status}
-                      </small>
-                    </div>
-                  </div>
-
-                  {/* ===== EXPANDED DETAILS ===== */}
-                  {expanded === i.id && (
-                    <div
                       style={{
-                        marginTop: 14,
-                        paddingTop: 14,
-                        borderTop:
-                          "1px solid var(--p-border)",
-                        fontSize: 13,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: statusColor(incident?.status),
                       }}
                     >
-                      <p className="muted">
-                        • Incident correlated across telemetry
-                        <br />
-                        • Asset monitored for escalation
-                        <br />
-                        • Manual response required if unresolved
-                      </p>
+                      {safeStr(incident?.status).toUpperCase()}
+                    </span>
+                  </div>
 
-                      <p className="muted">
-                        Recommended actions:
-                        <br />– Review impact
-                        <br />– Validate containment
-                        <br />– Assign owner
-                      </p>
-
-                      <p className="muted">
-                        Ask the assistant:
-                        <br />– “What happened?”
-                        <br />– “Is this fully contained?”
-                        <br />– “What should I do next?”
-                      </p>
-                    </div>
-                  )}
+                  <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>
+                    Affected Asset: {safeStr(incident?.asset)}
+                  </div>
                 </div>
-              ))}
+              ))
+            )}
           </div>
+        </div>
 
-          <button style={{ marginTop: 18 }}>
-            View Full Incident History
-          </button>
-        </section>
+        {/* ================= RIGHT PANEL ================= */}
+        <div className="card">
+          {selected ? (
+            <>
+              <h3>{safeStr(selected?.title)}</h3>
 
-        {/* ===== RIGHT: RESPONSE STATUS ===== */}
-        <aside className="postureCard">
-          <h3>Response Status</h3>
-          <p className="muted">
-            Current investigation and containment posture.
-          </p>
-
-          <ul className="list">
-            <li>
-              <span className="dot bad" />
-              <div>
-                <b>Critical Incidents</b>
-                <small>Immediate attention required</small>
+              <div style={{ marginBottom: 12 }}>
+                <strong>Status: </strong>
+                <span
+                  style={{
+                    color: statusColor(selected?.status),
+                    fontWeight: 700,
+                  }}
+                >
+                  {safeStr(selected?.status).toUpperCase()}
+                </span>
               </div>
-            </li>
-            <li>
-              <span className="dot warn" />
-              <div>
-                <b>Investigations Ongoing</b>
-                <small>Human review in progress</small>
-              </div>
-            </li>
-            <li>
-              <span className="dot ok" />
-              <div>
-                <b>Resolved / Contained</b>
-                <small>No active spread detected</small>
-              </div>
-            </li>
-          </ul>
 
-          <p className="muted" style={{ marginTop: 14 }}>
-            Use the assistant to ask:
-            <br />• “Which incident is most urgent?”
-            <br />• “Do I need to act now?”
-          </p>
-        </aside>
+              <div style={{ marginBottom: 14 }}>
+                {safeStr(selected?.description, "No description available.")}
+              </div>
+
+              <div style={{ fontSize: 13, opacity: 0.6 }}>
+                Detected: {safeStr(selected?.detectedAt)}
+              </div>
+
+              <div style={{ fontSize: 13, opacity: 0.6 }}>
+                Owner: {safeStr(selected?.owner)}
+              </div>
+
+              <button
+                className="btn"
+                style={{ marginTop: 20 }}
+              >
+                Escalate
+              </button>
+            </>
+          ) : (
+            <div style={{ opacity: 0.6 }}>
+              Select an incident to view details.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
