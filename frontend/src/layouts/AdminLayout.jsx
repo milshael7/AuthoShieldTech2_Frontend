@@ -1,13 +1,9 @@
 // frontend/src/layouts/AdminLayout.jsx
-// Admin Layout — FULL SOC CONTROL (PHASE 3 HARDENED)
-//
-// FIXES:
-// - Scroll restoration
-// - Proper flex containment
-// - Stable sidebar
-// - Independent content scrolling
-// - Clean navigation behavior
-// - Production hardened
+// Admin Layout — Institutional Stable Build
+// Scroll-safe
+// Clean routing
+// No forced height hacks
+// Production hardened
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -32,20 +28,16 @@ export default function AdminLayout() {
   }
 
   return (
-    <div
-      className={`layout-root ${menuOpen ? "sidebar-open" : ""}`}
-      style={{ height: "100svh" }} // 🔥 ensures full viewport height
-    >
+    <div className={`layout-root ${menuOpen ? "sidebar-open" : ""}`}>
+
       {/* ================= MOBILE OVERLAY ================= */}
       {menuOpen && (
         <div className="sidebar-overlay" onClick={closeMenu} />
       )}
 
       {/* ================= SIDEBAR ================= */}
-      <aside
-        className="layout-sidebar admin"
-        style={{ overflowY: "auto" }} // 🔥 sidebar scroll fix
-      >
+      <aside className="layout-sidebar admin">
+
         <div className="layout-brand">
           <Logo size="md" />
           <span className="muted" style={{ fontSize: 12 }}>
@@ -87,6 +79,10 @@ export default function AdminLayout() {
             Reports
           </NavLink>
 
+          <NavLink to="trading" onClick={closeMenu}>
+            Trading Oversight
+          </NavLink>
+
           <NavLink to="notifications" onClick={closeMenu}>
             Notifications
           </NavLink>
@@ -108,22 +104,10 @@ export default function AdminLayout() {
       </aside>
 
       {/* ================= MAIN ================= */}
-      <main
-        className="layout-main"
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
+      <main className="layout-main">
+
         {/* ================= CONTENT ================= */}
-        <section
-          className="layout-content"
-          style={{
-            flex: 1,
-            overflowY: "auto", // 🔥 main scroll fix
-          }}
-        >
+        <section className="layout-content">
           <Outlet />
         </section>
 
@@ -151,6 +135,7 @@ export default function AdminLayout() {
             />
           </div>
         </section>
+
       </main>
     </div>
   );
