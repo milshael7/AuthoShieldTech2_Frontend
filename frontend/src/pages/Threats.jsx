@@ -20,7 +20,7 @@ function severityColor(level) {
     case "medium":
       return "#ffd166";
     case "low":
-      return "#2bd576";
+      return "#5EC6FF";
     default:
       return "#999";
   }
@@ -30,8 +30,8 @@ function severityColor(level) {
 
 export default function Threats() {
   const [threats, setThreats] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   async function load() {
     setLoading(true);
@@ -54,8 +54,8 @@ export default function Threats() {
     return {
       total: list.length,
       critical: list.filter(t => t?.severity === "critical").length,
-      high: list.filter(t => t?.severity === "high").length,
       active: list.filter(t => t?.status === "active").length,
+      mitigated: list.filter(t => t?.status === "mitigated").length,
     };
   }, [threats]);
 
@@ -66,13 +66,13 @@ export default function Threats() {
 
       {/* ================= HEADER ================= */}
       <div>
-        <h2 style={{ margin: 0 }}>Threat Intelligence Board</h2>
+        <h2 style={{ margin: 0 }}>Threat Intelligence Center</h2>
         <div style={{ fontSize: 13, opacity: 0.6 }}>
-          Real-time threat monitoring and detection feed
+          Live attack monitoring and threat analysis
         </div>
       </div>
 
-      {/* ================= SUMMARY STRIP ================= */}
+      {/* ================= SUMMARY ================= */}
       <div
         style={{
           display: "grid",
@@ -93,16 +93,16 @@ export default function Threats() {
         </div>
 
         <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>High</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#ff884d" }}>
-            {summary.high}
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Active</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#ffd166" }}>
+            {summary.active}
           </div>
         </div>
 
         <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Active</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>
-            {summary.active}
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Mitigated</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#5EC6FF" }}>
+            {summary.mitigated}
           </div>
         </div>
       </div>
@@ -116,9 +116,9 @@ export default function Threats() {
         }}
       >
 
-        {/* ================= LEFT: THREAT LIST ================= */}
+        {/* ================= LEFT PANEL ================= */}
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ maxHeight: 500, overflowY: "auto" }}>
+          <div style={{ maxHeight: 520, overflowY: "auto" }}>
 
             {loading ? (
               <div style={{ padding: 20 }}>Loading threats...</div>
@@ -135,7 +135,7 @@ export default function Threats() {
                     cursor: "pointer",
                     background:
                       selected?.id === t?.id
-                        ? "rgba(94,198,255,0.08)"
+                        ? "rgba(255,77,77,0.08)"
                         : "transparent",
                   }}
                 >
@@ -149,12 +149,12 @@ export default function Threats() {
                         color: severityColor(t?.severity),
                       }}
                     >
-                      {safeStr(t?.severity, "unknown").toUpperCase()}
+                      {safeStr(t?.severity).toUpperCase()}
                     </span>
                   </div>
 
                   <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>
-                    {safeStr(t?.source, "Unknown source")}
+                    Source: {safeStr(t?.source)} • Status: {safeStr(t?.status)}
                   </div>
                 </div>
               ))
@@ -162,14 +162,14 @@ export default function Threats() {
           </div>
         </div>
 
-        {/* ================= RIGHT: DETAILS ================= */}
+        {/* ================= RIGHT PANEL ================= */}
         <div className="card">
           {selected ? (
             <>
               <h3>{safeStr(selected?.title)}</h3>
 
-              <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 14 }}>
-                Severity:{" "}
+              <div style={{ marginBottom: 10 }}>
+                <strong>Severity: </strong>
                 <span
                   style={{
                     color: severityColor(selected?.severity),
@@ -180,24 +180,28 @@ export default function Threats() {
                 </span>
               </div>
 
+              <div style={{ marginBottom: 10 }}>
+                <strong>Status:</strong> {safeStr(selected?.status)}
+              </div>
+
+              <div style={{ marginBottom: 10 }}>
+                <strong>Source:</strong> {safeStr(selected?.source)}
+              </div>
+
               <div style={{ marginBottom: 14 }}>
-                {safeStr(selected?.description, "No details available.")}
+                <strong>Description:</strong>
+                <div style={{ fontSize: 14, opacity: 0.7 }}>
+                  {safeStr(selected?.description, "No details available")}
+                </div>
               </div>
 
-              <div style={{ fontSize: 13, opacity: 0.6 }}>
-                Status: {safeStr(selected?.status)}
-              </div>
-
-              <button
-                className="btn"
-                style={{ marginTop: 20 }}
-              >
-                Investigate
+              <button className="btn" style={{ marginTop: 10 }}>
+                Initiate Containment
               </button>
             </>
           ) : (
             <div style={{ opacity: 0.6 }}>
-              Select a threat to view details.
+              Select a threat to analyze.
             </div>
           )}
         </div>
