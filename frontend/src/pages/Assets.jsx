@@ -7,23 +7,12 @@ function safeArray(v) {
   return Array.isArray(v) ? v : [];
 }
 
-function safeStr(v, fallback = "—") {
-  return typeof v === "string" && v.trim() ? v : fallback;
-}
-
-function riskColor(level) {
-  switch (String(level).toLowerCase()) {
-    case "critical":
-      return "#ff4d4d";
-    case "high":
-      return "#ff884d";
-    case "medium":
-      return "#ffd166";
-    case "low":
-      return "#5EC6FF";
-    default:
-      return "#999";
-  }
+function typeColor(type) {
+  if (type === "server") return "#ff9f43";
+  if (type === "endpoint") return "#5EC6FF";
+  if (type === "cloud") return "#7aa2ff";
+  if (type === "database") return "#ffd166";
+  return "#999";
 }
 
 /* ================= PAGE ================= */
@@ -50,12 +39,12 @@ export default function Assets() {
   }, []);
 
   const summary = useMemo(() => {
-    const list = safeArray(assets);
     return {
-      total: list.length,
-      critical: list.filter(a => a?.risk === "critical").length,
-      high: list.filter(a => a?.risk === "high").length,
-      internetFacing: list.filter(a => a?.internetFacing).length,
+      total: assets.length,
+      servers: assets.filter(a => a?.type === "server").length,
+      endpoints: assets.filter(a => a?.type === "endpoint").length,
+      cloud: assets.filter(a => a?.type === "cloud").length,
+      databases: assets.filter(a => a?.type === "database").length,
     };
   }, [assets]);
 
@@ -66,9 +55,9 @@ export default function Assets() {
 
       {/* ================= HEADER ================= */}
       <div>
-        <h2 style={{ margin: 0 }}>Asset Command Center</h2>
+        <h2 style={{ margin: 0 }}>Asset Inventory Command</h2>
         <div style={{ fontSize: 13, opacity: 0.6 }}>
-          Enterprise asset visibility and exposure
+          Complete visibility of infrastructure & digital footprint
         </div>
       </div>
 
@@ -76,35 +65,20 @@ export default function Assets() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
-          gap: 20,
+          gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
+          gap: 18,
         }}
       >
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Total Assets</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>{summary.total}</div>
-        </div>
-
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Critical Risk</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#ff4d4d" }}>
-            {summary.critical}
+        {Object.entries(summary).map(([k, v]) => (
+          <div key={k} className="card">
+            <div style={{ fontSize: 12, opacity: 0.6 }}>
+              {k.toUpperCase()}
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800 }}>
+              {v}
+            </div>
           </div>
-        </div>
-
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>High Risk</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#ff884d" }}>
-            {summary.high}
-          </div>
-        </div>
-
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Internet Facing</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#5EC6FF" }}>
-            {summary.internetFacing}
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* ================= MAIN GRID ================= */}
@@ -116,45 +90,45 @@ export default function Assets() {
         }}
       >
 
-        {/* ================= LEFT PANEL ================= */}
+        {/* ================= LIST ================= */}
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ maxHeight: 500, overflowY: "auto" }}>
+          <div style={{ maxHeight: 520, overflowY: "auto" }}>
 
             {loading ? (
               <div style={{ padding: 20 }}>Loading assets...</div>
             ) : assets.length === 0 ? (
-              <div style={{ padding: 20 }}>No assets discovered.</div>
+              <div style={{ padding: 20 }}>No assets found.</div>
             ) : (
-              safeArray(assets).map((asset, i) => (
+              safeArray(assets).map((a, idx) => (
                 <div
-                  key={asset?.id || i}
-                  onClick={() => setSelected(asset)}
+                  key={a?.id || idx}
+                  onClick={() => setSelected(a)}
                   style={{
                     padding: 18,
                     borderBottom: "1px solid rgba(255,255,255,0.08)",
                     cursor: "pointer",
                     background:
-                      selected?.id === asset?.id
+                      selected?.id === a?.id
                         ? "rgba(94,198,255,0.08)"
                         : "transparent",
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <strong>{safeStr(asset?.name, "Unnamed Asset")}</strong>
+                    <strong>{a?.name || "Unnamed Asset"}</strong>
 
                     <span
                       style={{
                         fontSize: 12,
                         fontWeight: 700,
-                        color: riskColor(asset?.risk),
+                        color: typeColor(a?.type),
                       }}
                     >
-                      {safeStr(asset?.risk).toUpperCase()}
+                      {String(a?.type || "unknown").toUpperCase()}
                     </span>
                   </div>
 
                   <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>
-                    Type: {safeStr(asset?.type)} • Owner: {safeStr(asset?.owner)}
+                    IP: {a?.ip || "—"} • Status: {a?.status || "unknown"}
                   </div>
                 </div>
               ))
@@ -162,48 +136,39 @@ export default function Assets() {
           </div>
         </div>
 
-        {/* ================= RIGHT PANEL ================= */}
+        {/* ================= DETAIL ================= */}
         <div className="card">
           {selected ? (
             <>
-              <h3>{safeStr(selected?.name)}</h3>
+              <h3>{selected?.name}</h3>
 
-              <div style={{ marginBottom: 10 }}>
-                <strong>Risk Level: </strong>
-                <span
-                  style={{
-                    color: riskColor(selected?.risk),
-                    fontWeight: 700,
-                  }}
-                >
-                  {safeStr(selected?.risk).toUpperCase()}
+              <div style={{ marginBottom: 8 }}>
+                Type:{" "}
+                <span style={{ color: typeColor(selected?.type) }}>
+                  {selected?.type}
                 </span>
               </div>
 
-              <div style={{ marginBottom: 10 }}>
-                <strong>Type:</strong> {safeStr(selected?.type)}
+              <div style={{ marginBottom: 8 }}>
+                IP Address: {selected?.ip || "—"}
               </div>
 
-              <div style={{ marginBottom: 10 }}>
-                <strong>Owner:</strong> {safeStr(selected?.owner)}
+              <div style={{ marginBottom: 8 }}>
+                Status: {selected?.status || "unknown"}
               </div>
 
-              <div style={{ marginBottom: 10 }}>
-                <strong>Internet Facing:</strong>{" "}
-                {selected?.internetFacing ? "Yes" : "No"}
+              <div style={{ marginBottom: 14 }}>
+                Owner: {selected?.owner || "Not Assigned"}
               </div>
 
-              <div style={{ fontSize: 13, opacity: 0.6 }}>
-                Last Scan: {safeStr(selected?.lastScan)}
-              </div>
-
-              <button className="btn" style={{ marginTop: 20 }}>
-                Initiate Deep Scan
+              <button className="btn">Scan Asset</button>
+              <button className="btn" style={{ marginLeft: 10 }}>
+                Isolate Asset
               </button>
             </>
           ) : (
             <div style={{ opacity: 0.6 }}>
-              Select an asset to view details.
+              Select an asset to view detailed information.
             </div>
           )}
         </div>
