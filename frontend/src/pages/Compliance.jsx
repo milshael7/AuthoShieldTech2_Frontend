@@ -1,219 +1,223 @@
-// frontend/src/pages/Compliance.jsx
-// SOC Compliance & Governance — FINAL BASELINE
-// Framework coverage, control status, audit readiness
-// SAFE: Uses existing platform.css only
-
 import React, { useEffect, useMemo, useState } from "react";
+import { api } from "../lib/api.js";
 
 /* ================= HELPERS ================= */
 
-function statusDot(status) {
-  if (status === "fail") return "bad";
-  if (status === "warn") return "warn";
-  return "ok";
+function safeArray(v) {
+  return Array.isArray(v) ? v : [];
+}
+
+function pct(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  return Math.max(0, Math.min(100, Math.round(x)));
+}
+
+function statusColor(status) {
+  switch (String(status).toLowerCase()) {
+    case "compliant":
+      return "#5EC6FF";
+    case "partial":
+      return "#ffd166";
+    case "non_compliant":
+      return "#ff4d4d";
+    default:
+      return "#999";
+  }
 }
 
 /* ================= PAGE ================= */
 
 export default function Compliance() {
-  const [controls, setControls] = useState([]);
+  const [frameworks, setFrameworks] = useState([]);
+  const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Placeholder until compliance backend is wired
-    setTimeout(() => {
-      setControls([
-        {
-          id: "AC-01",
-          framework: "SOC 2",
-          title: "Access Control Policy",
-          status: "ok",
-        },
-        {
-          id: "AC-07",
-          framework: "SOC 2",
-          title: "User Access Reviews",
-          status: "warn",
-        },
-        {
-          id: "IA-02",
-          framework: "NIST",
-          title: "Multi-Factor Authentication",
-          status: "ok",
-        },
-        {
-          id: "CM-06",
-          framework: "NIST",
-          title: "Configuration Management",
-          status: "fail",
-        },
-        {
-          id: "A.12.6",
-          framework: "ISO 27001",
-          title: "Technical Vulnerability Management",
-          status: "warn",
-        },
-        {
-          id: "164.312(a)",
-          framework: "HIPAA",
-          title: "Access Controls",
-          status: "ok",
-        },
-      ]);
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await api.compliance().catch(() => ({}));
+      setFrameworks(safeArray(res?.frameworks));
+    } catch {
+      setFrameworks([]);
+    } finally {
       setLoading(false);
-    }, 700);
+    }
+  }
+
+  useEffect(() => {
+    load();
   }, []);
 
-  /* ================= DERIVED ================= */
-
-  const stats = useMemo(() => {
+  const summary = useMemo(() => {
+    const list = safeArray(frameworks);
     return {
-      total: controls.length,
-      passed: controls.filter(c => c.status === "ok").length,
-      warning: controls.filter(c => c.status === "warn").length,
-      failed: controls.filter(c => c.status === "fail").length,
+      total: list.length,
+      compliant: list.filter(f => f?.status === "compliant").length,
+      partial: list.filter(f => f?.status === "partial").length,
+      non: list.filter(f => f?.status === "non_compliant").length,
     };
-  }, [controls]);
-
-  const frameworks = useMemo(() => {
-    return Array.from(new Set(controls.map(c => c.framework)));
-  }, [controls]);
+  }, [frameworks]);
 
   /* ================= UI ================= */
 
   return (
-    <div className="postureWrap">
-      {/* ================= KPI STRIP ================= */}
-      <div className="kpiGrid">
-        <div className="kpiCard">
-          <small>Total Controls</small>
-          <b>{stats.total}</b>
+    <div style={{ padding: 32, display: "flex", flexDirection: "column", gap: 28 }}>
+
+      {/* ================= HEADER ================= */}
+      <div>
+        <h2 style={{ margin: 0 }}>Compliance Command Board</h2>
+        <div style={{ fontSize: 13, opacity: 0.6 }}>
+          Regulatory posture across enterprise security frameworks
         </div>
-        <div className="kpiCard">
-          <small>Passing</small>
-          <b>{stats.passed}</b>
+      </div>
+
+      {/* ================= SUMMARY ================= */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+          gap: 20,
+        }}
+      >
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Frameworks</div>
+          <div style={{ fontSize: 26, fontWeight: 800 }}>{summary.total}</div>
         </div>
-        <div className="kpiCard">
-          <small>Needs Attention</small>
-          <b>{stats.warning}</b>
+
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Compliant</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#5EC6FF" }}>
+            {summary.compliant}
+          </div>
         </div>
-        <div className="kpiCard">
-          <small>Gaps</small>
-          <b>{stats.failed}</b>
+
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Partial</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#ffd166" }}>
+            {summary.partial}
+          </div>
+        </div>
+
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Non-Compliant</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#ff4d4d" }}>
+            {summary.non}
+          </div>
         </div>
       </div>
 
       {/* ================= MAIN GRID ================= */}
-      <div className="postureGrid">
-        {/* ===== LEFT: CONTROL LIST ===== */}
-        <section className="postureCard">
-          <div className="postureTop">
-            <div>
-              <h2>Compliance & Governance</h2>
-              <small>
-                Control coverage across regulatory and security frameworks
-              </small>
-            </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 1fr",
+          gap: 24,
+        }}
+      >
 
-            <div className="scoreMeta">
-              <b>{frameworks.length} Frameworks</b>
-              <span>SOC 2 • NIST • ISO • HIPAA</span>
-            </div>
-          </div>
+        {/* ================= LEFT: FRAMEWORK LIST ================= */}
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ maxHeight: 520, overflowY: "auto" }}>
 
-          <div className="list" style={{ marginTop: 20 }}>
-            {loading && <p className="muted">Evaluating controls…</p>}
+            {loading ? (
+              <div style={{ padding: 20 }}>Loading frameworks...</div>
+            ) : frameworks.length === 0 ? (
+              <div style={{ padding: 20 }}>No compliance data available.</div>
+            ) : (
+              safeArray(frameworks).map((f, idx) => (
+                <div
+                  key={f?.id || idx}
+                  onClick={() => setSelected(f)}
+                  style={{
+                    padding: 18,
+                    borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    cursor: "pointer",
+                    background:
+                      selected?.id === f?.id
+                        ? "rgba(94,198,255,0.08)"
+                        : "transparent",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <strong>{f?.name || "Framework"}</strong>
 
-            {!loading &&
-              controls.map(c => (
-                <div key={c.id} className="card" style={{ padding: 16 }}>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "auto 1fr auto",
-                      gap: 14,
-                      alignItems: "flex-start",
-                    }}
-                  >
-                    <span className={`dot ${statusDot(c.status)}`} />
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: statusColor(f?.status),
+                      }}
+                    >
+                      {String(f?.status || "unknown").toUpperCase()}
+                    </span>
+                  </div>
 
-                    <div>
-                      <b>{c.title}</b>
-                      <small
-                        style={{
-                          display: "block",
-                          marginTop: 4,
-                          color: "var(--p-muted)",
-                        }}
-                      >
-                        {c.framework} • Control {c.id}
-                      </small>
-                    </div>
-
-                    <div style={{ textAlign: "right" }}>
-                      <small
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 700,
-                        }}
-                      >
-                        {c.status === "ok"
-                          ? "Compliant"
-                          : c.status === "warn"
-                          ? "Needs Review"
-                          : "Gap Identified"}
-                      </small>
-                    </div>
+                  <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>
+                    Controls: {f?.controls || 0} • Score: {pct(f?.score)}%
                   </div>
                 </div>
-              ))}
+              ))
+            )}
           </div>
+        </div>
 
-          <button style={{ marginTop: 18 }}>
-            Export Compliance Report
-          </button>
-        </section>
+        {/* ================= RIGHT: DETAIL ================= */}
+        <div className="card">
+          {selected ? (
+            <>
+              <h3>{selected?.name}</h3>
 
-        {/* ===== RIGHT: COMPLIANCE STATUS ===== */}
-        <aside className="postureCard">
-          <h3>Audit Readiness</h3>
-          <p className="muted">
-            Current compliance posture across key frameworks.
-          </p>
-
-          <ul className="list">
-            <li>
-              <span className="dot ok" />
-              <div>
-                <b>Core Controls Covered</b>
-                <small>Most baseline requirements met</small>
+              <div style={{ marginBottom: 10 }}>
+                <strong>Status: </strong>
+                <span
+                  style={{
+                    color: statusColor(selected?.status),
+                    fontWeight: 700,
+                  }}
+                >
+                  {String(selected?.status || "unknown").toUpperCase()}
+                </span>
               </div>
-            </li>
 
-            <li>
-              <span className="dot warn" />
-              <div>
-                <b>Review Required</b>
-                <small>Some controls need updates</small>
+              <div style={{ marginBottom: 10 }}>
+                <strong>Overall Score:</strong> {pct(selected?.score)}%
               </div>
-            </li>
 
-            <li>
-              <span className="dot bad" />
-              <div>
-                <b>Compliance Gaps</b>
-                <small>Action needed before audit</small>
+              <div
+                style={{
+                  height: 8,
+                  background: "rgba(255,255,255,0.08)",
+                  borderRadius: 999,
+                  overflow: "hidden",
+                  marginBottom: 18,
+                }}
+              >
+                <div
+                  style={{
+                    width: `${pct(selected?.score)}%`,
+                    height: "100%",
+                    background:
+                      "linear-gradient(90deg,#5EC6FF,#7aa2ff)",
+                  }}
+                />
               </div>
-            </li>
-          </ul>
 
-          <p className="muted" style={{ marginTop: 14 }}>
-            Ask the assistant:
-            <br />• “Are we SOC 2 ready?”
-            <br />• “What controls are failing?”
-            <br />• “What should I fix before an audit?”
-          </p>
-        </aside>
+              <div style={{ fontSize: 14, opacity: 0.7 }}>
+                {selected?.description ||
+                  "Detailed control mapping and audit readiness analysis."}
+              </div>
+
+              <button className="btn" style={{ marginTop: 16 }}>
+                Export Compliance Report
+              </button>
+            </>
+          ) : (
+            <div style={{ opacity: 0.6 }}>
+              Select a framework to review compliance posture.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
