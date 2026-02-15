@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
-import CoverageRadar from "../components/CoverageRadar";
 
 /* ================= HELPERS ================= */
 
@@ -64,174 +63,252 @@ export default function Posture() {
 
   /* ================= DERIVED ================= */
 
-  const kpis = useMemo(
-    () => [
-      { label: "Users", value: summary.users ?? 0 },
-      { label: "Devices", value: summary.devices ?? 0 },
-      { label: "Mailboxes", value: summary.mailboxes ?? 0 },
-      { label: "Cloud Drives", value: summary.drives ?? 0 },
-      { label: "Internet Assets", value: summary.assets ?? 0 },
-    ],
-    [summary]
+  const degradedControls = checks.filter(
+    (c) => c?.status && c.status !== "ok"
   );
 
-  const signals = useMemo(() => {
-    const safeChecks = safeArray(checks);
-    return [
-      {
-        label: "Active Threats",
-        value: safeChecks.filter((c) => c?.status === "warn").length,
-      },
-      {
-        label: "High-Risk Assets",
-        value: summary.highRiskAssets ?? 0,
-      },
-      {
-        label: "Controls Degraded",
-        value: safeChecks.filter((c) => c?.status && c.status !== "ok").length,
-      },
-    ];
-  }, [checks, summary]);
+  const severityCounts = useMemo(() => {
+    const base = { critical: 0, high: 0, medium: 0, low: 0 };
+    safeArray(checks).forEach((c) => {
+      if (base[c?.severity] !== undefined) {
+        base[c.severity]++;
+      }
+    });
+    return base;
+  }, [checks]);
 
   /* ================= UI ================= */
 
   return (
-    <div style={{ padding: 28, display: "flex", flexDirection: "column", gap: 28 }}>
+    <div style={{ padding: 32, display: "flex", flexDirection: "column", gap: 32 }}>
 
       {/* ================= KPI STRIP ================= */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
-          gap: 18,
+          gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))",
+          gap: 20,
         }}
       >
-        {kpis.map((k) => (
-          <div key={k.label} className="card">
-            <div style={{ fontSize: 12, opacity: 0.7 }}>{k.label}</div>
-            <div style={{ fontSize: 26, fontWeight: 800 }}>{k.value}</div>
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Security Score</div>
+          <div style={{ fontSize: 30, fontWeight: 800 }}>{pct(score)}%</div>
+        </div>
+
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Total Assets</div>
+          <div style={{ fontSize: 30, fontWeight: 800 }}>
+            {summary.assets ?? 0}
           </div>
-        ))}
+        </div>
+
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>High Risk Assets</div>
+          <div style={{ fontSize: 30, fontWeight: 800 }}>
+            {summary.highRiskAssets ?? 0}
+          </div>
+        </div>
+
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Active Threats</div>
+          <div style={{ fontSize: 30, fontWeight: 800 }}>
+            {degradedControls.length}
+          </div>
+        </div>
       </div>
 
-      {/* ================= MAIN DASHBOARD GRID ================= */}
+      {/* ================= MAIN GRID ================= */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "2fr 1fr",
-          gap: 24,
+          gridTemplateColumns: "3fr 1.2fr",
+          gap: 28,
         }}
       >
-
         {/* ================= LEFT PANEL ================= */}
-        <div className="card" style={{ padding: 24 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <h2 style={{ margin: 0 }}>Security Posture</h2>
-              <div style={{ fontSize: 13, opacity: 0.6 }}>
-                Enterprise operational state
-              </div>
-            </div>
+          {/* SECURITY SCORE PANEL */}
+          <div className="card" style={{ padding: 28 }}>
+            <h2 style={{ margin: 0 }}>Security Posture Overview</h2>
 
-            {/* SCORE RING */}
             <div
               style={{
-                width: 120,
-                height: 120,
-                borderRadius: "50%",
-                background: `conic-gradient(#5EC6FF ${pct(score) * 3.6}deg, rgba(255,255,255,0.08) 0deg)`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 22,
-                fontWeight: 800,
+                marginTop: 20,
+                height: 10,
+                background: "rgba(255,255,255,0.08)",
+                borderRadius: 999,
+                overflow: "hidden",
               }}
             >
-              {pct(score)}%
+              <div
+                style={{
+                  width: `${pct(score)}%`,
+                  height: "100%",
+                  background:
+                    "linear-gradient(90deg,#5EC6FF,#7aa2ff)",
+                }}
+              />
+            </div>
+
+            <div style={{ marginTop: 14, opacity: 0.7 }}>
+              Enterprise operational readiness
             </div>
           </div>
 
-          {/* METER */}
-          <div
-            style={{
-              marginTop: 20,
-              height: 8,
-              background: "rgba(255,255,255,0.08)",
-              borderRadius: 999,
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                width: `${pct(score)}%`,
-                height: "100%",
-                background: "linear-gradient(90deg,#5EC6FF,#7aa2ff)",
-              }}
-            />
-          </div>
+          {/* THREAT SEVERITY */}
+          <div className="card" style={{ padding: 28 }}>
+            <h3>Threat Severity Distribution</h3>
 
-          {/* SIGNALS */}
-          <div style={{ marginTop: 28 }}>
-            <h3>Security Signals</h3>
-
-            <div style={{ display: "grid", gap: 14 }}>
-              {signals.map((s) => (
+            {Object.entries(severityCounts).map(([level, count]) => (
+              <div key={level} style={{ marginTop: 16 }}>
                 <div
-                  key={s.label}
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
-                    padding: 14,
-                    borderRadius: 12,
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.08)",
+                    fontSize: 13,
+                    opacity: 0.8,
                   }}
                 >
-                  <span>{s.label}</span>
-                  <strong>{s.value}</strong>
+                  <span>{level.toUpperCase()}</span>
+                  <span>{count}</span>
                 </div>
-              ))}
-            </div>
+
+                <div
+                  style={{
+                    marginTop: 6,
+                    height: 6,
+                    background: "rgba(255,255,255,0.08)",
+                    borderRadius: 999,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${pct(
+                        (count / (checks.length || 1)) * 100
+                      )}%`,
+                      height: "100%",
+                      borderRadius: 999,
+                      background: "#5EC6FF",
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
 
-          {err && (
-            <div style={{ marginTop: 18, color: "#ff4d4d" }}>{err}</div>
-          )}
+          {/* CONTROL MATRIX */}
+          <div className="card" style={{ padding: 28 }}>
+            <h3>Control Health Matrix</h3>
+
+            <div
+              style={{
+                marginTop: 20,
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit,minmax(160px,1fr))",
+                gap: 14,
+              }}
+            >
+              {safeArray(checks)
+                .slice(0, 8)
+                .map((c, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      padding: 14,
+                      borderRadius: 14,
+                      background: "rgba(255,255,255,0.04)",
+                      border:
+                        "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      {safeStr(c?.title)}
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontWeight: 700,
+                        color:
+                          c?.status === "ok"
+                            ? "#2bd576"
+                            : "#ff4d4d",
+                      }}
+                    >
+                      {safeStr(c?.status, "unknown").toUpperCase()}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
         </div>
 
         {/* ================= RIGHT PANEL ================= */}
-        <div className="card" style={{ padding: 24 }}>
-          <h3>Analyst Insights</h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
 
-          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-            {safeArray(checks)
-              .slice(0, 5)
-              .map((c, i) => (
-                <div
-                  key={c?.id || i}
-                  style={{
-                    padding: 12,
-                    borderRadius: 10,
-                    background: "rgba(255,255,255,0.05)",
-                  }}
-                >
-                  <strong>{safeStr(c?.title, "Security Signal")}</strong>
-                  <div style={{ fontSize: 13, opacity: 0.7 }}>
-                    {safeStr(c?.message, "Details unavailable")}
-                  </div>
-                </div>
-              ))}
+          <div className="card" style={{ padding: 28 }}>
+            <h3>Asset Exposure</h3>
+
+            <div style={{ marginTop: 16, lineHeight: 1.9 }}>
+              <div>Users: {summary.users ?? 0}</div>
+              <div>Devices: {summary.devices ?? 0}</div>
+              <div>Mailboxes: {summary.mailboxes ?? 0}</div>
+              <div>Cloud Drives: {summary.drives ?? 0}</div>
+            </div>
           </div>
 
-          <button
-            onClick={load}
-            disabled={loading}
-            className="btn"
-            style={{ marginTop: 20 }}
-          >
-            {loading ? "Refreshing…" : "Run New Scan"}
-          </button>
+          <div className="card" style={{ padding: 28 }}>
+            <h3>Analyst Feed</h3>
+
+            <div style={{ marginTop: 18 }}>
+              {safeArray(checks)
+                .slice(0, 5)
+                .map((c, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      paddingBottom: 14,
+                      marginBottom: 14,
+                      borderBottom:
+                        "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <strong>{safeStr(c?.title)}</strong>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        opacity: 0.7,
+                        marginTop: 4,
+                      }}
+                    >
+                      {safeStr(c?.message)}
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            <button
+              onClick={load}
+              disabled={loading}
+              className="btn"
+              style={{ marginTop: 12 }}
+            >
+              {loading ? "Refreshing…" : "Run New Scan"}
+            </button>
+
+            {err && (
+              <div
+                style={{
+                  marginTop: 14,
+                  color: "#ff4d4d",
+                }}
+              >
+                {err}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
