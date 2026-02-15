@@ -7,23 +7,12 @@ function safeArray(v) {
   return Array.isArray(v) ? v : [];
 }
 
-function safeStr(v, fallback = "—") {
-  return typeof v === "string" && v.trim() ? v : fallback;
-}
-
-function severityColor(level) {
-  switch (String(level).toLowerCase()) {
-    case "critical":
-      return "#ff4d4d";
-    case "high":
-      return "#ff884d";
-    case "medium":
-      return "#ffd166";
-    case "low":
-      return "#5EC6FF";
-    default:
-      return "#999";
-  }
+function statusColor(status) {
+  if (status === "open") return "#ff4d4d";
+  if (status === "investigating") return "#ffd166";
+  if (status === "contained") return "#5EC6FF";
+  if (status === "resolved") return "#2bd576";
+  return "#999";
 }
 
 /* ================= PAGE ================= */
@@ -50,12 +39,12 @@ export default function Incidents() {
   }, []);
 
   const summary = useMemo(() => {
-    const list = safeArray(incidents);
     return {
-      total: list.length,
-      critical: list.filter(i => i?.severity === "critical").length,
-      active: list.filter(i => i?.status === "active").length,
-      resolved: list.filter(i => i?.status === "resolved").length,
+      total: incidents.length,
+      open: incidents.filter(i => i?.status === "open").length,
+      investigating: incidents.filter(i => i?.status === "investigating").length,
+      contained: incidents.filter(i => i?.status === "contained").length,
+      resolved: incidents.filter(i => i?.status === "resolved").length,
     };
   }, [incidents]);
 
@@ -68,43 +57,28 @@ export default function Incidents() {
       <div>
         <h2 style={{ margin: 0 }}>Incident Response War Room</h2>
         <div style={{ fontSize: 13, opacity: 0.6 }}>
-          Live security event containment and response coordination
+          Active security events & containment operations
         </div>
       </div>
 
-      {/* ================= SUMMARY ================= */}
+      {/* ================= SUMMARY STRIP ================= */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
-          gap: 20,
+          gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))",
+          gap: 18,
         }}
       >
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Total Incidents</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>{summary.total}</div>
-        </div>
-
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Critical</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#ff4d4d" }}>
-            {summary.critical}
+        {Object.entries(summary).map(([k, v]) => (
+          <div key={k} className="card">
+            <div style={{ fontSize: 12, opacity: 0.6 }}>
+              {k.toUpperCase()}
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800 }}>
+              {v}
+            </div>
           </div>
-        </div>
-
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Active</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#ffd166" }}>
-            {summary.active}
-          </div>
-        </div>
-
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Resolved</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#5EC6FF" }}>
-            {summary.resolved}
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* ================= MAIN GRID ================= */}
@@ -116,14 +90,13 @@ export default function Incidents() {
         }}
       >
 
-        {/* ================= LEFT: INCIDENT LIST ================= */}
+        {/* ================= INCIDENT LIST ================= */}
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <div style={{ maxHeight: 520, overflowY: "auto" }}>
-
             {loading ? (
               <div style={{ padding: 20 }}>Loading incidents...</div>
             ) : incidents.length === 0 ? (
-              <div style={{ padding: 20 }}>No incidents detected.</div>
+              <div style={{ padding: 20 }}>No active incidents.</div>
             ) : (
               safeArray(incidents).map((i, idx) => (
                 <div
@@ -135,26 +108,26 @@ export default function Incidents() {
                     cursor: "pointer",
                     background:
                       selected?.id === i?.id
-                        ? "rgba(255,77,77,0.08)"
+                        ? "rgba(94,198,255,0.08)"
                         : "transparent",
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <strong>{safeStr(i?.title, "Security Incident")}</strong>
+                    <strong>{i?.title || "Unknown Incident"}</strong>
 
                     <span
                       style={{
                         fontSize: 12,
                         fontWeight: 700,
-                        color: severityColor(i?.severity),
+                        color: statusColor(i?.status),
                       }}
                     >
-                      {safeStr(i?.severity).toUpperCase()}
+                      {String(i?.status || "unknown").toUpperCase()}
                     </span>
                   </div>
 
                   <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>
-                    Asset: {safeStr(i?.asset)} • Status: {safeStr(i?.status)}
+                    Affected Asset: {i?.asset || "—"}
                   </div>
                 </div>
               ))
@@ -162,46 +135,39 @@ export default function Incidents() {
           </div>
         </div>
 
-        {/* ================= RIGHT: INCIDENT DETAIL ================= */}
+        {/* ================= INCIDENT DETAIL ================= */}
         <div className="card">
           {selected ? (
             <>
-              <h3>{safeStr(selected?.title)}</h3>
+              <h3>{selected?.title}</h3>
 
-              <div style={{ marginBottom: 10 }}>
-                <strong>Severity: </strong>
-                <span
-                  style={{
-                    color: severityColor(selected?.severity),
-                    fontWeight: 700,
-                  }}
-                >
-                  {safeStr(selected?.severity).toUpperCase()}
+              <div style={{ marginBottom: 8 }}>
+                Status:{" "}
+                <span style={{ color: statusColor(selected?.status) }}>
+                  {selected?.status}
                 </span>
               </div>
 
-              <div style={{ marginBottom: 10 }}>
-                <strong>Status:</strong> {safeStr(selected?.status)}
-              </div>
-
-              <div style={{ marginBottom: 10 }}>
-                <strong>Asset:</strong> {safeStr(selected?.asset)}
+              <div style={{ marginBottom: 8 }}>
+                Affected Asset: {selected?.asset || "Unknown"}
               </div>
 
               <div style={{ marginBottom: 14 }}>
-                <strong>Description:</strong>
-                <div style={{ fontSize: 14, opacity: 0.7 }}>
-                  {safeStr(selected?.description, "No details available")}
+                Description:
+                <div style={{ fontSize: 14, opacity: 0.8, marginTop: 6 }}>
+                  {selected?.description || "No additional details."}
                 </div>
               </div>
 
-              <button className="btn" style={{ marginTop: 10 }}>
-                Mark as Resolved
-              </button>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button className="btn">Start Investigation</button>
+                <button className="btn">Contain</button>
+                <button className="btn">Mark Resolved</button>
+              </div>
             </>
           ) : (
             <div style={{ opacity: 0.6 }}>
-              Select an incident to review.
+              Select an incident to view operational details.
             </div>
           )}
         </div>
