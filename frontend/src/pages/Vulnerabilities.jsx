@@ -7,27 +7,41 @@ function safeArray(v) {
   return Array.isArray(v) ? v : [];
 }
 
-function severityColor(sev) {
-  if (sev === "critical") return "#ff4d4d";
-  if (sev === "high") return "#ff9f43";
-  if (sev === "medium") return "#ffd166";
-  return "#5EC6FF";
+function severityColor(level) {
+  switch (level) {
+    case "critical":
+      return "rgba(255,0,0,.25)";
+    case "high":
+      return "rgba(255,90,0,.25)";
+    case "medium":
+      return "rgba(255,200,0,.25)";
+    case "low":
+      return "rgba(94,198,255,.15)";
+    default:
+      return "rgba(255,255,255,.08)";
+  }
+}
+
+function groupBySeverity(vulns = []) {
+  const map = { critical: 0, high: 0, medium: 0, low: 0 };
+  vulns.forEach(v => {
+    const sev = v?.severity?.toLowerCase();
+    if (map[sev] !== undefined) map[sev]++;
+  });
+  return map;
 }
 
 /* ================= PAGE ================= */
 
 export default function Vulnerabilities() {
-  const [items, setItems] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [vulns, setVulns] = useState([]);
   const [loading, setLoading] = useState(true);
 
   async function load() {
     setLoading(true);
     try {
-      const res = await api.vulnerabilities().catch(() => ({}));
-      setItems(safeArray(res?.vulnerabilities));
-    } catch {
-      setItems([]);
+      const data = await api.vulnerabilities().catch(() => ({}));
+      setVulns(safeArray(data?.vulnerabilities));
     } finally {
       setLoading(false);
     }
@@ -37,141 +51,144 @@ export default function Vulnerabilities() {
     load();
   }, []);
 
-  const summary = useMemo(() => {
-    return {
-      total: items.length,
-      critical: items.filter(v => v?.severity === "critical").length,
-      high: items.filter(v => v?.severity === "high").length,
-      medium: items.filter(v => v?.severity === "medium").length,
-      low: items.filter(v => v?.severity === "low").length,
-    };
-  }, [items]);
+  const severityStats = useMemo(
+    () => groupBySeverity(vulns),
+    [vulns]
+  );
+
+  const total = vulns.length;
 
   /* ================= UI ================= */
 
   return (
     <div style={{ padding: 32, display: "flex", flexDirection: "column", gap: 28 }}>
 
-      {/* ================= HEADER ================= */}
+      {/* HEADER */}
       <div>
-        <h2 style={{ margin: 0 }}>Vulnerability Risk Matrix</h2>
+        <h2 style={{ margin: 0 }}>Vulnerability Command Center</h2>
         <div style={{ fontSize: 13, opacity: 0.6 }}>
-          Exposure analysis and remediation prioritization
+          Exposure monitoring, risk classification & remediation pipeline
         </div>
       </div>
 
-      {/* ================= SUMMARY CARDS ================= */}
+      {/* SUMMARY STRIP */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))",
-          gap: 18,
+          gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+          gap: 18
         }}
       >
-        {Object.entries(summary).map(([key, value]) => (
-          <div key={key} className="card">
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Total Findings</div>
+          <div style={{ fontSize: 26, fontWeight: 800 }}>{total}</div>
+        </div>
+
+        {Object.entries(severityStats).map(([level, count]) => (
+          <div key={level} className="card">
             <div style={{ fontSize: 12, opacity: 0.6 }}>
-              {key.toUpperCase()}
+              {level.toUpperCase()}
             </div>
-            <div style={{ fontSize: 24, fontWeight: 800 }}>
-              {value}
-            </div>
+            <div style={{ fontSize: 22, fontWeight: 800 }}>{count}</div>
           </div>
         ))}
       </div>
 
-      {/* ================= MAIN GRID ================= */}
+      {/* MAIN GRID */}
       <div
         style={{
           display: "grid",
           gridTemplateColumns: "2fr 1fr",
-          gap: 24,
+          gap: 24
         }}
       >
 
-        {/* ================= LIST ================= */}
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ maxHeight: 520, overflowY: "auto" }}>
+        {/* ================= FINDINGS TABLE ================= */}
+        <div className="card">
+          <h3>Active Findings</h3>
 
-            {loading ? (
-              <div style={{ padding: 20 }}>Loading vulnerabilities...</div>
-            ) : items.length === 0 ? (
-              <div style={{ padding: 20 }}>No vulnerabilities found.</div>
-            ) : (
-              safeArray(items).map((v, idx) => (
-                <div
-                  key={v?.id || idx}
-                  onClick={() => setSelected(v)}
-                  style={{
-                    padding: 18,
-                    borderBottom: "1px solid rgba(255,255,255,0.08)",
-                    cursor: "pointer",
-                    background:
-                      selected?.id === v?.id
-                        ? "rgba(94,198,255,0.08)"
-                        : "transparent",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <strong>{v?.title || "Unknown Vulnerability"}</strong>
-
-                    <span
+          {loading ? (
+            <div>Scanning...</div>
+          ) : total === 0 ? (
+            <div style={{ opacity: 0.6 }}>
+              No vulnerabilities detected.
+            </div>
+          ) : (
+            <div style={{ marginTop: 20, overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ textAlign: "left", opacity: 0.6 }}>
+                    <th>Title</th>
+                    <th>Asset</th>
+                    <th>Severity</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vulns.map((v, i) => (
+                    <tr
+                      key={v?.id || i}
                       style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: severityColor(v?.severity),
+                        borderTop: "1px solid rgba(255,255,255,.08)"
                       }}
                     >
-                      {String(v?.severity || "low").toUpperCase()}
-                    </span>
-                  </div>
-
-                  <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>
-                    Asset: {v?.asset || "Unknown"} • CVSS: {v?.score ?? "—"}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* ================= DETAIL PANEL ================= */}
-        <div className="card">
-          {selected ? (
-            <>
-              <h3>{selected?.title}</h3>
-
-              <div style={{ marginBottom: 10 }}>
-                Severity:{" "}
-                <span style={{ color: severityColor(selected?.severity) }}>
-                  {String(selected?.severity || "low").toUpperCase()}
-                </span>
-              </div>
-
-              <div style={{ marginBottom: 10 }}>
-                Asset: {selected?.asset || "Unknown"}
-              </div>
-
-              <div style={{ marginBottom: 10 }}>
-                CVSS Score: {selected?.score ?? "—"}
-              </div>
-
-              <div style={{ marginBottom: 16 }}>
-                {selected?.description ||
-                  "No detailed description provided."}
-              </div>
-
-              <button className="btn">Start Remediation</button>
-              <button className="btn" style={{ marginLeft: 10 }}>
-                Mark as Accepted Risk
-              </button>
-            </>
-          ) : (
-            <div style={{ opacity: 0.6 }}>
-              Select a vulnerability to view risk details.
+                      <td style={{ padding: "10px 0" }}>
+                        {v?.title || "—"}
+                      </td>
+                      <td>{v?.asset || "—"}</td>
+                      <td>
+                        <span
+                          style={{
+                            padding: "4px 10px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            background: severityColor(v?.severity)
+                          }}
+                        >
+                          {v?.severity || "unknown"}
+                        </span>
+                      </td>
+                      <td>{v?.status || "open"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
+
+        {/* ================= REMEDIATION PANEL ================= */}
+        <div className="card">
+          <h3>Remediation Strategy</h3>
+
+          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div>
+              <strong>Critical / High</strong>
+              <div style={{ fontSize: 13, opacity: 0.7 }}>
+                Immediate patching & isolation recommended.
+              </div>
+            </div>
+
+            <div>
+              <strong>Medium</strong>
+              <div style={{ fontSize: 13, opacity: 0.7 }}>
+                Schedule mitigation within next release cycle.
+              </div>
+            </div>
+
+            <div>
+              <strong>Low</strong>
+              <div style={{ fontSize: 13, opacity: 0.7 }}>
+                Monitor and document risk acceptance.
+              </div>
+            </div>
+
+            <button className="btn" onClick={load}>
+              Re-run Scan
+            </button>
+          </div>
+        </div>
+
       </div>
     </div>
   );
