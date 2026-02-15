@@ -7,171 +7,182 @@ function safeArray(v) {
   return Array.isArray(v) ? v : [];
 }
 
-function typeColor(type) {
-  if (type === "server") return "#ff9f43";
-  if (type === "endpoint") return "#5EC6FF";
-  if (type === "cloud") return "#7aa2ff";
-  if (type === "database") return "#ffd166";
-  return "#999";
+function countByType(assets = []) {
+  const map = {};
+  assets.forEach(a => {
+    const type = a?.type || "unknown";
+    map[type] = (map[type] || 0) + 1;
+  });
+  return map;
 }
 
 /* ================= PAGE ================= */
 
 export default function Assets() {
   const [assets, setAssets] = useState([]);
-  const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const [newAsset, setNewAsset] = useState({
+    name: "",
+    type: "",
+    owner: ""
+  });
 
   async function load() {
     setLoading(true);
     try {
-      const res = await api.assets().catch(() => ({}));
-      setAssets(safeArray(res?.assets));
-    } catch {
-      setAssets([]);
+      const data = await api.assets().catch(() => ({}));
+      setAssets(safeArray(data?.assets));
     } finally {
       setLoading(false);
     }
+  }
+
+  async function addAsset() {
+    if (!newAsset.name || !newAsset.type) return;
+
+    await api.createAsset(newAsset).catch(() => {});
+    setNewAsset({ name: "", type: "", owner: "" });
+    load();
   }
 
   useEffect(() => {
     load();
   }, []);
 
-  const summary = useMemo(() => {
-    return {
-      total: assets.length,
-      servers: assets.filter(a => a?.type === "server").length,
-      endpoints: assets.filter(a => a?.type === "endpoint").length,
-      cloud: assets.filter(a => a?.type === "cloud").length,
-      databases: assets.filter(a => a?.type === "database").length,
-    };
-  }, [assets]);
+  const typeStats = useMemo(() => countByType(assets), [assets]);
 
   /* ================= UI ================= */
 
   return (
     <div style={{ padding: 32, display: "flex", flexDirection: "column", gap: 28 }}>
 
-      {/* ================= HEADER ================= */}
+      {/* HEADER */}
       <div>
-        <h2 style={{ margin: 0 }}>Asset Inventory Command</h2>
+        <h2 style={{ margin: 0 }}>Asset & Inventory Command</h2>
         <div style={{ fontSize: 13, opacity: 0.6 }}>
-          Complete visibility of infrastructure & digital footprint
+          Manage infrastructure, endpoints, and digital footprint
         </div>
       </div>
 
-      {/* ================= SUMMARY ================= */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
-          gap: 18,
-        }}
-      >
-        {Object.entries(summary).map(([k, v]) => (
-          <div key={k} className="card">
+      {/* SUMMARY STRIP */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))",
+        gap: 18
+      }}>
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Total Assets</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{assets.length}</div>
+        </div>
+
+        {Object.entries(typeStats).map(([type, count]) => (
+          <div key={type} className="card">
             <div style={{ fontSize: 12, opacity: 0.6 }}>
-              {k.toUpperCase()}
+              {type.toUpperCase()}
             </div>
-            <div style={{ fontSize: 24, fontWeight: 800 }}>
-              {v}
-            </div>
+            <div style={{ fontSize: 22, fontWeight: 800 }}>{count}</div>
           </div>
         ))}
       </div>
 
-      {/* ================= MAIN GRID ================= */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "2fr 1fr",
-          gap: 24,
-        }}
-      >
+      {/* MAIN GRID */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "2fr 1fr",
+        gap: 24
+      }}>
 
-        {/* ================= LIST ================= */}
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ maxHeight: 520, overflowY: "auto" }}>
-
-            {loading ? (
-              <div style={{ padding: 20 }}>Loading assets...</div>
-            ) : assets.length === 0 ? (
-              <div style={{ padding: 20 }}>No assets found.</div>
-            ) : (
-              safeArray(assets).map((a, idx) => (
-                <div
-                  key={a?.id || idx}
-                  onClick={() => setSelected(a)}
-                  style={{
-                    padding: 18,
-                    borderBottom: "1px solid rgba(255,255,255,0.08)",
-                    cursor: "pointer",
-                    background:
-                      selected?.id === a?.id
-                        ? "rgba(94,198,255,0.08)"
-                        : "transparent",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <strong>{a?.name || "Unnamed Asset"}</strong>
-
-                    <span
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: typeColor(a?.type),
-                      }}
-                    >
-                      {String(a?.type || "unknown").toUpperCase()}
-                    </span>
-                  </div>
-
-                  <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>
-                    IP: {a?.ip || "—"} • Status: {a?.status || "unknown"}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* ================= DETAIL ================= */}
+        {/* ================= INVENTORY TABLE ================= */}
         <div className="card">
-          {selected ? (
-            <>
-              <h3>{selected?.name}</h3>
+          <h3>Inventory</h3>
 
-              <div style={{ marginBottom: 8 }}>
-                Type:{" "}
-                <span style={{ color: typeColor(selected?.type) }}>
-                  {selected?.type}
-                </span>
-              </div>
-
-              <div style={{ marginBottom: 8 }}>
-                IP Address: {selected?.ip || "—"}
-              </div>
-
-              <div style={{ marginBottom: 8 }}>
-                Status: {selected?.status || "unknown"}
-              </div>
-
-              <div style={{ marginBottom: 14 }}>
-                Owner: {selected?.owner || "Not Assigned"}
-              </div>
-
-              <button className="btn">Scan Asset</button>
-              <button className="btn" style={{ marginLeft: 10 }}>
-                Isolate Asset
-              </button>
-            </>
-          ) : (
+          {loading ? (
+            <div>Loading assets...</div>
+          ) : assets.length === 0 ? (
             <div style={{ opacity: 0.6 }}>
-              Select an asset to view detailed information.
+              No assets registered.
+            </div>
+          ) : (
+            <div style={{ marginTop: 20, overflowX: "auto" }}>
+              <table style={{
+                width: "100%",
+                borderCollapse: "collapse"
+              }}>
+                <thead>
+                  <tr style={{ textAlign: "left", opacity: 0.6 }}>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Owner</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assets.map((asset, i) => (
+                    <tr key={asset?.id || i} style={{
+                      borderTop: "1px solid rgba(255,255,255,.08)"
+                    }}>
+                      <td style={{ padding: "10px 0" }}>
+                        {asset?.name || "—"}
+                      </td>
+                      <td>{asset?.type || "—"}</td>
+                      <td>{asset?.owner || "—"}</td>
+                      <td>
+                        <span style={{
+                          padding: "4px 10px",
+                          borderRadius: 999,
+                          fontSize: 12,
+                          background:
+                            asset?.status === "critical"
+                              ? "rgba(255,0,0,.25)"
+                              : "rgba(94,198,255,.15)"
+                        }}>
+                          {asset?.status || "active"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
+
+        {/* ================= ADD ASSET PANEL ================= */}
+        <div className="card">
+          <h3>Add Asset</h3>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 14 }}>
+            <input
+              placeholder="Asset Name"
+              value={newAsset.name}
+              onChange={(e) =>
+                setNewAsset({ ...newAsset, name: e.target.value })
+              }
+            />
+
+            <input
+              placeholder="Asset Type (server, laptop, domain...)"
+              value={newAsset.type}
+              onChange={(e) =>
+                setNewAsset({ ...newAsset, type: e.target.value })
+              }
+            />
+
+            <input
+              placeholder="Owner"
+              value={newAsset.owner}
+              onChange={(e) =>
+                setNewAsset({ ...newAsset, owner: e.target.value })
+              }
+            />
+
+            <button className="btn" onClick={addAsset}>
+              Register Asset
+            </button>
+          </div>
+        </div>
+
       </div>
     </div>
   );
