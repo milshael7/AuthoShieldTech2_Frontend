@@ -3,33 +3,47 @@ import { api } from "../lib/api.js";
 
 /* ================= HELPERS ================= */
 
-function safeArray(v) {
-  return Array.isArray(v) ? v : [];
+function pct(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  return Math.max(0, Math.min(100, Math.round(x)));
 }
 
-function formatDate(d) {
-  if (!d) return "—";
-  try {
-    return new Date(d).toLocaleDateString();
-  } catch {
-    return "—";
-  }
+function money(v) {
+  if (!Number.isFinite(Number(v))) return "—";
+  return `$${Number(v).toFixed(2)}`;
+}
+
+function safeArray(v) {
+  return Array.isArray(v) ? v : [];
 }
 
 /* ================= PAGE ================= */
 
 export default function Reports() {
-  const [reports, setReports] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [summary, setSummary] = useState({});
+  const [checks, setChecks] = useState([]);
+  const [trading, setTrading] = useState({});
   const [loading, setLoading] = useState(true);
 
   async function load() {
     setLoading(true);
     try {
-      const res = await api.reports().catch(() => ({}));
-      setReports(safeArray(res?.reports));
+      const [s, c, t] = await Promise.all([
+        api.postureSummary().catch(() => ({})),
+        api.postureChecks().catch(() => ({})),
+        fetch("/api/trading/paper/snapshot")
+          .then(r => r.json())
+          .catch(() => ({})),
+      ]);
+
+      setSummary(s || {});
+      setChecks(safeArray(c?.checks));
+      setTrading(t?.snapshot || {});
     } catch {
-      setReports([]);
+      setSummary({});
+      setChecks([]);
+      setTrading({});
     } finally {
       setLoading(false);
     }
@@ -39,14 +53,17 @@ export default function Reports() {
     load();
   }, []);
 
-  const summary = useMemo(() => {
-    return {
-      total: reports.length,
-      critical: reports.filter(r => r?.severity === "critical").length,
-      high: reports.filter(r => r?.severity === "high").length,
-      informational: reports.filter(r => r?.severity === "info").length,
-    };
-  }, [reports]);
+  const securityScore = useMemo(() => {
+    if (!checks.length) return 0;
+    const val = checks.reduce((s, c) => {
+      if (c?.status === "ok") return s + 1;
+      if (c?.status === "warn") return s + 0.5;
+      return s;
+    }, 0);
+    return Math.round((val / checks.length) * 100);
+  }, [checks]);
+
+  const highRisk = checks.filter(c => c?.status !== "ok").length;
 
   /* ================= UI ================= */
 
@@ -55,135 +72,93 @@ export default function Reports() {
 
       {/* ================= HEADER ================= */}
       <div>
-        <h2 style={{ margin: 0 }}>Reports Intelligence Center</h2>
+        <h2 style={{ margin: 0 }}>Executive Intelligence Overview</h2>
         <div style={{ fontSize: 13, opacity: 0.6 }}>
-          Executive security reports and operational summaries
+          High-level security & trading performance summary
         </div>
       </div>
 
-      {/* ================= SUMMARY ================= */}
+      {/* ================= SCORE STRIP ================= */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+          gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))",
           gap: 20,
         }}
       >
         <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Total Reports</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>{summary.total}</div>
-        </div>
-
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Critical</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#ff4d4d" }}>
-            {summary.critical}
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Security Score</div>
+          <div style={{ fontSize: 30, fontWeight: 800 }}>
+            {pct(securityScore)}%
           </div>
         </div>
 
         <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>High</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#ffd166" }}>
-            {summary.high}
+          <div style={{ fontSize: 12, opacity: 0.6 }}>High-Risk Controls</div>
+          <div style={{ fontSize: 30, fontWeight: 800 }}>
+            {highRisk}
           </div>
         </div>
 
         <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Informational</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#5EC6FF" }}>
-            {summary.informational}
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Trading Equity</div>
+          <div style={{ fontSize: 30, fontWeight: 800 }}>
+            {money(trading?.equity)}
+          </div>
+        </div>
+
+        <div className="card">
+          <div style={{ fontSize: 12, opacity: 0.6 }}>Active Positions</div>
+          <div style={{ fontSize: 30, fontWeight: 800 }}>
+            {trading?.position ? 1 : 0}
           </div>
         </div>
       </div>
 
-      {/* ================= MAIN GRID ================= */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "2fr 1fr",
-          gap: 24,
-        }}
-      >
+      {/* ================= STRATEGIC SUMMARY ================= */}
+      <div className="card">
+        <h3>Strategic Risk Summary</h3>
 
-        {/* ================= LEFT: REPORT LIST ================= */}
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ maxHeight: 520, overflowY: "auto" }}>
+        {loading ? (
+          <div>Analyzing...</div>
+        ) : (
+          <>
+            <p style={{ opacity: 0.85 }}>
+              Overall security posture is currently operating at{" "}
+              <strong>{pct(securityScore)}%</strong>.
+              {securityScore >= 85
+                ? " Risk exposure is controlled."
+                : securityScore >= 65
+                ? " Moderate exposure detected."
+                : " Elevated exposure requires executive attention."}
+            </p>
 
-            {loading ? (
-              <div style={{ padding: 20 }}>Loading reports...</div>
-            ) : reports.length === 0 ? (
-              <div style={{ padding: 20 }}>No reports available.</div>
-            ) : (
-              safeArray(reports).map((r, idx) => (
-                <div
-                  key={r?.id || idx}
-                  onClick={() => setSelected(r)}
-                  style={{
-                    padding: 18,
-                    borderBottom: "1px solid rgba(255,255,255,0.08)",
-                    cursor: "pointer",
-                    background:
-                      selected?.id === r?.id
-                        ? "rgba(94,198,255,0.08)"
-                        : "transparent",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <strong>{r?.title || "Security Report"}</strong>
+            <p style={{ opacity: 0.85 }}>
+              {highRisk > 0
+                ? `${highRisk} security controls require review.`
+                : "All critical security controls are stable."}
+            </p>
 
-                    <span
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color:
-                          r?.severity === "critical"
-                            ? "#ff4d4d"
-                            : r?.severity === "high"
-                            ? "#ffd166"
-                            : "#5EC6FF",
-                      }}
-                    >
-                      {String(r?.severity || "info").toUpperCase()}
-                    </span>
-                  </div>
+            <p style={{ opacity: 0.85 }}>
+              Trading equity currently stands at{" "}
+              <strong>{money(trading?.equity)}</strong>.
+              {trading?.equity > 0
+                ? " Portfolio is operational."
+                : " Trading engine inactive or initializing."}
+            </p>
+          </>
+        )}
+      </div>
 
-                  <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>
-                    Created: {formatDate(r?.createdAt)}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+      {/* ================= ACTION PANEL ================= */}
+      <div className="card">
+        <h3>Executive Actions</h3>
 
-        {/* ================= RIGHT: DETAIL ================= */}
-        <div className="card">
-          {selected ? (
-            <>
-              <h3>{selected?.title}</h3>
-
-              <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 12 }}>
-                Created: {formatDate(selected?.createdAt)}
-              </div>
-
-              <div style={{ marginBottom: 18 }}>
-                {selected?.summary ||
-                  "Detailed security analysis and recommendations."}
-              </div>
-
-              <button className="btn" style={{ marginBottom: 10 }}>
-                Export PDF
-              </button>
-
-              <button className="btn" style={{ marginLeft: 10 }}>
-                Share with Executive Team
-              </button>
-            </>
-          ) : (
-            <div style={{ opacity: 0.6 }}>
-              Select a report to view executive summary.
-            </div>
-          )}
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+          <button className="btn">Generate PDF Report</button>
+          <button className="btn">Export Security Metrics</button>
+          <button className="btn">Export Trading Metrics</button>
+          <button className="btn">Schedule Board Summary</button>
         </div>
       </div>
     </div>
