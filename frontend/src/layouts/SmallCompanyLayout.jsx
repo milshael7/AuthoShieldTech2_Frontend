@@ -1,8 +1,9 @@
 // frontend/src/layouts/SmallCompanyLayout.jsx
-// Small Company Layout — Institutional Baseline (HARDENED)
-// Visibility-only SOC
+// Small Company Layout — Institutional Baseline (STABILIZED)
+// Clean relative routing
+// Role-contained
+// Scroll-safe
 // Upgrade path preserved
-// Structural parity with other layouts
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -22,13 +23,18 @@ export default function SmallCompanyLayout() {
     navigate("/login");
   }
 
+  function closeMenu() {
+    setMenuOpen(false);
+  }
+
   return (
     <div className={`layout-root ${menuOpen ? "sidebar-open" : ""}`}>
+
       {/* ================= MOBILE OVERLAY ================= */}
       {menuOpen && (
         <div
           className="sidebar-overlay"
-          onClick={() => setMenuOpen(false)}
+          onClick={closeMenu}
         />
       )}
 
@@ -42,56 +48,33 @@ export default function SmallCompanyLayout() {
         </div>
 
         <nav className="layout-nav">
-          <NavLink
-            to="/small-company"
-            end
-            onClick={() => setMenuOpen(false)}
-          >
+
+          <NavLink to="." end onClick={closeMenu}>
             Security Overview
           </NavLink>
 
-          <NavLink
-            to="/small-company/assets"
-            onClick={() => setMenuOpen(false)}
-          >
+          <NavLink to="assets" onClick={closeMenu}>
             Assets
           </NavLink>
 
-          <NavLink
-            to="/small-company/threats"
-            onClick={() => setMenuOpen(false)}
-          >
+          <NavLink to="threats" onClick={closeMenu}>
             Threats
           </NavLink>
 
-          <NavLink
-            to="/small-company/incidents"
-            onClick={() => setMenuOpen(false)}
-          >
+          <NavLink to="incidents" onClick={closeMenu}>
             Incidents
           </NavLink>
 
-          <NavLink
-            to="/small-company/reports"
-            onClick={() => setMenuOpen(false)}
-          >
+          <NavLink to="reports" onClick={closeMenu}>
             Reports
-          </NavLink>
-
-          {/* 🔥 Read-only trading visibility */}
-          <NavLink
-            to="/admin/trading"
-            onClick={() => setMenuOpen(false)}
-          >
-            Trading Overview
           </NavLink>
 
           <hr style={{ opacity: 0.2 }} />
 
           <NavLink
-            to="/small-company/upgrade"
+            to="upgrade"
             className="upgrade-link"
-            onClick={() => setMenuOpen(false)}
+            onClick={closeMenu}
           >
             Upgrade to Company
           </NavLink>
@@ -104,6 +87,7 @@ export default function SmallCompanyLayout() {
 
       {/* ================= MAIN ================= */}
       <main className="layout-main">
+
         {/* ================= CONTENT ================= */}
         <section className="layout-content">
           <Outlet />
@@ -117,7 +101,7 @@ export default function SmallCompanyLayout() {
           <div className="ai-drawer-handle">
             <button
               className="ai-toggle"
-              onClick={() => setInsightsOpen((v) => !v)}
+              onClick={() => setInsightsOpen(v => !v)}
             >
               {insightsOpen
                 ? "▼ Hide Security Insights"
@@ -138,6 +122,7 @@ export default function SmallCompanyLayout() {
             />
           </div>
         </section>
+
       </main>
     </div>
   );
