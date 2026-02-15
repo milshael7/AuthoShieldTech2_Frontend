@@ -7,23 +7,12 @@ function safeArray(v) {
   return Array.isArray(v) ? v : [];
 }
 
-function safeStr(v, fallback = "—") {
-  return typeof v === "string" && v.trim() ? v : fallback;
-}
-
 function severityColor(level) {
-  switch (String(level).toLowerCase()) {
-    case "critical":
-      return "#ff4d4d";
-    case "high":
-      return "#ff884d";
-    case "medium":
-      return "#ffd166";
-    case "low":
-      return "#5EC6FF";
-    default:
-      return "#999";
-  }
+  if (level === "critical") return "#ff4d4d";
+  if (level === "high") return "#ff9f43";
+  if (level === "medium") return "#ffd166";
+  if (level === "low") return "#5EC6FF";
+  return "#999";
 }
 
 /* ================= PAGE ================= */
@@ -50,12 +39,12 @@ export default function Threats() {
   }, []);
 
   const summary = useMemo(() => {
-    const list = safeArray(threats);
     return {
-      total: list.length,
-      critical: list.filter(t => t?.severity === "critical").length,
-      active: list.filter(t => t?.status === "active").length,
-      mitigated: list.filter(t => t?.status === "mitigated").length,
+      total: threats.length,
+      critical: threats.filter(t => t?.severity === "critical").length,
+      high: threats.filter(t => t?.severity === "high").length,
+      medium: threats.filter(t => t?.severity === "medium").length,
+      low: threats.filter(t => t?.severity === "low").length,
     };
   }, [threats]);
 
@@ -66,45 +55,30 @@ export default function Threats() {
 
       {/* ================= HEADER ================= */}
       <div>
-        <h2 style={{ margin: 0 }}>Threat Intelligence Center</h2>
+        <h2 style={{ margin: 0 }}>Threat Intelligence Command</h2>
         <div style={{ fontSize: 13, opacity: 0.6 }}>
-          Live attack monitoring and threat analysis
+          Real-time detection & adversary activity tracking
         </div>
       </div>
 
-      {/* ================= SUMMARY ================= */}
+      {/* ================= SUMMARY STRIP ================= */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
-          gap: 20,
+          gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))",
+          gap: 18,
         }}
       >
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Total Threats</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>{summary.total}</div>
-        </div>
-
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Critical</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#ff4d4d" }}>
-            {summary.critical}
+        {Object.entries(summary).map(([k, v]) => (
+          <div key={k} className="card">
+            <div style={{ fontSize: 12, opacity: 0.6 }}>
+              {k.toUpperCase()}
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800 }}>
+              {v}
+            </div>
           </div>
-        </div>
-
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Active</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#ffd166" }}>
-            {summary.active}
-          </div>
-        </div>
-
-        <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Mitigated</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#5EC6FF" }}>
-            {summary.mitigated}
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* ================= MAIN GRID ================= */}
@@ -116,18 +90,17 @@ export default function Threats() {
         }}
       >
 
-        {/* ================= LEFT PANEL ================= */}
+        {/* ================= THREAT LIST ================= */}
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <div style={{ maxHeight: 520, overflowY: "auto" }}>
-
             {loading ? (
               <div style={{ padding: 20 }}>Loading threats...</div>
             ) : threats.length === 0 ? (
-              <div style={{ padding: 20 }}>No threats detected.</div>
+              <div style={{ padding: 20 }}>No active threats detected.</div>
             ) : (
-              safeArray(threats).map((t, i) => (
+              safeArray(threats).map((t, idx) => (
                 <div
-                  key={t?.id || i}
+                  key={t?.id || idx}
                   onClick={() => setSelected(t)}
                   style={{
                     padding: 18,
@@ -135,12 +108,12 @@ export default function Threats() {
                     cursor: "pointer",
                     background:
                       selected?.id === t?.id
-                        ? "rgba(255,77,77,0.08)"
+                        ? "rgba(94,198,255,0.08)"
                         : "transparent",
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <strong>{safeStr(t?.title, "Threat Event")}</strong>
+                    <strong>{t?.title || "Unknown Threat"}</strong>
 
                     <span
                       style={{
@@ -149,12 +122,12 @@ export default function Threats() {
                         color: severityColor(t?.severity),
                       }}
                     >
-                      {safeStr(t?.severity).toUpperCase()}
+                      {String(t?.severity || "unknown").toUpperCase()}
                     </span>
                   </div>
 
                   <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>
-                    Source: {safeStr(t?.source)} • Status: {safeStr(t?.status)}
+                    Source: {t?.source || "—"} • Target: {t?.target || "—"}
                   </div>
                 </div>
               ))
@@ -162,46 +135,42 @@ export default function Threats() {
           </div>
         </div>
 
-        {/* ================= RIGHT PANEL ================= */}
+        {/* ================= THREAT DETAIL ================= */}
         <div className="card">
           {selected ? (
             <>
-              <h3>{safeStr(selected?.title)}</h3>
+              <h3>{selected?.title}</h3>
 
-              <div style={{ marginBottom: 10 }}>
-                <strong>Severity: </strong>
-                <span
-                  style={{
-                    color: severityColor(selected?.severity),
-                    fontWeight: 700,
-                  }}
-                >
-                  {safeStr(selected?.severity).toUpperCase()}
+              <div style={{ marginBottom: 8 }}>
+                Severity:{" "}
+                <span style={{ color: severityColor(selected?.severity) }}>
+                  {selected?.severity}
                 </span>
               </div>
 
-              <div style={{ marginBottom: 10 }}>
-                <strong>Status:</strong> {safeStr(selected?.status)}
+              <div style={{ marginBottom: 8 }}>
+                Source: {selected?.source || "Unknown"}
               </div>
 
-              <div style={{ marginBottom: 10 }}>
-                <strong>Source:</strong> {safeStr(selected?.source)}
+              <div style={{ marginBottom: 8 }}>
+                Target: {selected?.target || "Unknown"}
               </div>
 
               <div style={{ marginBottom: 14 }}>
-                <strong>Description:</strong>
-                <div style={{ fontSize: 14, opacity: 0.7 }}>
-                  {safeStr(selected?.description, "No details available")}
+                Description:
+                <div style={{ fontSize: 14, opacity: 0.8, marginTop: 6 }}>
+                  {selected?.description || "No additional details."}
                 </div>
               </div>
 
-              <button className="btn" style={{ marginTop: 10 }}>
-                Initiate Containment
+              <button className="btn">Investigate</button>
+              <button className="btn" style={{ marginLeft: 10 }}>
+                Contain Threat
               </button>
             </>
           ) : (
             <div style={{ opacity: 0.6 }}>
-              Select a threat to analyze.
+              Select a threat to view full intelligence data.
             </div>
           )}
         </div>
