@@ -1,13 +1,18 @@
 /**
- * AuthoShield Tech — Official Logo Component (DEPLOY SAFE)
+ * AuthoShield Tech — Official Logo Component (SMART NAV ENABLED)
  */
 
 import React from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { getSavedUser } from "../lib/api";
 
 export default function Logo({
   size = "md",
   variant = "full",
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const sizes = {
     sm: { icon: 28, font: 15 },
     md: { icon: 38, font: 18 },
@@ -16,18 +21,51 @@ export default function Logo({
 
   const cfg = sizes[size] || sizes.md;
 
+  function resolveHomeRoute() {
+    const user = getSavedUser();
+    if (!user?.role) return "/";
+
+    const role = String(user.role).toLowerCase();
+
+    switch (role) {
+      case "admin":
+        return "/admin";
+      case "manager":
+        return "/manager";
+      case "company":
+        return "/company";
+      case "small_company":
+        return "/small-company";
+      case "individual":
+      case "user":
+        return "/user";
+      default:
+        return "/";
+    }
+  }
+
+  function handleClick() {
+    const target = resolveHomeRoute();
+
+    if (location.pathname !== target) {
+      navigate(target);
+    }
+  }
+
   return (
     <div
       className="authoshield-logo"
+      onClick={handleClick}
       style={{
         display: "flex",
         alignItems: "center",
         gap: 12,
         userSelect: "none",
         whiteSpace: "nowrap",
+        cursor: "pointer",
       }}
     >
-      {/* Logo Image (public folder) */}
+      {/* Logo Image */}
       <img
         src="/logo.png"
         alt="AuthoShield Tech"
