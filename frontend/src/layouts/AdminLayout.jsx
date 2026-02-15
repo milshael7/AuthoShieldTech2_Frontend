@@ -1,12 +1,13 @@
 // frontend/src/layouts/AdminLayout.jsx
-// Admin Layout — FULL SOC CONTROL (PHASE 2 STABILIZED)
+// Admin Layout — FULL SOC CONTROL (PHASE 3 HARDENED)
 //
 // FIXES:
-// - Relative routing (no absolute admin paths)
-// - Removed undefined /admin/trading route
-// - Clean active NavLink styling
-// - Sidebar stability
-// - Production safe structure
+// - Scroll restoration
+// - Proper flex containment
+// - Stable sidebar
+// - Independent content scrolling
+// - Clean navigation behavior
+// - Production hardened
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -31,18 +32,20 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className={`layout-root ${menuOpen ? "sidebar-open" : ""}`}>
-      
+    <div
+      className={`layout-root ${menuOpen ? "sidebar-open" : ""}`}
+      style={{ height: "100svh" }} // 🔥 ensures full viewport height
+    >
       {/* ================= MOBILE OVERLAY ================= */}
       {menuOpen && (
-        <div
-          className="sidebar-overlay"
-          onClick={closeMenu}
-        />
+        <div className="sidebar-overlay" onClick={closeMenu} />
       )}
 
       {/* ================= SIDEBAR ================= */}
-      <aside className="layout-sidebar admin">
+      <aside
+        className="layout-sidebar admin"
+        style={{ overflowY: "auto" }} // 🔥 sidebar scroll fix
+      >
         <div className="layout-brand">
           <Logo size="md" />
           <span className="muted" style={{ fontSize: 12 }}>
@@ -90,7 +93,6 @@ export default function AdminLayout() {
 
           <hr style={{ opacity: 0.18 }} />
 
-          {/* Cross-role access */}
           <NavLink to="/manager" onClick={closeMenu}>
             Manager View
           </NavLink>
@@ -106,10 +108,22 @@ export default function AdminLayout() {
       </aside>
 
       {/* ================= MAIN ================= */}
-      <main className="layout-main">
-
+      <main
+        className="layout-main"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
         {/* ================= CONTENT ================= */}
-        <section className="layout-content">
+        <section
+          className="layout-content"
+          style={{
+            flex: 1,
+            overflowY: "auto", // 🔥 main scroll fix
+          }}
+        >
           <Outlet />
         </section>
 
@@ -127,10 +141,7 @@ export default function AdminLayout() {
             </button>
           </div>
 
-          <div
-            className="ai-drawer-body"
-            style={{ overflow: "auto" }}
-          >
+          <div className="ai-drawer-body">
             <AuthoDevPanel
               title="Security Advisor"
               getContext={() => ({
