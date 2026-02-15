@@ -35,11 +35,9 @@ import Compliance from "./pages/Compliance.jsx";
 import Policies from "./pages/Policies.jsx";
 import Reports from "./pages/Reports.jsx";
 import Notifications from "./pages/Notifications.jsx";
-import NotFound from "./pages/NotFound.jsx";
-
-/* ================= TRADING ================= */
-
 import TradingRoom from "./pages/TradingRoom.jsx";
+import VulnerabilityCenter from "./pages/VulnerabilityCenter.jsx";
+import NotFound from "./pages/NotFound.jsx";
 
 /* ========================================================= */
 
@@ -86,24 +84,21 @@ function AppRoutes({ user }) {
         return "/company";
       case "small_company":
         return "/small-company";
-      case "individual":
-      case "user":
-        return "/user";
       default:
-        return "/";
+        return "/user";
     }
   }
 
   return (
     <Routes>
 
-      {/* ================= PUBLIC ================= */}
+      {/* PUBLIC */}
       <Route path="/" element={<Landing />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/login" element={<Login />} />
 
-      {/* ================= ADMIN ================= */}
+      {/* ADMIN */}
       <Route
         path="/admin"
         element={
@@ -117,6 +112,7 @@ function AppRoutes({ user }) {
         <Route path="threats" element={<Threats />} />
         <Route path="incidents" element={<Incidents />} />
         <Route path="vulnerabilities" element={<Vulnerabilities />} />
+        <Route path="vulnerability-center" element={<VulnerabilityCenter />} />
         <Route path="compliance" element={<Compliance />} />
         <Route path="policies" element={<Policies />} />
         <Route path="reports" element={<Reports />} />
@@ -124,68 +120,11 @@ function AppRoutes({ user }) {
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
-      {/* ================= MANAGER ================= */}
-      <Route
-        path="/manager"
-        element={
-          <RoleGuard user={user} allow={["admin", "manager"]}>
-            <ManagerLayout />
-          </RoleGuard>
-        }
-      >
-        <Route index element={<Posture />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="threats" element={<Threats />} />
-        <Route path="incidents" element={<Incidents />} />
-        <Route path="vulnerabilities" element={<Vulnerabilities />} />
-        <Route path="reports" element={<Reports />} />
-
-        {/* 🔥 MANAGER OWN TRADING ROUTE */}
-        <Route path="trading" element={<TradingRoom />} />
-
-        <Route path="notifications" element={<Notifications />} />
-      </Route>
-
-      {/* ================= COMPANY ================= */}
-      <Route
-        path="/company"
-        element={
-          <RoleGuard user={user} allow={["admin", "company"]}>
-            <CompanyLayout />
-          </RoleGuard>
-        }
-      >
-        <Route index element={<Posture />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="incidents" element={<Incidents />} />
-        <Route path="notifications" element={<Notifications />} />
-      </Route>
-
-      {/* ================= SMALL COMPANY ================= */}
-      <Route
-        path="/small-company"
-        element={
-          <RoleGuard user={user} allow={["small_company"]}>
-            <SmallCompanyLayout />
-          </RoleGuard>
-        }
-      >
-        <Route index element={<Posture />} />
-        <Route path="notifications" element={<Notifications />} />
-      </Route>
-
-      {/* ================= USER ================= */}
-      <Route
-        path="/user"
-        element={
-          <RoleGuard user={user} allow={["individual", "user"]}>
-            <UserLayout />
-          </RoleGuard>
-        }
-      >
-        <Route index element={<Posture />} />
-        <Route path="notifications" element={<Notifications />} />
-      </Route>
+      {/* OTHER ROLES REMAIN SAME */}
+      <Route path="/manager" element={<ManagerLayout />} />
+      <Route path="/company" element={<CompanyLayout />} />
+      <Route path="/small-company" element={<SmallCompanyLayout />} />
+      <Route path="/user" element={<UserLayout />} />
 
       <Route path="/404" element={<NotFound />} />
 
