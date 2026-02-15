@@ -3,6 +3,10 @@ import { api } from "../lib/api.js";
 
 /* ================= HELPERS ================= */
 
+function safeArray(v) {
+  return Array.isArray(v) ? v : [];
+}
+
 function pct(n) {
   const x = Number(n);
   if (!Number.isFinite(x)) return 0;
@@ -10,40 +14,27 @@ function pct(n) {
 }
 
 function money(v) {
-  if (!Number.isFinite(Number(v))) return "—";
-  return `$${Number(v).toFixed(2)}`;
-}
-
-function safeArray(v) {
-  return Array.isArray(v) ? v : [];
+  if (v == null) return "—";
+  return `$${Number(v).toLocaleString()}`;
 }
 
 /* ================= PAGE ================= */
 
 export default function Reports() {
   const [summary, setSummary] = useState({});
-  const [checks, setChecks] = useState([]);
-  const [trading, setTrading] = useState({});
+  const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
 
   async function load() {
     setLoading(true);
     try {
-      const [s, c, t] = await Promise.all([
-        api.postureSummary().catch(() => ({})),
-        api.postureChecks().catch(() => ({})),
-        fetch("/api/trading/paper/snapshot")
-          .then(r => r.json())
-          .catch(() => ({})),
+      const [s, i] = await Promise.all([
+        api.reportSummary().catch(() => ({})),
+        api.incidents().catch(() => ({})),
       ]);
 
       setSummary(s || {});
-      setChecks(safeArray(c?.checks));
-      setTrading(t?.snapshot || {});
-    } catch {
-      setSummary({});
-      setChecks([]);
-      setTrading({});
+      setIncidents(safeArray(i?.incidents));
     } finally {
       setLoading(false);
     }
@@ -53,114 +44,173 @@ export default function Reports() {
     load();
   }, []);
 
-  const securityScore = useMemo(() => {
-    if (!checks.length) return 0;
-    const val = checks.reduce((s, c) => {
-      if (c?.status === "ok") return s + 1;
-      if (c?.status === "warn") return s + 0.5;
-      return s;
-    }, 0);
-    return Math.round((val / checks.length) * 100);
-  }, [checks]);
+  const incidentTrend = useMemo(() => {
+    const open = incidents.filter(i => i?.status === "open").length;
+    const resolved = incidents.filter(i => i?.status === "resolved").length;
+    return { open, resolved };
+  }, [incidents]);
 
-  const highRisk = checks.filter(c => c?.status !== "ok").length;
+  const riskScore = pct(summary?.riskScore ?? 0);
+  const complianceScore = pct(summary?.complianceScore ?? 0);
 
   /* ================= UI ================= */
 
   return (
     <div style={{ padding: 32, display: "flex", flexDirection: "column", gap: 28 }}>
 
-      {/* ================= HEADER ================= */}
+      {/* HEADER */}
       <div>
-        <h2 style={{ margin: 0 }}>Executive Intelligence Overview</h2>
+        <h2 style={{ margin: 0 }}>Executive Analytics & Reporting</h2>
         <div style={{ fontSize: 13, opacity: 0.6 }}>
-          High-level security & trading performance summary
+          Enterprise-level visibility & strategic oversight
         </div>
       </div>
 
-      {/* ================= SCORE STRIP ================= */}
+      {/* SUMMARY STRIP */}
       <div
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))",
-          gap: 20,
+          gap: 18
         }}
       >
         <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Security Score</div>
-          <div style={{ fontSize: 30, fontWeight: 800 }}>
-            {pct(securityScore)}%
+          <div style={{ fontSize: 12, opacity: 0.6 }}>
+            Enterprise Risk Score
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>
+            {riskScore}%
           </div>
         </div>
 
         <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>High-Risk Controls</div>
-          <div style={{ fontSize: 30, fontWeight: 800 }}>
-            {highRisk}
+          <div style={{ fontSize: 12, opacity: 0.6 }}>
+            Compliance Maturity
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>
+            {complianceScore}%
           </div>
         </div>
 
         <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Trading Equity</div>
-          <div style={{ fontSize: 30, fontWeight: 800 }}>
-            {money(trading?.equity)}
+          <div style={{ fontSize: 12, opacity: 0.6 }}>
+            Total Incidents
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>
+            {incidents.length}
           </div>
         </div>
 
         <div className="card">
-          <div style={{ fontSize: 12, opacity: 0.6 }}>Active Positions</div>
-          <div style={{ fontSize: 30, fontWeight: 800 }}>
-            {trading?.position ? 1 : 0}
+          <div style={{ fontSize: 12, opacity: 0.6 }}>
+            Estimated Financial Exposure
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>
+            {money(summary?.financialExposure)}
           </div>
         </div>
       </div>
 
-      {/* ================= STRATEGIC SUMMARY ================= */}
-      <div className="card">
-        <h3>Strategic Risk Summary</h3>
+      {/* MAIN GRID */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 1fr",
+          gap: 24
+        }}
+      >
 
-        {loading ? (
-          <div>Analyzing...</div>
-        ) : (
-          <>
-            <p style={{ opacity: 0.85 }}>
-              Overall security posture is currently operating at{" "}
-              <strong>{pct(securityScore)}%</strong>.
-              {securityScore >= 85
-                ? " Risk exposure is controlled."
-                : securityScore >= 65
-                ? " Moderate exposure detected."
-                : " Elevated exposure requires executive attention."}
-            </p>
+        {/* ================= INCIDENT TREND ================= */}
+        <div className="card">
+          <h3>Incident Distribution</h3>
 
-            <p style={{ opacity: 0.85 }}>
-              {highRisk > 0
-                ? `${highRisk} security controls require review.`
-                : "All critical security controls are stable."}
-            </p>
+          <div style={{ marginTop: 20 }}>
 
-            <p style={{ opacity: 0.85 }}>
-              Trading equity currently stands at{" "}
-              <strong>{money(trading?.equity)}</strong>.
-              {trading?.equity > 0
-                ? " Portfolio is operational."
-                : " Trading engine inactive or initializing."}
-            </p>
-          </>
-        )}
-      </div>
+            <div style={{ marginBottom: 14 }}>
+              <strong>Open Incidents</strong>
+              <div
+                style={{
+                  marginTop: 6,
+                  height: 8,
+                  background: "rgba(255,255,255,.08)",
+                  borderRadius: 999,
+                  overflow: "hidden"
+                }}
+              >
+                <div
+                  style={{
+                    width: `${pct(
+                      (incidentTrend.open / (incidents.length || 1)) * 100
+                    )}%`,
+                    height: "100%",
+                    background: "linear-gradient(90deg,#ff5a5f,#ffd166)"
+                  }}
+                />
+              </div>
+            </div>
 
-      {/* ================= ACTION PANEL ================= */}
-      <div className="card">
-        <h3>Executive Actions</h3>
+            <div>
+              <strong>Resolved Incidents</strong>
+              <div
+                style={{
+                  marginTop: 6,
+                  height: 8,
+                  background: "rgba(255,255,255,.08)",
+                  borderRadius: 999,
+                  overflow: "hidden"
+                }}
+              >
+                <div
+                  style={{
+                    width: `${pct(
+                      (incidentTrend.resolved / (incidents.length || 1)) * 100
+                    )}%`,
+                    height: "100%",
+                    background: "linear-gradient(90deg,#2bd576,#5EC6FF)"
+                  }}
+                />
+              </div>
+            </div>
 
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-          <button className="btn">Generate PDF Report</button>
-          <button className="btn">Export Security Metrics</button>
-          <button className="btn">Export Trading Metrics</button>
-          <button className="btn">Schedule Board Summary</button>
+          </div>
         </div>
+
+        {/* ================= STRATEGIC NOTES ================= */}
+        <div className="card">
+          <h3>Strategic Insights</h3>
+
+          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+
+            <div>
+              <strong>Risk Trajectory</strong>
+              <div style={{ fontSize: 13, opacity: 0.7 }}>
+                Monitor long-term enterprise exposure trends.
+              </div>
+            </div>
+
+            <div>
+              <strong>Compliance Readiness</strong>
+              <div style={{ fontSize: 13, opacity: 0.7 }}>
+                Assess preparedness for audits & regulatory review.
+              </div>
+            </div>
+
+            <div>
+              <strong>Operational Stability</strong>
+              <div style={{ fontSize: 13, opacity: 0.7 }}>
+                Evaluate response effectiveness & resolution speed.
+              </div>
+            </div>
+
+            <button className="btn" onClick={load} disabled={loading}>
+              {loading ? "Refreshing…" : "Refresh Report"}
+            </button>
+
+          </div>
+        </div>
+
       </div>
+
     </div>
   );
 }
