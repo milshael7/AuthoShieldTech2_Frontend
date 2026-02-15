@@ -47,7 +47,7 @@ export default function Posture() {
 
       setSummary(s && typeof s === "object" ? s : {});
       setChecks(safeArray(c?.checks));
-    } catch (e) {
+    } catch {
       setErr("Failed to load security posture");
       setSummary({});
       setChecks([]);
@@ -75,44 +75,20 @@ export default function Posture() {
     [summary]
   );
 
-  const coverage = useMemo(
-    () => [
-      { name: "Endpoint Security", val: pct(score * 0.92) },
-      { name: "Identity & Access", val: pct(score * 0.85) },
-      { name: "Email Protection", val: pct(score * 0.78) },
-      { name: "Cloud Security", val: pct(score * 0.81) },
-      { name: "Data Protection", val: pct(score * 0.74) },
-      { name: "Dark Web Monitoring", val: pct(score * 0.69) },
-    ],
-    [score]
-  );
-
-  const radarCoverage = useMemo(
-    () =>
-      coverage.map((c) => ({
-        name: c.name,
-        coverage: c.val,
-      })),
-    [coverage]
-  );
-
   const signals = useMemo(() => {
     const safeChecks = safeArray(checks);
     return [
       {
         label: "Active Threats",
         value: safeChecks.filter((c) => c?.status === "warn").length,
-        tone: "warn",
       },
       {
         label: "High-Risk Assets",
         value: summary.highRiskAssets ?? 0,
-        tone: "bad",
       },
       {
         label: "Controls Degraded",
         value: safeChecks.filter((c) => c?.status && c.status !== "ok").length,
-        tone: "warn",
       },
     ];
   }, [checks, summary]);
@@ -120,121 +96,143 @@ export default function Posture() {
   /* ================= UI ================= */
 
   return (
-    <div className="postureWrap">
+    <div style={{ padding: 28, display: "flex", flexDirection: "column", gap: 28 }}>
+
       {/* ================= KPI STRIP ================= */}
-      <div className="kpiGrid">
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+          gap: 18,
+        }}
+      >
         {kpis.map((k) => (
-          <div key={k.label} className="kpiCard">
-            <small>{k.label}</small>
-            <b>{k.value}</b>
+          <div key={k.label} className="card">
+            <div style={{ fontSize: 12, opacity: 0.7 }}>{k.label}</div>
+            <div style={{ fontSize: 26, fontWeight: 800 }}>{k.value}</div>
           </div>
         ))}
       </div>
 
-      {/* ================= MAIN GRID ================= */}
-      <div className="postureGrid">
-        {/* ===== LEFT: SECURITY POSTURE ===== */}
-        <section className="postureCard">
-          <div className="postureTop">
+      {/* ================= MAIN DASHBOARD GRID ================= */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 1fr",
+          gap: 24,
+        }}
+      >
+
+        {/* ================= LEFT PANEL ================= */}
+        <div className="card" style={{ padding: 24 }}>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <h2>Security Posture</h2>
-              <small>
-                Scope:{" "}
-                {safeStr(
-                  typeof summary.scope === "object"
-                    ? summary.scope?.type
-                    : null
-                )}{" "}
-                • Last scan just now
-              </small>
-            </div>
-
-            <div className="postureScore">
-              <div className="scoreRing" style={{ "--val": pct(score) }}>
-                {pct(score)}%
-              </div>
-              <div className="scoreMeta">
-                <b>Overall Score</b>
-                <span>{loading ? "Analyzing…" : "Operational"}</span>
+              <h2 style={{ margin: 0 }}>Security Posture</h2>
+              <div style={{ fontSize: 13, opacity: 0.6 }}>
+                Enterprise operational state
               </div>
             </div>
+
+            {/* SCORE RING */}
+            <div
+              style={{
+                width: 120,
+                height: 120,
+                borderRadius: "50%",
+                background: `conic-gradient(#5EC6FF ${pct(score) * 3.6}deg, rgba(255,255,255,0.08) 0deg)`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 22,
+                fontWeight: 800,
+              }}
+            >
+              {pct(score)}%
+            </div>
           </div>
 
-          <div className="meter">
-            <div style={{ width: `${pct(score)}%` }} />
+          {/* METER */}
+          <div
+            style={{
+              marginTop: 20,
+              height: 8,
+              background: "rgba(255,255,255,0.08)",
+              borderRadius: 999,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${pct(score)}%`,
+                height: "100%",
+                background: "linear-gradient(90deg,#5EC6FF,#7aa2ff)",
+              }}
+            />
           </div>
 
-          {err && <p className="error">{err}</p>}
+          {/* SIGNALS */}
+          <div style={{ marginTop: 28 }}>
+            <h3>Security Signals</h3>
 
-          {/* ===== SECURITY SIGNALS ===== */}
-          <h3 style={{ marginTop: 22 }}>Security Signals</h3>
-
-          <div className="list">
-            {signals.map((s) => (
-              <li key={s.label}>
-                <span className={`dot ${s.tone}`} />
-                <div>
-                  <b>{s.label}</b>
-                  <small>{s.value} detected</small>
+            <div style={{ display: "grid", gap: 14 }}>
+              {signals.map((s) => (
+                <div
+                  key={s.label}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    padding: 14,
+                    borderRadius: 12,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <span>{s.label}</span>
+                  <strong>{s.value}</strong>
                 </div>
-              </li>
-            ))}
-          </div>
-
-          {/* ===== COVERAGE ===== */}
-          <h3 style={{ marginTop: 24 }}>
-            Coverage by Security Control
-          </h3>
-
-          <CoverageRadar data={radarCoverage} />
-
-          <div className="coverGrid" style={{ marginTop: 20 }}>
-            {coverage.map((x) => (
-              <div key={x.name}>
-                <div className="coverItemTop">
-                  <b>{x.name}</b>
-                  <small>{x.val}%</small>
-                </div>
-                <div className="coverBar">
-                  <div style={{ width: `${x.val}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ===== RIGHT: INSIGHTS ===== */}
-        <aside className="postureCard">
-          <h3>Analyst Insights</h3>
-          <p className="muted">
-            Highest priority risks based on exposure and impact.
-          </p>
-
-          <ul className="list">
-            {safeArray(checks)
-              .slice(0, 6)
-              .map((c, i) => (
-                <li key={c?.id || i}>
-                  <span className={`dot ${c?.status || "info"}`} />
-                  <div>
-                    <b>{safeStr(c?.title, "Security Signal")}</b>
-                    <small>{safeStr(c?.message, "Details unavailable")}</small>
-                  </div>
-                </li>
               ))}
-          </ul>
+            </div>
+          </div>
 
-          <button onClick={load} disabled={loading}>
+          {err && (
+            <div style={{ marginTop: 18, color: "#ff4d4d" }}>{err}</div>
+          )}
+        </div>
+
+        {/* ================= RIGHT PANEL ================= */}
+        <div className="card" style={{ padding: 24 }}>
+          <h3>Analyst Insights</h3>
+
+          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+            {safeArray(checks)
+              .slice(0, 5)
+              .map((c, i) => (
+                <div
+                  key={c?.id || i}
+                  style={{
+                    padding: 12,
+                    borderRadius: 10,
+                    background: "rgba(255,255,255,0.05)",
+                  }}
+                >
+                  <strong>{safeStr(c?.title, "Security Signal")}</strong>
+                  <div style={{ fontSize: 13, opacity: 0.7 }}>
+                    {safeStr(c?.message, "Details unavailable")}
+                  </div>
+                </div>
+              ))}
+          </div>
+
+          <button
+            onClick={load}
+            disabled={loading}
+            className="btn"
+            style={{ marginTop: 20 }}
+          >
             {loading ? "Refreshing…" : "Run New Scan"}
           </button>
-
-          <p className="muted" style={{ marginTop: 14 }}>
-            Ask the assistant:
-            <br />• “What is my biggest risk right now?”
-            <br />• “Which control needs attention?”
-            <br />• “Where should I start remediation?”
-          </p>
-        </aside>
+        </div>
       </div>
     </div>
   );
