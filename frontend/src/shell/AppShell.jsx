@@ -1,5 +1,8 @@
-// frontend/src/shell/AppShell.jsx
-// AutoShield Tech — Application Shell (CRASH SAFE HARDENED)
+/* =========================================================
+   AutoShield Tech — Application Shell (SCROLL FIXED)
+   Clean Global Layout
+   Single Scroll Authority
+   ========================================================= */
 
 import React from "react";
 import BackgroundLayer from "../components/BackgroundLayer.jsx";
@@ -8,7 +11,7 @@ import TopHeader from "../components/TopHeader.jsx";
 import "../styles/background.css";
 
 /* =========================================================
-   SAFE WRAPPER (prevents visual layers from crashing app)
+   SAFE WRAPPER
 ========================================================= */
 
 class SafeRender extends React.Component {
@@ -32,7 +35,7 @@ class SafeRender extends React.Component {
 }
 
 /* =========================================================
-   APP SHELL
+   APP SHELL (GLOBAL FRAME)
 ========================================================= */
 
 export default function AppShell({ children }) {
@@ -40,11 +43,9 @@ export default function AppShell({ children }) {
     <div
       className="app-shell"
       style={{
-        position: "relative",
         minHeight: "100svh",
         width: "100%",
         backgroundColor: "#0B0E14",
-        isolation: "isolate",
         display: "flex",
         flexDirection: "column",
       }}
@@ -93,15 +94,14 @@ export default function AppShell({ children }) {
         </SafeRender>
       </div>
 
-      {/* ===== APPLICATION UI ===== */}
+      {/* ===== APPLICATION CONTENT ===== */}
       <div
         className="app-shell-content"
         style={{
           position: "relative",
           zIndex: 10,
-          flex: 1,
           width: "100%",
-          overflow: "auto",
+          flex: 1,
         }}
       >
         {children}
