@@ -1,15 +1,12 @@
 /* =========================================================
-   AUTOSHIELD ENTERPRISE LAYOUT — FULL LOCKED VERSION
-   + Collapsible AI Dock
-   + ChatGPT-style Advisor UI
+   AUTOSHIELD ENTERPRISE LAYOUT — MASTER LOCKED BUILD
+   Production Stable
    ========================================================= */
 
 .layout-root{
   display:flex;
   min-height:100vh;
   width:100%;
-  position:relative;
-  overflow:visible;
   background:#0b0f1a;
   color:#eaf1ff;
 }
@@ -25,7 +22,7 @@
   flex-direction:column;
   gap:18px;
   flex-shrink:0;
-  backdrop-filter: blur(10px);
+  backdrop-filter:blur(10px);
 }
 
 .layout-nav{
@@ -35,7 +32,6 @@
 }
 
 .layout-nav a{
-  display:block;
   padding:10px 14px;
   border-radius:8px;
   text-decoration:none;
@@ -73,10 +69,8 @@
 
 .layout-content{
   padding:28px;
-  overflow-x:auto;
-  overflow-y:auto;
+  overflow:auto;
   min-width:0;
-  max-width:100%;
 }
 
 /* ================= CARDS ================= */
@@ -116,17 +110,17 @@
 .enterprise-ai-panel{
   position:relative;
   width:380px;
-  display:flex;
-  flex-direction:column;
+  min-width:56px;
   border-left:1px solid rgba(255,255,255,.08);
   background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(0,0,0,.45));
-  backdrop-filter: blur(10px);
-  transition: width .22s ease;
-  min-width:56px;
+  backdrop-filter:blur(10px);
+  display:flex;
+  flex-direction:column;
+  transition:width .25s ease;
 }
 
 .enterprise-ai-panel.collapsed{
-  width:56px;
+  width:40px;
 }
 
 .enterprise-ai-inner{
@@ -139,44 +133,39 @@
   display:none;
 }
 
-/* Edge tab */
+/* Edge Toggle */
+
 .advisor-tab{
   position:absolute;
   left:-1px;
-  top:50%;
-  transform:translate(-100%, -50%);
+  top:20px;
+  transform:translateX(-100%);
   border:1px solid rgba(255,255,255,.12);
-  background:rgba(0,0,0,.45);
-  color:#cfd8ff;
-  padding:10px 10px;
+  background:rgba(0,0,0,.55);
+  color:#eaf1ff;
+  padding:10px 14px;
   border-radius:10px 0 0 10px;
   cursor:pointer;
-  display:flex;
-  align-items:center;
-  gap:8px;
-  backdrop-filter: blur(10px);
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.4px;
+  backdrop-filter:blur(10px);
+  transition:.2s ease;
 }
 
 .advisor-tab:hover{
-  background:rgba(120,160,255,.12);
-  border-color:rgba(120,160,255,.35);
-}
-
-.advisor-tab-text{
-  font-size:12px;
-  font-weight:700;
-  letter-spacing:.3px;
-  white-space:nowrap;
+  background:rgba(120,160,255,.14);
+  border-color:rgba(120,160,255,.45);
 }
 
 /* =========================================================
-   ADVISOR UI — CHATGPT-LIKE
+   ADVISOR UI
    ========================================================= */
 
 .advisor-wrap{
-  height:100%;
   display:flex;
   flex-direction:column;
+  height:100%;
   min-height:0;
 }
 
@@ -190,7 +179,6 @@
 
 .advisor-feed{
   flex:1;
-  min-height:0;
   overflow:auto;
   padding:16px;
   display:flex;
@@ -201,14 +189,14 @@
 .advisor-row{
   display:flex;
   flex-direction:column;
-  gap:8px;
+  gap:6px;
 }
 
 .advisor-row.user{ align-items:flex-end; }
 .advisor-row.ai{ align-items:flex-start; }
 
 .advisor-bubble{
-  max-width:88%;
+  max-width:85%;
   padding:12px 14px;
   border-radius:14px;
   font-size:14px;
@@ -225,9 +213,10 @@
 .advisor-row.ai .advisor-bubble{
   background:rgba(255,255,255,.05);
   border:1px solid rgba(255,255,255,.08);
-  color:#eaf1ff;
   border-top-left-radius:6px;
 }
+
+/* Message actions */
 
 .advisor-actions{
   display:flex;
@@ -237,38 +226,41 @@
 
 .advisor-actions button{
   background:transparent;
-  border:1px solid rgba(255,255,255,.10);
+  border:1px solid rgba(255,255,255,.12);
   color:#cfd8ff;
   padding:6px 8px;
   border-radius:8px;
   cursor:pointer;
-  transition:.15s ease;
   font-size:12px;
+  transition:.15s ease;
 }
 
 .advisor-actions button:hover{
-  background:rgba(120,160,255,.14);
-  border-color:rgba(120,160,255,.35);
+  background:rgba(120,160,255,.15);
+  border-color:rgba(120,160,255,.4);
 }
 
 .advisor-actions button.active{
-  background:rgba(120,160,255,.22);
-  border-color:rgba(120,160,255,.55);
+  background:rgba(120,160,255,.25);
+  border-color:rgba(120,160,255,.6);
 }
 
 .advisor-ts{
   font-size:10px;
-  opacity:.45;
+  opacity:.4;
 }
 
-/* INPUT BAR (mic left, send right) */
+/* =========================================================
+   INPUT BAR
+   ========================================================= */
+
 .advisor-inputBar{
   border-top:1px solid rgba(255,255,255,.06);
   padding:12px;
   display:flex;
   gap:10px;
   align-items:flex-end;
-  background:rgba(0,0,0,.18);
+  background:rgba(0,0,0,.25);
 }
 
 .advisor-micBtn,
@@ -276,18 +268,18 @@
   width:44px;
   height:44px;
   border-radius:12px;
-  border:1px solid rgba(255,255,255,.10);
-  background:rgba(0,0,0,.35);
-  color:#eaf1ff;
-  cursor:pointer;
-  transition:.15s ease;
+  border:1px solid rgba(255,255,255,.15);
+  background:rgba(0,0,0,.4);
+  color:#fff;
   font-weight:800;
+  cursor:pointer;
+  transition:.2s ease;
 }
 
 .advisor-micBtn:hover,
 .advisor-sendBtn:hover{
-  background:rgba(120,160,255,.12);
-  border-color:rgba(120,160,255,.35);
+  background:rgba(120,160,255,.15);
+  border-color:rgba(120,160,255,.5);
 }
 
 .advisor-sendBtn:disabled{
@@ -298,8 +290,6 @@
 .advisor-inputCenter{
   flex:1;
   position:relative;
-  display:flex;
-  align-items:center;
 }
 
 .advisor-textarea{
@@ -308,58 +298,46 @@
   max-height:140px;
   resize:none;
   border-radius:12px;
-  border:1px solid rgba(255,255,255,.10);
-  background:rgba(0,0,0,.35);
+  border:1px solid rgba(255,255,255,.15);
+  background:rgba(0,0,0,.45);
   color:#fff;
-  padding:12px 12px;
+  padding:12px;
+  padding-right:72px;
   outline:none;
-  line-height:1.4;
-  padding-right:72px; /* space for bars overlay */
 }
 
 .advisor-textarea:focus{
-  border-color:rgba(120,160,255,.45);
+  border-color:rgba(120,160,255,.5);
 }
 
-/* Voice bars (center-right overlay like ChatGPT vibe) */
+/* Voice bars */
+
 .advisor-bars{
   position:absolute;
-  right:16px;
+  right:18px;
+  bottom:14px;
   display:flex;
   gap:4px;
-  align-items:flex-end;
   height:16px;
-  opacity:.9;
+  align-items:flex-end;
 }
 
 .advisor-bars span{
   width:3px;
-  border-radius:999px;
   background:#5EC6FF;
-  animation: advWave .9s infinite ease-in-out;
+  border-radius:999px;
+  animation:advWave .9s infinite ease-in-out;
 }
 
-.advisor-bars span:nth-child(1){ animation-delay:0s; }
-.advisor-bars span:nth-child(2){ animation-delay:.12s; }
-.advisor-bars span:nth-child(3){ animation-delay:.24s; }
-.advisor-bars span:nth-child(4){ animation-delay:.36s; }
-.advisor-bars span:nth-child(5){ animation-delay:.48s; }
+.advisor-bars span:nth-child(1){animation-delay:0s;}
+.advisor-bars span:nth-child(2){animation-delay:.1s;}
+.advisor-bars span:nth-child(3){animation-delay:.2s;}
+.advisor-bars span:nth-child(4){animation-delay:.3s;}
+.advisor-bars span:nth-child(5){animation-delay:.4s;}
 
 @keyframes advWave{
-  0%,100%{ height:4px; }
-  50%{ height:16px; }
+  0%,100%{height:4px;}
+  50%{height:16px;}
 }
 
-.advisor-loading{
-  padding:10px 14px;
-  font-size:12px;
-  opacity:.6;
-  border-top:1px solid rgba(255,255,255,.06);
-}
-
-/* =========================================================
-   TRADING ROOM (kept)
-   ========================================================= */
-
-.trading-room{ display:flex; flex-direction:column; gap:28px; }
-.trading-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px; }
+/* ========================================================= */
