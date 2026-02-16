@@ -1,41 +1,32 @@
 import React, { useEffect, useRef, useState } from "react";
 import { readAloud } from "./ReadAloud";
 
-/* ================= SAFE STORAGE ================= */
+/* ================= STORAGE ================= */
 
-function safeLocalGet(key) {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+function safeGet(key) {
+  try { return localStorage.getItem(key); }
+  catch { return null; }
 }
 
-function safeLocalSet(key, value) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {}
+function safeSet(key, value) {
+  try { localStorage.setItem(key, value); }
+  catch {}
 }
 
 function getRoomId() {
   if (typeof window === "undefined") return "root";
-  const path = window.location.pathname.replace(/\/+$/, "");
-  return path || "root";
+  return window.location.pathname.replace(/\/+$/, "") || "root";
 }
 
-function getSavedUserLocal() {
-  try {
-    return JSON.parse(localStorage.getItem("as_user") || "null");
-  } catch {
-    return null;
-  }
+function getUser() {
+  try { return JSON.parse(localStorage.getItem("as_user") || "null"); }
+  catch { return null; }
 }
 
 function getStorageKey() {
-  const user = getSavedUserLocal();
-  const tenantId = user?.companyId || user?.company || "unknown";
-  const roomId = getRoomId();
-  return `authodev.panel.${tenantId}.${roomId}`;
+  const user = getUser();
+  const tenant = user?.companyId || user?.company || "unknown";
+  return `authodev.panel.${tenant}.${getRoomId()}`;
 }
 
 /* ================= COMPONENT ================= */
@@ -43,9 +34,8 @@ function getStorageKey() {
 export default function AuthoDevPanel({
   title = "Security Advisor",
   endpoint = "/api/ai/chat",
-  getContext,
+  getContext
 }) {
-  const user = getSavedUserLocal();
   const storageKey = getStorageKey();
 
   const [messages, setMessages] = useState([]);
@@ -53,25 +43,23 @@ export default function AuthoDevPanel({
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
 
-  const bottomRef = useRef(null);
   const recognitionRef = useRef(null);
+  const bottomRef = useRef(null);
 
-  /* ================= LOAD STORED MESSAGES ================= */
+  /* ================= LOAD / SAVE ================= */
 
   useEffect(() => {
-    const raw = safeLocalGet(storageKey);
+    const raw = safeGet(storageKey);
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
-        setMessages(Array.isArray(parsed?.messages) ? parsed.messages : []);
-      } catch {
-        setMessages([]);
-      }
+        setMessages(parsed?.messages || []);
+      } catch {}
     }
   }, [storageKey]);
 
   useEffect(() => {
-    safeLocalSet(storageKey, JSON.stringify({ messages }));
+    safeSet(storageKey, JSON.stringify({ messages }));
   }, [messages, storageKey]);
 
   useEffect(() => {
@@ -82,20 +70,19 @@ export default function AuthoDevPanel({
 
   function startListening() {
     if (!("webkitSpeechRecognition" in window)) {
-      alert("Voice input not supported in this browser.");
+      alert("Voice not supported in this browser.");
       return;
     }
 
     const recognition = new window.webkitSpeechRecognition();
     recognition.lang = "en-US";
     recognition.interimResults = false;
-    recognition.continuous = false;
 
     recognition.onstart = () => setListening(true);
     recognition.onend = () => setListening(false);
 
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
       setInput(transcript);
     };
 
@@ -103,23 +90,29 @@ export default function AuthoDevPanel({
     recognitionRef.current = recognition;
   }
 
-  /* ================= SEND MESSAGE ================= */
+  function stopListening() {
+    recognitionRef.current?.stop();
+    setListening(false);
+  }
 
-  async function sendMessage() {
-    if (!input.trim() || loading) return;
+  /* ================= SEND ================= */
 
-    const userMsg = {
-      role: "user",
-      text: input.trim(),
-      ts: new Date().toLocaleTimeString(),
-    };
+  async function sendMessage(regenerateText = null) {
+    const messageText = regenerateText || input.trim();
+    if (!messageText || loading) return;
 
-    setMessages((m) => [...m, userMsg]);
-    setInput("");
+    if (!regenerateText) {
+      setMessages(m => [
+        ...m,
+        { role: "user", text: messageText, ts: new Date().toLocaleTimeString() }
+      ]);
+      setInput("");
+    }
+
     setLoading(true);
 
     try {
-      const pageContext =
+      const context =
         typeof getContext === "function" ? getContext() : {};
 
       const res = await fetch(endpoint, {
@@ -127,80 +120,120 @@ export default function AuthoDevPanel({
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          message: userMsg.text,
-          context: pageContext,
-        }),
+          message: messageText,
+          context
+        })
       });
 
       const data = await res.json().catch(() => ({}));
 
-      const aiMsg = {
-        role: "ai",
-        text: data?.reply || "No response available.",
-        speakText: data?.speakText || data?.reply,
-        ts: new Date().toLocaleTimeString(),
-      };
-
-      setMessages((m) => [...m, aiMsg]);
-    } catch {
-      setMessages((m) => [
+      setMessages(m => [
         ...m,
         {
           role: "ai",
-          text: "Assistant temporarily unavailable.",
-          speakText: "Assistant temporarily unavailable.",
-          ts: new Date().toLocaleTimeString(),
-        },
+          text: data?.reply || "No response available.",
+          speakText: data?.speakText || data?.reply,
+          reaction: null,
+          ts: new Date().toLocaleTimeString()
+        }
+      ]);
+
+    } catch {
+      setMessages(m => [
+        ...m,
+        {
+          role: "ai",
+          text: "Assistant unavailable.",
+          speakText: "Assistant unavailable.",
+          reaction: null,
+          ts: new Date().toLocaleTimeString()
+        }
       ]);
     } finally {
       setLoading(false);
     }
   }
 
+  /* ================= MESSAGE ACTIONS ================= */
+
+  function copyText(text) {
+    navigator.clipboard.writeText(text);
+  }
+
+  function shareText(text) {
+    if (navigator.share) {
+      navigator.share({ text });
+    } else {
+      copyText(text);
+      alert("Copied (sharing not supported).");
+    }
+  }
+
+  function setReaction(index, type) {
+    setMessages(m =>
+      m.map((msg, i) =>
+        i === index ? { ...msg, reaction: type } : msg
+      )
+    );
+  }
+
   /* ================= UI ================= */
 
   return (
-    <div className="advisor-dock">
+    <div className="advisor-container">
 
-      {/* HEADER */}
       <div className="advisor-header">
-        <div>
-          <strong>{title}</strong>
-          <div className="advisor-sub">Enterprise AI Assistant</div>
-        </div>
+        <strong>{title}</strong>
       </div>
 
-      {/* MESSAGES */}
       <div className="advisor-messages">
         {messages.map((m, i) => (
           <div key={i} className={`advisor-bubble ${m.role}`}>
+
             <div className="advisor-text">{m.text}</div>
 
             {m.role === "ai" && (
-              <div className="advisor-controls">
+              <div className="advisor-actions">
+
+                <button onClick={() => readAloud(m.speakText)}>🔊</button>
+                <button onClick={() => copyText(m.text)}>📋</button>
+                <button onClick={() => shareText(m.text)}>📤</button>
+
                 <button
-                  className="icon-btn"
-                  onClick={() => readAloud(m.speakText)}
+                  className={m.reaction === "up" ? "active" : ""}
+                  onClick={() => setReaction(i, "up")}
                 >
-                  🔊
+                  👍
                 </button>
+
+                <button
+                  className={m.reaction === "down" ? "active" : ""}
+                  onClick={() => setReaction(i, "down")}
+                >
+                  👎
+                </button>
+
+                <button onClick={() => sendMessage(m.text)}>↻</button>
+
               </div>
             )}
 
             <div className="advisor-time">{m.ts}</div>
+
           </div>
         ))}
+
         <div ref={bottomRef} />
       </div>
 
-      {/* INPUT */}
       <div className="advisor-input">
+
         <textarea
-          placeholder="Type or use voice…"
+          placeholder="Type your message..."
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={e => setInput(e.target.value)}
           rows={2}
-          onKeyDown={(e) => {
+          onKeyDown={e => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               sendMessage();
@@ -208,20 +241,21 @@ export default function AuthoDevPanel({
           }}
         />
 
-        <div className="advisor-actions">
-          <button
-            className={`icon-btn ${listening ? "active" : ""}`}
-            onClick={startListening}
-          >
-            🎙
+        <div className="advisor-input-actions">
+
+          {!listening ? (
+            <button onClick={startListening}>🎙</button>
+          ) : (
+            <button onClick={stopListening}>⏹</button>
+          )}
+
+          <button onClick={() => sendMessage()}>
+            ➤
           </button>
 
-          <button onClick={sendMessage} disabled={loading}>
-            {loading ? "..." : "Send"}
-          </button>
         </div>
-      </div>
 
+      </div>
     </div>
   );
 }
