@@ -1,8 +1,9 @@
 // frontend/src/layouts/AdminLayout.jsx
-// Admin Layout — FULL SOC CONTROL (PHASE 4 HARDENED)
-// Includes Vulnerability Center
+// Admin Layout — Enterprise SOC Architecture (FINAL STRUCTURE)
+// Fixed right AI dock
+// No floating toggle
+// Clean professional layout
 // Scroll-safe
-// Clean navigation
 // Production ready
 
 import React, { useState } from "react";
@@ -15,7 +16,6 @@ import "../styles/layout.css";
 export default function AdminLayout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
 
   function logout() {
     clearToken();
@@ -28,7 +28,7 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className={`layout-root ${menuOpen ? "sidebar-open" : ""}`}>
+    <div className={`layout-root enterprise ${menuOpen ? "sidebar-open" : ""}`}>
       {menuOpen && (
         <div className="sidebar-overlay" onClick={closeMenu} />
       )}
@@ -38,7 +38,7 @@ export default function AdminLayout() {
         <div className="layout-brand">
           <Logo size="md" />
           <span className="muted" style={{ fontSize: 12 }}>
-            Admin SOC
+            Admin Control
           </span>
         </div>
 
@@ -49,7 +49,7 @@ export default function AdminLayout() {
           </NavLink>
 
           <NavLink to="assets" onClick={closeMenu}>
-            Assets & Inventory
+            Assets
           </NavLink>
 
           <NavLink to="threats" onClick={closeMenu}>
@@ -64,7 +64,6 @@ export default function AdminLayout() {
             Vulnerabilities
           </NavLink>
 
-          {/* 🔥 NEW */}
           <NavLink to="vulnerability-center" onClick={closeMenu}>
             Vulnerability Center
           </NavLink>
@@ -92,12 +91,13 @@ export default function AdminLayout() {
           <hr style={{ opacity: 0.18 }} />
 
           <NavLink to="/manager" onClick={closeMenu}>
-            Manager View
+            Manager Global View
           </NavLink>
 
           <NavLink to="/company" onClick={closeMenu}>
-            Company View
+            Company Global View
           </NavLink>
+
         </nav>
 
         <button className="btn logout-btn" onClick={logout}>
@@ -105,36 +105,30 @@ export default function AdminLayout() {
         </button>
       </aside>
 
-      {/* ================= MAIN ================= */}
-      <main className="layout-main">
-        <section className="layout-content">
-          <Outlet />
-        </section>
+      {/* ================= MAIN CONTENT + AI ================= */}
+      <div className="enterprise-main">
 
-        {/* ================= ADVISOR ================= */}
-        <section
-          className={`ai-drawer ${assistantOpen ? "open" : ""}`}
-        >
-          <div className="ai-drawer-handle">
-            <button
-              className="ai-toggle"
-              onClick={() => setAssistantOpen(v => !v)}
-            >
-              {assistantOpen ? "▼ Hide Advisor" : "▲ Show Advisor"}
-            </button>
-          </div>
+        {/* CENTER CONTENT */}
+        <main className="layout-main">
+          <section className="layout-content">
+            <Outlet />
+          </section>
+        </main>
 
-          <div className="ai-drawer-body">
-            <AuthoDevPanel
-              title="Security Advisor"
-              getContext={() => ({
-                role: "admin",
-                location: window.location.pathname,
-              })}
-            />
-          </div>
-        </section>
-      </main>
+        {/* FIXED RIGHT AI PANEL */}
+        <aside className="enterprise-ai-panel">
+          <AuthoDevPanel
+            title="Enterprise Security Advisor"
+            getContext={() => ({
+              role: "admin",
+              location: window.location.pathname,
+              access: "full-control",
+              scope: "global-visibility",
+            })}
+          />
+        </aside>
+
+      </div>
     </div>
   );
 }
