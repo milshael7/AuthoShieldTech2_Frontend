@@ -1,5 +1,6 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — STABLE VERSION
+   AUTOSHIELD FRONTEND API LAYER — FULL STABLE VERSION
+   All endpoints unified + safe refresh + no session wipe
    ========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
@@ -117,7 +118,6 @@ async function req(
       data = {};
     }
 
-    /* ---------- SAFE TOKEN REFRESH ---------- */
     if (res.status === 401 && auth && retry && getToken()) {
       try {
         const refreshRes = await fetchWithTimeout(
@@ -144,19 +144,16 @@ async function req(
             false
           );
         }
-      } catch {
-        // ignore refresh failure
-      }
+      } catch {}
 
-      // 🚫 DO NOT auto-clear session
       throw new Error("Unauthorized");
     }
 
     if (!res.ok) {
       throw new Error(
         data?.error ||
-          data?.message ||
-          `Request failed (${res.status})`
+        data?.message ||
+        `Request failed (${res.status})`
       );
     }
 
@@ -209,23 +206,12 @@ export const api = {
   managerAudit: (limit = 200) =>
     req(`/api/manager/audit?limit=${encodeURIComponent(limit)}`),
 
-  /* ---------- COMPANY ---------- */
-  companyMe: () => req("/api/company/me"),
-  companyNotifications: () => req("/api/company/notifications"),
-  companyMarkRead: (id) =>
-    req(`/api/company/notifications/${id}/read`, {
-      method: "POST",
-    }),
-
-  /* ---------- AI ---------- */
-  aiChat: (message, context) =>
-    req("/api/ai/chat", {
-      method: "POST",
-      body: { message, context },
-    }),
-
-  /* ---------- THREAT INTELLIGENCE ---------- */
-  threatFeed: () => req("/api/threat-feed"),
+  /* ---------- SECURITY MODULES ---------- */
+  vulnerabilities: () => req("/api/security/vulnerabilities"),
+  vulnerabilityCenter: () => req("/api/security/vulnerability-center"),
+  compliance: () => req("/api/security/compliance"),
+  policies: () => req("/api/security/policies"),
+  reports: () => req("/api/security/reports"),
 
   /* ---------- INCIDENTS ---------- */
   incidents: () => req("/api/incidents"),
@@ -235,7 +221,17 @@ export const api = {
       body: payload,
     }),
 
-  /* ---------- HEALTH WARMUP ---------- */
+  /* ---------- THREAT INTEL ---------- */
+  threatFeed: () => req("/api/threat-feed"),
+
+  /* ---------- AI ---------- */
+  aiChat: (message, context) =>
+    req("/api/ai/chat", {
+      method: "POST",
+      body: { message, context },
+    }),
+
+  /* ---------- HEALTH ---------- */
   warmup: () =>
     fetch(joinUrl(API_BASE, "/api/health"), {
       method: "GET",
