@@ -1,15 +1,7 @@
 /* =========================================================
    AUTOSHIELD ENTERPRISE LAYOUT — FULL LOCKED VERSION
-   Includes:
-   - Sidebar
-   - Scroll-safe content
-   - Trading room
-   - Enterprise AI panel
-   - Professional Advisor UI
-   ========================================================= */
-
-/* =========================================================
-   ROOT
+   + Collapsible AI Dock
+   + ChatGPT-style Advisor UI
    ========================================================= */
 
 .layout-root{
@@ -22,17 +14,11 @@
   color:#eaf1ff;
 }
 
-/* =========================================================
-   SIDEBAR
-   ========================================================= */
+/* ================= SIDEBAR ================= */
 
 .layout-sidebar{
   width:260px;
-  background:linear-gradient(
-    180deg,
-    rgba(255,255,255,.05),
-    rgba(0,0,0,.55)
-  );
+  background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.55));
   border-right:1px solid rgba(255,255,255,.08);
   padding:20px;
   display:flex;
@@ -64,17 +50,13 @@
 
 .layout-nav a.active{
   background:rgba(120,160,255,.22);
-  color:#ffffff;
+  color:#fff;
   font-weight:600;
 }
 
-.logout-btn{
-  margin-top:auto;
-}
+.logout-btn{ margin-top:auto; }
 
-/* =========================================================
-   ENTERPRISE MAIN STRUCTURE
-   ========================================================= */
+/* ================= MAIN ================= */
 
 .enterprise-main{
   display:flex;
@@ -97,33 +79,10 @@
   max-width:100%;
 }
 
-/* =========================================================
-   ENTERPRISE AI PANEL
-   ========================================================= */
-
-.enterprise-ai-panel{
-  width:380px;
-  display:flex;
-  flex-direction:column;
-  border-left:1px solid rgba(255,255,255,.08);
-  background:linear-gradient(
-    180deg,
-    rgba(255,255,255,.04),
-    rgba(0,0,0,.45)
-  );
-  backdrop-filter: blur(10px);
-}
-
-/* =========================================================
-   CARD SYSTEM
-   ========================================================= */
+/* ================= CARDS ================= */
 
 .card{
-  background:linear-gradient(
-    180deg,
-    rgba(255,255,255,.05),
-    rgba(0,0,0,.35)
-  );
+  background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.35));
   border:1px solid rgba(255,255,255,.08);
   border-radius:14px;
   padding:18px;
@@ -135,9 +94,7 @@
   transform:translateY(-2px);
 }
 
-/* =========================================================
-   BUTTONS
-   ========================================================= */
+/* ================= BUTTONS ================= */
 
 .btn{
   padding:10px 16px;
@@ -145,186 +102,264 @@
   border:none;
   font-weight:600;
   cursor:pointer;
-  background:linear-gradient(
-    180deg,
-    rgba(120,160,255,.9),
-    rgba(70,110,255,.8)
-  );
+  background:linear-gradient(180deg, rgba(120,160,255,.9), rgba(70,110,255,.8));
   color:#fff;
   transition:.2s ease;
 }
 
-.btn:hover{
-  transform:translateY(-1px);
-  opacity:.9;
-}
+.btn:hover{ transform:translateY(-1px); opacity:.9; }
 
 /* =========================================================
-   TRADING ROOM
+   COLLAPSIBLE RIGHT AI DOCK
    ========================================================= */
 
-.trading-room{
+.enterprise-ai-panel{
+  position:relative;
+  width:380px;
   display:flex;
   flex-direction:column;
-  gap:28px;
+  border-left:1px solid rgba(255,255,255,.08);
+  background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(0,0,0,.45));
+  backdrop-filter: blur(10px);
+  transition: width .22s ease;
+  min-width:56px;
 }
 
-.trading-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
-  gap:20px;
+.enterprise-ai-panel.collapsed{
+  width:56px;
 }
 
-/* =========================================================
-   ADVISOR PANEL (PROFESSIONAL CHAT STYLE)
-   ========================================================= */
-
-.advisor-wrapper{
-  display:flex;
-  flex-direction:column;
-  height:100%;
-}
-
-.advisor-header{
-  padding:18px;
-  border-bottom:1px solid rgba(255,255,255,.06);
-  font-size:14px;
-  font-weight:600;
-  letter-spacing:.4px;
-}
-
-.advisor-body{
+.enterprise-ai-inner{
   flex:1;
-  overflow-y:auto;
-  padding:20px;
+  min-height:0;
+  overflow:hidden;
+}
+
+.enterprise-ai-panel.collapsed .enterprise-ai-inner{
+  display:none;
+}
+
+/* Edge tab */
+.advisor-tab{
+  position:absolute;
+  left:-1px;
+  top:50%;
+  transform:translate(-100%, -50%);
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(0,0,0,.45);
+  color:#cfd8ff;
+  padding:10px 10px;
+  border-radius:10px 0 0 10px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  backdrop-filter: blur(10px);
+}
+
+.advisor-tab:hover{
+  background:rgba(120,160,255,.12);
+  border-color:rgba(120,160,255,.35);
+}
+
+.advisor-tab-text{
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.3px;
+  white-space:nowrap;
+}
+
+/* =========================================================
+   ADVISOR UI — CHATGPT-LIKE
+   ========================================================= */
+
+.advisor-wrap{
+  height:100%;
   display:flex;
   flex-direction:column;
-  gap:18px;
+  min-height:0;
 }
 
-.advisor-message{
+.advisor-miniTitle{
+  padding:14px 16px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  font-weight:700;
+  font-size:12px;
+  opacity:.85;
+}
+
+.advisor-feed{
+  flex:1;
+  min-height:0;
+  overflow:auto;
+  padding:16px;
   display:flex;
   flex-direction:column;
-  gap:6px;
+  gap:16px;
 }
 
-.advisor-message.user{
-  align-items:flex-end;
+.advisor-row{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
 }
 
-.advisor-message.ai{
-  align-items:flex-start;
-}
+.advisor-row.user{ align-items:flex-end; }
+.advisor-row.ai{ align-items:flex-start; }
 
 .advisor-bubble{
-  max-width:85%;
-  padding:14px 16px;
+  max-width:88%;
+  padding:12px 14px;
   border-radius:14px;
   font-size:14px;
   line-height:1.5;
   white-space:pre-wrap;
 }
 
-.advisor-message.user .advisor-bubble{
-  background:linear-gradient(
-    180deg,
-    rgba(120,160,255,.9),
-    rgba(70,110,255,.8)
-  );
+.advisor-row.user .advisor-bubble{
+  background:linear-gradient(180deg, rgba(120,160,255,.9), rgba(70,110,255,.8));
   color:#fff;
-  border-top-right-radius:4px;
+  border-top-right-radius:6px;
 }
 
-.advisor-message.ai .advisor-bubble{
+.advisor-row.ai .advisor-bubble{
   background:rgba(255,255,255,.05);
   border:1px solid rgba(255,255,255,.08);
-  color:#dfe7ff;
-  border-top-left-radius:4px;
+  color:#eaf1ff;
+  border-top-left-radius:6px;
 }
 
-/* ================= ACTION BUTTONS ================= */
-
-.advisor-controls{
+.advisor-actions{
   display:flex;
-  flex-wrap:wrap;
   gap:8px;
+  flex-wrap:wrap;
+}
+
+.advisor-actions button{
+  background:transparent;
+  border:1px solid rgba(255,255,255,.10);
+  color:#cfd8ff;
+  padding:6px 8px;
+  border-radius:8px;
+  cursor:pointer;
+  transition:.15s ease;
   font-size:12px;
 }
 
-.advisor-controls button{
-  background:transparent;
-  border:1px solid rgba(255,255,255,.08);
-  padding:4px 8px;
-  border-radius:6px;
-  cursor:pointer;
-  color:#cfd8ff;
-  transition:.15s ease;
-}
-
-.advisor-controls button:hover{
-  background:rgba(120,160,255,.15);
+.advisor-actions button:hover{
+  background:rgba(120,160,255,.14);
   border-color:rgba(120,160,255,.35);
 }
 
-.advisor-controls button.active{
-  background:rgba(120,160,255,.25);
-  border-color:rgba(120,160,255,.5);
+.advisor-actions button.active{
+  background:rgba(120,160,255,.22);
+  border-color:rgba(120,160,255,.55);
 }
 
-.advisor-time{
+.advisor-ts{
   font-size:10px;
   opacity:.45;
 }
 
-/* =========================================================
-   INPUT AREA
-   ========================================================= */
-
-.advisor-input-area{
+/* INPUT BAR (mic left, send right) */
+.advisor-inputBar{
   border-top:1px solid rgba(255,255,255,.06);
-  padding:14px;
+  padding:12px;
+  display:flex;
+  gap:10px;
+  align-items:flex-end;
+  background:rgba(0,0,0,.18);
 }
 
-.advisor-input-controls{
+.advisor-micBtn,
+.advisor-sendBtn{
+  width:44px;
+  height:44px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.10);
+  background:rgba(0,0,0,.35);
+  color:#eaf1ff;
+  cursor:pointer;
+  transition:.15s ease;
+  font-weight:800;
+}
+
+.advisor-micBtn:hover,
+.advisor-sendBtn:hover{
+  background:rgba(120,160,255,.12);
+  border-color:rgba(120,160,255,.35);
+}
+
+.advisor-sendBtn:disabled{
+  opacity:.4;
+  cursor:not-allowed;
+}
+
+.advisor-inputCenter{
+  flex:1;
+  position:relative;
   display:flex;
   align-items:center;
-  gap:8px;
 }
 
-.advisor-input-area textarea{
+.advisor-textarea{
   width:100%;
-  background:rgba(0,0,0,.45);
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:10px;
-  padding:10px;
-  color:#fff;
+  min-height:44px;
+  max-height:140px;
   resize:none;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.10);
+  background:rgba(0,0,0,.35);
+  color:#fff;
+  padding:12px 12px;
   outline:none;
-  margin-bottom:10px;
+  line-height:1.4;
+  padding-right:72px; /* space for bars overlay */
+}
+
+.advisor-textarea:focus{
+  border-color:rgba(120,160,255,.45);
+}
+
+/* Voice bars (center-right overlay like ChatGPT vibe) */
+.advisor-bars{
+  position:absolute;
+  right:16px;
+  display:flex;
+  gap:4px;
+  align-items:flex-end;
+  height:16px;
+  opacity:.9;
+}
+
+.advisor-bars span{
+  width:3px;
+  border-radius:999px;
+  background:#5EC6FF;
+  animation: advWave .9s infinite ease-in-out;
+}
+
+.advisor-bars span:nth-child(1){ animation-delay:0s; }
+.advisor-bars span:nth-child(2){ animation-delay:.12s; }
+.advisor-bars span:nth-child(3){ animation-delay:.24s; }
+.advisor-bars span:nth-child(4){ animation-delay:.36s; }
+.advisor-bars span:nth-child(5){ animation-delay:.48s; }
+
+@keyframes advWave{
+  0%,100%{ height:4px; }
+  50%{ height:16px; }
+}
+
+.advisor-loading{
+  padding:10px 14px;
+  font-size:12px;
+  opacity:.6;
+  border-top:1px solid rgba(255,255,255,.06);
 }
 
 /* =========================================================
-   MIC ANIMATION
+   TRADING ROOM (kept)
    ========================================================= */
 
-.mic-bars{
-  display:flex;
-  gap:3px;
-  align-items:flex-end;
-  height:16px;
-}
-
-.mic-bars span{
-  width:3px;
-  background:#5EC6FF;
-  animation:micWave 1s infinite ease-in-out;
-}
-
-.mic-bars span:nth-child(1){ animation-delay:0s; }
-.mic-bars span:nth-child(2){ animation-delay:.15s; }
-.mic-bars span:nth-child(3){ animation-delay:.3s; }
-
-@keyframes micWave{
-  0%,100%{ height:4px; }
-  50%{ height:14px; }
-}
+.trading-room{ display:flex; flex-direction:column; gap:28px; }
+.trading-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px; }
