@@ -1,5 +1,5 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — RENDER SAFE VERSION
+   AUTOSHIELD FRONTEND API LAYER — STABLE VERSION
    Cold-start protected + warmup + stable refresh
    ========================================================= */
 
@@ -184,6 +184,7 @@ async function req(
    ============================= */
 
 export const api = {
+  /* ---------- AUTH ---------- */
   login: (email, password) =>
     req("/api/auth/login", {
       method: "POST",
@@ -198,20 +199,24 @@ export const api = {
       auth: false,
     }),
 
+  /* ---------- USER ---------- */
   meNotifications: () => req("/api/me/notifications"),
   markMyNotificationRead: (id) =>
     req(`/api/me/notifications/${id}/read`, { method: "POST" }),
 
+  /* ---------- ADMIN ---------- */
   adminUsers: () => req("/api/admin/users"),
   adminCompanies: () => req("/api/admin/companies"),
   adminNotifications: () => req("/api/admin/notifications"),
 
+  /* ---------- MANAGER ---------- */
   managerOverview: () => req("/api/manager/overview"),
   managerUsers: () => req("/api/manager/users"),
   managerCompanies: () => req("/api/manager/companies"),
   managerAudit: (limit = 200) =>
     req(`/api/manager/audit?limit=${encodeURIComponent(limit)}`),
 
+  /* ---------- COMPANY ---------- */
   companyMe: () => req("/api/company/me"),
   companyNotifications: () => req("/api/company/notifications"),
   companyMarkRead: (id) =>
@@ -219,13 +224,17 @@ export const api = {
       method: "POST",
     }),
 
+  /* ---------- AI ---------- */
   aiChat: (message, context) =>
     req("/api/ai/chat", {
       method: "POST",
       body: { message, context },
     }),
 
-  /* 🔥 RENDER WARMUP */
+  /* ---------- THREAT INTELLIGENCE (FIXED) ---------- */
+  threatFeed: () => req("/api/threat-feed"),
+
+  /* ---------- HEALTH WARMUP ---------- */
   warmup: () =>
     fetch(joinUrl(API_BASE, "/api/health"), {
       method: "GET",
