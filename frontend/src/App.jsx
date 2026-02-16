@@ -1,11 +1,13 @@
 // frontend/src/App.jsx
-import React, { useEffect, useState, useMemo } from "react";
+// FULL ROLE-STRUCTURED ROUTING — CLEAN HIERARCHY
+// Phase 1 Architecture Lock
+
+import React, { useEffect, useState } from "react";
 import {
   BrowserRouter,
   Routes,
   Route,
   Navigate,
-  useLocation,
 } from "react-router-dom";
 import { getSavedUser } from "./lib/api.js";
 
@@ -24,7 +26,7 @@ import Pricing from "./pages/public/Pricing.jsx";
 import Signup from "./pages/public/Signup.jsx";
 import Login from "./pages/Login.jsx";
 
-/* ================= APP PAGES ================= */
+/* ================= SHARED PAGES ================= */
 
 import Posture from "./pages/Posture.jsx";
 import Assets from "./pages/Assets.jsx";
@@ -45,8 +47,7 @@ function normalizeRole(role) {
   return String(role || "").toLowerCase();
 }
 
-function RoleGuard({ user, ready, allow, children }) {
-  if (!ready) return null; // ⛔ block render until hydration finishes
+function RoleGuard({ user, allow, children }) {
   if (!user) return <Navigate to="/login" replace />;
 
   const role = normalizeRole(user.role);
@@ -59,24 +60,24 @@ function RoleGuard({ user, ready, allow, children }) {
   return children;
 }
 
-function AppRoutes({ user, ready }) {
-  const location = useLocation();
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [ready, setReady] = useState(false);
 
-  const isPublicPath = useMemo(() => {
-    return (
-      location.pathname === "/" ||
-      location.pathname.startsWith("/pricing") ||
-      location.pathname.startsWith("/signup") ||
-      location.pathname.startsWith("/login")
-    );
-  }, [location.pathname]);
+  useEffect(() => {
+    const u = getSavedUser();
+    setUser(u || null);
+    setReady(true);
+  }, []);
 
-  const role = normalizeRole(user?.role);
+  if (!ready) {
+    return <div style={{ padding: 40 }}>Loading...</div>;
+  }
 
   function defaultRedirect() {
     if (!user) return "/login";
 
-    switch (role) {
+    switch (normalizeRole(user.role)) {
       case "admin":
         return "/admin";
       case "manager":
@@ -91,72 +92,112 @@ function AppRoutes({ user, ready }) {
   }
 
   return (
-    <Routes>
-      {/* PUBLIC */}
-      <Route path="/" element={<Landing />} />
-      <Route path="/pricing" element={<Pricing />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/login" element={<Login />} />
-
-      {/* ADMIN */}
-      <Route
-        path="/admin"
-        element={
-          <RoleGuard user={user} ready={ready} allow={["admin"]}>
-            <AdminLayout />
-          </RoleGuard>
-        }
-      >
-        <Route index element={<Posture />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="threats" element={<Threats />} />
-        <Route path="incidents" element={<Incidents />} />
-        <Route path="vulnerabilities" element={<Vulnerabilities />} />
-        <Route path="vulnerability-center" element={<VulnerabilityCenter />} />
-        <Route path="compliance" element={<Compliance />} />
-        <Route path="policies" element={<Policies />} />
-        <Route path="reports" element={<Reports />} />
-        <Route path="trading" element={<TradingRoom />} />
-        <Route path="notifications" element={<Notifications />} />
-      </Route>
-
-      <Route path="/manager" element={<ManagerLayout />} />
-      <Route path="/company" element={<CompanyLayout />} />
-      <Route path="/small-company" element={<SmallCompanyLayout />} />
-      <Route path="/user" element={<UserLayout />} />
-
-      <Route path="/404" element={<NotFound />} />
-
-      <Route
-        path="*"
-        element={
-          isPublicPath
-            ? <Navigate to="/" replace />
-            : <Navigate to={defaultRedirect()} replace />
-        }
-      />
-    </Routes>
-  );
-}
-
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [ready, setReady] = useState(false);
-
-  // 🔥 Hydrate ONCE on initial mount
-  useEffect(() => {
-    const u = getSavedUser();
-    setUser(u || null);
-    setReady(true);
-  }, []);
-
-  if (!ready) {
-    return <div style={{ padding: 40 }}>Loading...</div>;
-  }
-
-  return (
     <BrowserRouter>
-      <AppRoutes user={user} ready={ready} />
+      <Routes>
+
+        {/* ================= PUBLIC ================= */}
+
+        <Route path="/" element={<Landing />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/login" element={<Login />} />
+
+        {/* ================= ADMIN ================= */}
+
+        <Route
+          path="/admin/*"
+          element={
+            <RoleGuard user={user} allow={["admin"]}>
+              <AdminLayout />
+            </RoleGuard>
+          }
+        >
+          <Route index element={<Posture />} />
+          <Route path="assets" element={<Assets />} />
+          <Route path="threats" element={<Threats />} />
+          <Route path="incidents" element={<Incidents />} />
+          <Route path="vulnerabilities" element={<Vulnerabilities />} />
+          <Route path="vulnerability-center" element={<VulnerabilityCenter />} />
+          <Route path="compliance" element={<Compliance />} />
+          <Route path="policies" element={<Policies />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="trading" element={<TradingRoom />} />
+          <Route path="notifications" element={<Notifications />} />
+        </Route>
+
+        {/* ================= MANAGER ================= */}
+
+        <Route
+          path="/manager/*"
+          element={
+            <RoleGuard user={user} allow={["manager", "admin"]}>
+              <ManagerLayout />
+            </RoleGuard>
+          }
+        >
+          <Route index element={<Posture />} />
+          <Route path="assets" element={<Assets />} />
+          <Route path="threats" element={<Threats />} />
+          <Route path="incidents" element={<Incidents />} />
+          <Route path="vulnerabilities" element={<Vulnerabilities />} />
+          <Route path="compliance" element={<Compliance />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="trading" element={<TradingRoom />} />
+          <Route path="notifications" element={<Notifications />} />
+        </Route>
+
+        {/* ================= COMPANY ================= */}
+
+        <Route
+          path="/company/*"
+          element={
+            <RoleGuard user={user} allow={["company", "admin", "manager"]}>
+              <CompanyLayout />
+            </RoleGuard>
+          }
+        >
+          <Route index element={<Posture />} />
+          <Route path="assets" element={<Assets />} />
+          <Route path="incidents" element={<Incidents />} />
+          <Route path="notifications" element={<Notifications />} />
+        </Route>
+
+        {/* ================= SMALL COMPANY ================= */}
+
+        <Route
+          path="/small-company/*"
+          element={
+            <RoleGuard user={user} allow={["small_company", "admin", "manager"]}>
+              <SmallCompanyLayout />
+            </RoleGuard>
+          }
+        >
+          <Route index element={<Posture />} />
+          <Route path="assets" element={<Assets />} />
+          <Route path="incidents" element={<Incidents />} />
+          <Route path="notifications" element={<Notifications />} />
+        </Route>
+
+        {/* ================= INDIVIDUAL ================= */}
+
+        <Route
+          path="/user/*"
+          element={
+            <RoleGuard user={user} allow={["individual", "admin", "manager"]}>
+              <UserLayout />
+            </RoleGuard>
+          }
+        >
+          <Route index element={<Posture />} />
+          <Route path="notifications" element={<Notifications />} />
+        </Route>
+
+        {/* ================= FALLBACK ================= */}
+
+        <Route path="/404" element={<NotFound />} />
+        <Route path="*" element={<Navigate to={defaultRedirect()} replace />} />
+
+      </Routes>
     </BrowserRouter>
   );
 }
