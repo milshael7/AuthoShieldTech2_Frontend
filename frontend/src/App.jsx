@@ -58,8 +58,15 @@ function RoleGuard({ user, allow, children }) {
   return children;
 }
 
-function AppRoutes({ user }) {
+function AppRoutes() {
   const location = useLocation();
+  const [user, setUser] = useState(null);
+
+  /* 🔥 FIX: Re-read user whenever route changes */
+  useEffect(() => {
+    const u = getSavedUser();
+    setUser(u || null);
+  }, [location.pathname]);
 
   const isPublicPath = useMemo(() => {
     return (
@@ -91,7 +98,6 @@ function AppRoutes({ user }) {
 
   return (
     <Routes>
-
       {/* PUBLIC */}
       <Route path="/" element={<Landing />} />
       <Route path="/pricing" element={<Pricing />} />
@@ -120,7 +126,6 @@ function AppRoutes({ user }) {
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
-      {/* OTHER ROLES REMAIN SAME */}
       <Route path="/manager" element={<ManagerLayout />} />
       <Route path="/company" element={<CompanyLayout />} />
       <Route path="/small-company" element={<SmallCompanyLayout />} />
@@ -141,26 +146,9 @@ function AppRoutes({ user }) {
 }
 
 export default function App() {
-  const [user, setUser] = useState(undefined);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    try {
-      const u = getSavedUser();
-      setUser(u || null);
-    } catch {
-      setUser(null);
-    }
-    setReady(true);
-  }, []);
-
-  if (!ready) {
-    return <div style={{ padding: 40 }}>Loading…</div>;
-  }
-
   return (
     <BrowserRouter>
-      <AppRoutes user={user} />
+      <AppRoutes />
     </BrowserRouter>
   );
 }
