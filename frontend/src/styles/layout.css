@@ -1,18 +1,26 @@
 /* =========================================================
-   AUTOSHIELD CORE LAYOUT — CONTROLLED SCROLL VERSION
-   GitHub-style horizontal + vertical scroll inside content
+   AUTOSHIELD ENTERPRISE LAYOUT — PHASE 2
+   Institutional Grid + Fixed AI Dock
+   No floating drawers
+   Professional structure
    ========================================================= */
 
 /* =========================================================
-   ROOT
+   ROOT GRID
    ========================================================= */
 
 .layout-root{
-  display:flex;
+  display:grid;
+  grid-template-columns:260px 1fr;
   min-height:100vh;
   width:100%;
-  position:relative;
-  overflow:visible;
+  background:#0f1420;
+  color:#e6ecff;
+}
+
+/* When enterprise AI dock is active */
+.layout-root.enterprise{
+  grid-template-columns:260px 1fr 420px;
 }
 
 /* =========================================================
@@ -20,39 +28,43 @@
    ========================================================= */
 
 .layout-sidebar{
-  width:260px;
   background:linear-gradient(
     180deg,
-    rgba(255,255,255,.06),
-    rgba(0,0,0,.45)
+    rgba(255,255,255,.05),
+    rgba(0,0,0,.55)
   );
-  border-right:1px solid rgba(255,255,255,.12);
-  padding:18px;
+  border-right:1px solid rgba(255,255,255,.08);
+  padding:22px 18px;
   display:flex;
   flex-direction:column;
-  gap:18px;
-  flex-shrink:0;
-  backdrop-filter: blur(10px);
+  gap:20px;
+  backdrop-filter:blur(14px);
+}
+
+.layout-brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
 }
 
 .layout-nav{
   display:flex;
   flex-direction:column;
-  gap:10px;
+  gap:8px;
 }
 
 .layout-nav a{
-  display:block;
   padding:10px 14px;
   border-radius:8px;
   text-decoration:none;
   font-weight:500;
+  font-size:14px;
   color:#cfd8ff;
   transition:all .18s ease;
 }
 
 .layout-nav a:hover{
-  background:rgba(255,255,255,.06);
+  background:rgba(120,160,255,.08);
 }
 
 .layout-nav a.active{
@@ -61,30 +73,51 @@
   font-weight:600;
 }
 
-/* =========================================================
-   MAIN
-   ========================================================= */
-
-.layout-main{
-  flex:1;
-  display:flex;
-  flex-direction:column;
-  min-width:0; /* 🔥 prevent flex overflow clipping */
+.logout-btn{
+  margin-top:auto;
 }
 
 /* =========================================================
-   CONTENT (SCROLL ENABLED HERE)
+   MAIN CONTENT AREA
    ========================================================= */
 
-.layout-content{
-  padding:28px;
+.enterprise-main{
+  display:grid;
+  grid-template-columns:1fr 420px;
+  min-height:100vh;
+}
 
-  /* 🔥 THIS IS THE FIX */
-  overflow-x:auto;
-  overflow-y:auto;
+/* CENTER CONTENT */
 
+.layout-main{
+  display:flex;
+  flex-direction:column;
   min-width:0;
-  max-width:100%;
+}
+
+.layout-content{
+  padding:32px;
+  overflow:auto;
+  min-width:0;
+}
+
+/* =========================================================
+   AI RIGHT DOCK
+   ========================================================= */
+
+.enterprise-ai-panel{
+  border-left:1px solid rgba(255,255,255,.08);
+  background:linear-gradient(
+    180deg,
+    rgba(255,255,255,.04),
+    rgba(0,0,0,.55)
+  );
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+  position:sticky;
+  top:0;
+  overflow:hidden;
 }
 
 /* =========================================================
@@ -94,18 +127,17 @@
 .card{
   background:linear-gradient(
     180deg,
-    rgba(255,255,255,.05),
-    rgba(0,0,0,.35)
+    rgba(255,255,255,.04),
+    rgba(0,0,0,.45)
   );
   border:1px solid rgba(255,255,255,.08);
-  border-radius:14px;
-  padding:18px;
-  transition:all .2s ease;
+  border-radius:16px;
+  padding:20px;
+  transition:.2s ease;
 }
 
 .card:hover{
   border-color:rgba(120,160,255,.3);
-  transform:translateY(-2px);
 }
 
 /* =========================================================
@@ -120,8 +152,8 @@
   cursor:pointer;
   background:linear-gradient(
     180deg,
-    rgba(120,160,255,.85),
-    rgba(70,110,255,.75)
+    rgba(120,160,255,.9),
+    rgba(70,110,255,.8)
   );
   color:#fff;
   transition:.2s ease;
@@ -129,87 +161,132 @@
 
 .btn:hover{
   transform:translateY(-1px);
-  opacity:.9;
-}
-
-.logout-btn{
-  margin-top:auto;
+  opacity:.92;
 }
 
 /* =========================================================
-   STATUS COLORS
+   ADVISOR (ChatGPT-style structure base)
    ========================================================= */
 
-.status-positive{ color:#5EC6FF; }
-.status-negative{ color:#ff4d4d; }
-.status-neutral{ color:#999; }
-
-/* =========================================================
-   TRADING ROOM
-   ========================================================= */
-
-.trading-room{
+.advisor-container{
   display:flex;
   flex-direction:column;
-  gap:28px;
+  height:100%;
 }
 
-.trading-header{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
+.advisor-header{
+  padding:16px 20px;
   border-bottom:1px solid rgba(255,255,255,.08);
-  padding-bottom:12px;
-}
-
-.trading-alert{
-  background:rgba(255,70,70,.12);
-  border:1px solid rgba(255,70,70,.35);
-  padding:14px 18px;
-  border-radius:10px;
+  font-size:14px;
   font-weight:600;
-  color:#ff4d4d;
+  background:rgba(255,255,255,.03);
 }
 
-.trading-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
-  gap:20px;
-}
-
-.trading-card{
-  background:linear-gradient(
-    180deg,
-    rgba(255,255,255,.04),
-    rgba(0,0,0,.45)
-  );
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:16px;
+.advisor-messages{
+  flex:1;
+  overflow-y:auto;
   padding:20px;
   display:flex;
   flex-direction:column;
+  gap:18px;
+}
+
+.advisor-bubble{
+  max-width:92%;
+  padding:14px 16px;
+  border-radius:14px;
+  font-size:14px;
+  line-height:1.5;
+  position:relative;
+}
+
+.advisor-bubble.user{
+  align-self:flex-end;
+  background:rgba(120,160,255,.18);
+}
+
+.advisor-bubble.ai{
+  align-self:flex-start;
+  background:rgba(255,255,255,.06);
+}
+
+.advisor-text{
+  white-space:pre-wrap;
+}
+
+.advisor-actions{
+  display:flex;
   gap:10px;
-  transition:all .25s ease;
+  margin-top:8px;
+  opacity:.7;
 }
 
-.trading-card:hover{
-  border-color:rgba(120,160,255,.4);
-  transform:translateY(-3px);
+.advisor-actions button{
+  background:none;
+  border:none;
+  cursor:pointer;
+  font-size:14px;
+  opacity:.7;
+  transition:.15s ease;
 }
 
-.trading-market-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
-  gap:12px;
+.advisor-actions button:hover{
+  opacity:1;
 }
 
-.trading-ticker{
-  background:rgba(255,255,255,.05);
-  border:1px solid rgba(255,255,255,.08);
-  padding:12px;
-  border-radius:12px;
+.advisor-actions .active{
+  opacity:1;
+  color:#5ec6ff;
+}
+
+.advisor-time{
+  font-size:11px;
+  opacity:.4;
+  margin-top:6px;
+}
+
+/* =========================================================
+   INPUT AREA
+   ========================================================= */
+
+.advisor-input{
+  border-top:1px solid rgba(255,255,255,.08);
+  padding:14px 16px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  background:rgba(255,255,255,.03);
+}
+
+.advisor-input textarea{
+  resize:none;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,.12);
+  background:#121827;
+  color:#fff;
+  padding:10px 12px;
+  font-size:14px;
+}
+
+.advisor-input textarea:focus{
+  outline:none;
+  border-color:rgba(120,160,255,.6);
+}
+
+.advisor-input-actions{
   display:flex;
   justify-content:space-between;
   align-items:center;
-  font-weight:600;
+}
+
+.advisor-input-actions button{
+  background:none;
+  border:none;
+  cursor:pointer;
+  font-size:18px;
+  opacity:.75;
+}
+
+.advisor-input-actions button:hover{
+  opacity:1;
 }
