@@ -1,6 +1,6 @@
 /* =========================================================
    AUTOSHIELD FRONTEND API LAYER — FULL STABLE VERSION
-   All endpoints unified + safe refresh + no session wipe
+   Unified endpoints + safe refresh + full dashboard support
    ========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
@@ -118,6 +118,7 @@ async function req(
       data = {};
     }
 
+    // 🔄 Auto refresh on 401
     if (res.status === 401 && auth && retry && getToken()) {
       try {
         const refreshRes = await fetchWithTimeout(
@@ -169,11 +170,12 @@ async function req(
   }
 }
 
-/* =============================
+/* =========================================================
    API SURFACE
-   ============================= */
+   ========================================================= */
 
 export const api = {
+
   /* ---------- AUTH ---------- */
   login: (email, password) =>
     req("/api/auth/login", {
@@ -194,23 +196,62 @@ export const api = {
   markMyNotificationRead: (id) =>
     req(`/api/me/notifications/${id}/read`, { method: "POST" }),
 
+  /* ---------- COMPANY ---------- */
+  companyMe: () => req("/api/company/me"),
+  companyNotifications: () => req("/api/company/notifications"),
+  companyAddMember: (userId) =>
+    req("/api/company/members", {
+      method: "POST",
+      body: { userId },
+    }),
+  companyRemoveMember: (userId) =>
+    req(`/api/company/members/${userId}`, {
+      method: "DELETE",
+    }),
+  companyMarkRead: (id) =>
+    req(`/api/company/notifications/${id}/read`, {
+      method: "POST",
+    }),
+
   /* ---------- ADMIN ---------- */
   adminUsers: () => req("/api/admin/users"),
   adminCompanies: () => req("/api/admin/companies"),
   adminNotifications: () => req("/api/admin/notifications"),
+  adminCreateUser: (payload) =>
+    req("/api/admin/users", { method: "POST", body: payload }),
+  adminRotateUserId: (id) =>
+    req(`/api/admin/users/${id}/rotate-id`, { method: "POST" }),
+  adminUpdateSubscription: (id, payload) =>
+    req(`/api/admin/users/${id}/subscription`, {
+      method: "PATCH",
+      body: payload,
+    }),
+  adminCreateCompany: (payload) =>
+    req("/api/admin/companies", {
+      method: "POST",
+      body: payload,
+    }),
 
   /* ---------- MANAGER ---------- */
   managerOverview: () => req("/api/manager/overview"),
   managerUsers: () => req("/api/manager/users"),
   managerCompanies: () => req("/api/manager/companies"),
+  managerNotifications: () => req("/api/manager/notifications"),
   managerAudit: (limit = 200) =>
     req(`/api/manager/audit?limit=${encodeURIComponent(limit)}`),
 
-  /* ---------- SECURITY MODULES ---------- */
+  /* ---------- SECURITY DASHBOARDS ---------- */
+  assets: () => req("/api/security/assets"),
+  attackSurfaceOverview: () => req("/api/security/attack-surface"),
+  complianceOverview: () => req("/api/security/compliance-overview"),
+  vulnerabilityOverview: () => req("/api/security/vulnerability-overview"),
   vulnerabilities: () => req("/api/security/vulnerabilities"),
-  vulnerabilityCenter: () => req("/api/security/vulnerability-center"),
-  compliance: () => req("/api/security/compliance"),
+  postureSummary: () => req("/api/security/posture/summary"),
+  postureChecks: () => req("/api/security/posture/checks"),
+  usersOverview: () => req("/api/security/users-overview"),
+  reportSummary: () => req("/api/security/report-summary"),
   policies: () => req("/api/security/policies"),
+  compliance: () => req("/api/security/compliance"),
   reports: () => req("/api/security/reports"),
 
   /* ---------- INCIDENTS ---------- */
