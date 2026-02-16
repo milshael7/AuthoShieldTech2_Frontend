@@ -1,7 +1,7 @@
 // frontend/src/layouts/AdminLayout.jsx
-// Admin Layout — Enterprise SOC Architecture (FINAL)
-// Collapsible right AI dock (edge tab -> open)
-// Scroll-safe
+// Admin Layout — Enterprise SOC Architecture (POLISHED)
+// Professional collapsible AUTHOSHIELD Advisory dock
+// Stable scroll / fixed input
 // Production ready
 
 import React, { useState } from "react";
@@ -15,7 +15,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // ✅ AI Drawer state (collapsible to edge)
+  // AI Dock State
   const [advisorOpen, setAdvisorOpen] = useState(true);
 
   function logout() {
@@ -65,8 +65,9 @@ export default function AdminLayout() {
         </button>
       </aside>
 
-      {/* ================= MAIN CONTENT + AI ================= */}
+      {/* ================= MAIN + ADVISOR ================= */}
       <div className="enterprise-main">
+
         {/* CENTER CONTENT */}
         <main className="layout-main">
           <section className="layout-content">
@@ -74,30 +75,38 @@ export default function AdminLayout() {
           </section>
         </main>
 
-        {/* RIGHT AI PANEL (COLLAPSIBLE) */}
+        {/* RIGHT ADVISOR DOCK */}
         <aside className={`enterprise-ai-panel ${advisorOpen ? "open" : "collapsed"}`}>
-          {/* Edge Tab / Handle */}
-          <button
-            className="advisor-tab"
-            onClick={() => setAdvisorOpen((v) => !v)}
-            title={advisorOpen ? "Collapse Advisor" : "Open Advisor"}
-          >
-            <span className="advisor-tab-text">
-              {advisorOpen ? "›" : "AutoShield Advisor"}
-            </span>
-          </button>
 
-          <div className="enterprise-ai-inner">
-            <AuthoDevPanel
-              title="" // ✅ no big title up top
-              getContext={() => ({
-                role: "admin",
-                location: window.location.pathname,
-                access: "full-control",
-                scope: "global-visibility",
-              })}
-            />
+          {/* TOP HEADER — CLICK TO OPEN/CLOSE */}
+          <div
+            className="enterprise-ai-header"
+            onClick={() => setAdvisorOpen(v => !v)}
+            title={advisorOpen ? "Collapse Advisory Panel" : "Open Advisory Panel"}
+          >
+            <span className="enterprise-ai-title">
+              AUTHOSHIELD Advisory
+            </span>
+
+            <span className="enterprise-ai-toggle">
+              {advisorOpen ? "›" : "‹"}
+            </span>
           </div>
+
+          {/* PANEL BODY */}
+          {advisorOpen && (
+            <div className="enterprise-ai-inner">
+              <AuthoDevPanel
+                title=""
+                getContext={() => ({
+                  role: "admin",
+                  location: window.location.pathname,
+                  access: "full-control",
+                  scope: "global-visibility",
+                })}
+              />
+            </div>
+          )}
         </aside>
       </div>
     </div>
