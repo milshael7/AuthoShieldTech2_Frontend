@@ -1,6 +1,6 @@
 // frontend/src/App.jsx
-// FULL ROLE-STRUCTURED ROUTING — CLEAN HIERARCHY
-// Phase 1 Architecture Lock
+// FULL ROLE-STRUCTURED ROUTING — HARDENED + STABLE
+// Phase 2 Architecture Lock
 
 import React, { useEffect, useState } from "react";
 import {
@@ -44,11 +44,15 @@ import NotFound from "./pages/NotFound.jsx";
 /* ========================================================= */
 
 function normalizeRole(role) {
-  return String(role || "").toLowerCase();
+  return String(role || "").trim().toLowerCase();
 }
 
-function RoleGuard({ user, allow, children }) {
-  if (!user) return <Navigate to="/login" replace />;
+function RoleGuard({ user, ready, allow, children }) {
+  if (!ready) return null;
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
   const role = normalizeRole(user.role);
   const allowed = allow.map(normalizeRole);
@@ -65,14 +69,14 @@ export default function App() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const u = getSavedUser();
-    setUser(u || null);
+    const stored = getSavedUser();
+    setUser(stored || null);
+
+    // 🔎 DEBUG — Remove later if desired
+    console.log("HYDRATED USER:", stored);
+
     setReady(true);
   }, []);
-
-  if (!ready) {
-    return <div style={{ padding: 40 }}>Loading...</div>;
-  }
 
   function defaultRedirect() {
     if (!user) return "/login";
@@ -86,9 +90,15 @@ export default function App() {
         return "/company";
       case "small_company":
         return "/small-company";
-      default:
+      case "individual":
         return "/user";
+      default:
+        return "/login";
     }
+  }
+
+  if (!ready) {
+    return <div style={{ padding: 40 }}>Loading...</div>;
   }
 
   return (
@@ -107,7 +117,7 @@ export default function App() {
         <Route
           path="/admin/*"
           element={
-            <RoleGuard user={user} allow={["admin"]}>
+            <RoleGuard user={user} ready={ready} allow={["admin"]}>
               <AdminLayout />
             </RoleGuard>
           }
@@ -126,11 +136,12 @@ export default function App() {
         </Route>
 
         {/* ================= MANAGER ================= */}
+        {/* Admin allowed to view manager */}
 
         <Route
           path="/manager/*"
           element={
-            <RoleGuard user={user} allow={["manager", "admin"]}>
+            <RoleGuard user={user} ready={ready} allow={["manager", "admin"]}>
               <ManagerLayout />
             </RoleGuard>
           }
@@ -147,11 +158,12 @@ export default function App() {
         </Route>
 
         {/* ================= COMPANY ================= */}
+        {/* Manager + Admin global visibility */}
 
         <Route
           path="/company/*"
           element={
-            <RoleGuard user={user} allow={["company", "admin", "manager"]}>
+            <RoleGuard user={user} ready={ready} allow={["company", "admin", "manager"]}>
               <CompanyLayout />
             </RoleGuard>
           }
@@ -167,7 +179,7 @@ export default function App() {
         <Route
           path="/small-company/*"
           element={
-            <RoleGuard user={user} allow={["small_company", "admin", "manager"]}>
+            <RoleGuard user={user} ready={ready} allow={["small_company", "admin", "manager"]}>
               <SmallCompanyLayout />
             </RoleGuard>
           }
@@ -183,7 +195,7 @@ export default function App() {
         <Route
           path="/user/*"
           element={
-            <RoleGuard user={user} allow={["individual", "admin", "manager"]}>
+            <RoleGuard user={user} ready={ready} allow={["individual", "admin", "manager"]}>
               <UserLayout />
             </RoleGuard>
           }
