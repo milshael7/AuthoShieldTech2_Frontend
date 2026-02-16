@@ -1,6 +1,6 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — FULL STABLE VERSION
-   Unified endpoints + safe refresh + full dashboard support
+   AUTOSHIELD FRONTEND API LAYER — MASTER STABLE BUILD
+   Unified endpoints + overview compatibility layer
    ========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
@@ -13,9 +13,7 @@ const TOKEN_KEY = "as_token";
 const USER_KEY = "as_user";
 const REQUEST_TIMEOUT = 45000;
 
-/* =============================
-   STORAGE HELPERS
-   ============================= */
+/* ================= STORAGE ================= */
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -45,9 +43,7 @@ export function clearUser() {
   localStorage.removeItem(USER_KEY);
 }
 
-/* =============================
-   URL HELPER
-   ============================= */
+/* ================= HELPERS ================= */
 
 function joinUrl(base, path) {
   const cleanBase = String(base || "").replace(/\/+$/, "");
@@ -57,19 +53,12 @@ function joinUrl(base, path) {
   return `${cleanBase}${cleanPath}`;
 }
 
-/* =============================
-   FETCH WITH TIMEOUT
-   ============================= */
-
 async function fetchWithTimeout(url, options = {}, ms = REQUEST_TIMEOUT) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
 
   try {
-    return await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
+    return await fetch(url, { ...options, signal: controller.signal });
   } catch (err) {
     if (err?.name === "AbortError") {
       throw new Error("Request timeout");
@@ -80,18 +69,12 @@ async function fetchWithTimeout(url, options = {}, ms = REQUEST_TIMEOUT) {
   }
 }
 
-/* =============================
-   CORE REQUEST WRAPPER
-   ============================= */
-
 async function req(
   path,
   { method = "GET", body, auth = true, headers: extraHeaders = {} } = {},
   retry = true
 ) {
-  if (!API_BASE) {
-    throw new Error("API base URL not configured");
-  }
+  if (!API_BASE) throw new Error("API base URL not configured");
 
   const headers = {
     "Content-Type": "application/json",
@@ -103,71 +86,54 @@ async function req(
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
+  const res = await fetchWithTimeout(joinUrl(API_BASE, path), {
+    method,
+    headers,
+    credentials: "include",
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  let data = {};
   try {
-    const res = await fetchWithTimeout(joinUrl(API_BASE, path), {
-      method,
-      headers,
-      credentials: "include",
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    data = await res.json();
+  } catch {}
 
-    let data = {};
+  if (res.status === 401 && auth && retry && getToken()) {
     try {
-      data = await res.json();
-    } catch {
-      data = {};
-    }
-
-    // 🔄 Auto refresh on 401
-    if (res.status === 401 && auth && retry && getToken()) {
-      try {
-        const refreshRes = await fetchWithTimeout(
-          joinUrl(API_BASE, "/api/auth/refresh"),
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${getToken()}`,
-            },
-            credentials: "include",
-          }
-        );
-
-        const refreshData = await refreshRes.json().catch(() => ({}));
-
-        if (refreshRes.ok && refreshData.token) {
-          setToken(refreshData.token);
-          if (refreshData.user) saveUser(refreshData.user);
-
-          return req(
-            path,
-            { method, body, auth, headers: extraHeaders },
-            false
-          );
+      const refreshRes = await fetchWithTimeout(
+        joinUrl(API_BASE, "/api/auth/refresh"),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+          },
+          credentials: "include",
         }
-      } catch {}
-
-      throw new Error("Unauthorized");
-    }
-
-    if (!res.ok) {
-      throw new Error(
-        data?.error ||
-        data?.message ||
-        `Request failed (${res.status})`
       );
-    }
 
-    return data;
-  } catch (err) {
-    if (err.message === "Request timeout") {
-      throw new Error("Network timeout. Please try again.");
-    }
+      const refreshData = await refreshRes.json().catch(() => ({}));
 
+      if (refreshRes.ok && refreshData.token) {
+        setToken(refreshData.token);
+        if (refreshData.user) saveUser(refreshData.user);
+
+        return req(path, { method, body, auth, headers: extraHeaders }, false);
+      }
+    } catch {}
+
+    throw new Error("Unauthorized");
+  }
+
+  if (!res.ok) {
     throw new Error(
-      err.message || "Network error. Please check connection."
+      data?.error ||
+      data?.message ||
+      `Request failed (${res.status})`
     );
   }
+
+  return data;
 }
 
 /* =========================================================
@@ -196,73 +162,46 @@ export const api = {
   markMyNotificationRead: (id) =>
     req(`/api/me/notifications/${id}/read`, { method: "POST" }),
 
-  /* ---------- COMPANY ---------- */
-  companyMe: () => req("/api/company/me"),
-  companyNotifications: () => req("/api/company/notifications"),
-  companyAddMember: (userId) =>
-    req("/api/company/members", {
-      method: "POST",
-      body: { userId },
-    }),
-  companyRemoveMember: (userId) =>
-    req(`/api/company/members/${userId}`, {
-      method: "DELETE",
-    }),
-  companyMarkRead: (id) =>
-    req(`/api/company/notifications/${id}/read`, {
-      method: "POST",
-    }),
-
   /* ---------- ADMIN ---------- */
   adminUsers: () => req("/api/admin/users"),
   adminCompanies: () => req("/api/admin/companies"),
   adminNotifications: () => req("/api/admin/notifications"),
-  adminCreateUser: (payload) =>
-    req("/api/admin/users", { method: "POST", body: payload }),
-  adminRotateUserId: (id) =>
-    req(`/api/admin/users/${id}/rotate-id`, { method: "POST" }),
-  adminUpdateSubscription: (id, payload) =>
-    req(`/api/admin/users/${id}/subscription`, {
-      method: "PATCH",
-      body: payload,
-    }),
-  adminCreateCompany: (payload) =>
-    req("/api/admin/companies", {
-      method: "POST",
-      body: payload,
-    }),
 
   /* ---------- MANAGER ---------- */
   managerOverview: () => req("/api/manager/overview"),
   managerUsers: () => req("/api/manager/users"),
   managerCompanies: () => req("/api/manager/companies"),
-  managerNotifications: () => req("/api/manager/notifications"),
   managerAudit: (limit = 200) =>
     req(`/api/manager/audit?limit=${encodeURIComponent(limit)}`),
 
-  /* ---------- SECURITY DASHBOARDS ---------- */
-  assets: () => req("/api/security/assets"),
-  attackSurfaceOverview: () => req("/api/security/attack-surface"),
-  complianceOverview: () => req("/api/security/compliance-overview"),
-  vulnerabilityOverview: () => req("/api/security/vulnerability-overview"),
+  /* ---------- SECURITY MODULES ---------- */
   vulnerabilities: () => req("/api/security/vulnerabilities"),
-  postureSummary: () => req("/api/security/posture/summary"),
-  postureChecks: () => req("/api/security/posture/checks"),
-  usersOverview: () => req("/api/security/users-overview"),
-  reportSummary: () => req("/api/security/report-summary"),
-  policies: () => req("/api/security/policies"),
+  vulnerabilityOverview: () => req("/api/security/vulnerability-overview"),
+  vulnerabilityCenter: () => req("/api/security/vulnerability-center"),
+
   compliance: () => req("/api/security/compliance"),
+  complianceOverview: () => req("/api/security/compliance-overview"),
+
+  policies: () => req("/api/security/policies"),
+  policiesOverview: () => req("/api/security/policies-overview"),
+
   reports: () => req("/api/security/reports"),
+  reportSummary: () => req("/api/security/report-summary"),
+
+  attackSurfaceOverview: () => req("/api/security/attack-surface"),
+
+  assets: () => req("/api/security/assets"),
+  usersOverview: () => req("/api/security/users-overview"),
+
+  postureSummary: () => req("/api/security/posture-summary"),
+  postureChecks: () => req("/api/security/posture-checks"),
 
   /* ---------- INCIDENTS ---------- */
   incidents: () => req("/api/incidents"),
   createIncident: (payload) =>
-    req("/api/incidents", {
-      method: "POST",
-      body: payload,
-    }),
+    req("/api/incidents", { method: "POST", body: payload }),
 
-  /* ---------- THREAT INTEL ---------- */
+  /* ---------- THREAT ---------- */
   threatFeed: () => req("/api/threat-feed"),
 
   /* ---------- AI ---------- */
