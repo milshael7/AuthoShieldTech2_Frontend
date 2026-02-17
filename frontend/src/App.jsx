@@ -1,5 +1,5 @@
 // frontend/src/App.jsx
-// FULL ROLE-STRUCTURED ROUTING — GLOBAL CONTROL ADDED
+// FULL ROLE-STRUCTURED ROUTING — AUTH FLOW HARD LOCKED
 
 import React, { useEffect, useState } from "react";
 import {
@@ -8,7 +8,15 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { getSavedUser } from "./lib/api.js";
+
+import {
+  getSavedUser,
+  getToken,
+  setToken,
+  saveUser,
+  clearToken,
+  clearUser,
+} from "./lib/api.js";
 
 /* ================= LAYOUTS ================= */
 
@@ -52,6 +60,7 @@ function normalizeRole(role) {
 
 function RoleGuard({ user, ready, allow, children }) {
   if (!ready) return null;
+
   if (!user) return <Navigate to="/login" replace />;
 
   const role = normalizeRole(user.role);
@@ -68,11 +77,60 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
 
+  /* =========================================================
+     AUTH BOOT VALIDATION
+  ========================================================= */
+
   useEffect(() => {
-    const stored = getSavedUser();
-    setUser(stored || null);
-    setReady(true);
+    async function bootAuth() {
+      const token = getToken();
+      const storedUser = getSavedUser();
+
+      if (!token || !storedUser) {
+        clearToken();
+        clearUser();
+        setUser(null);
+        setReady(true);
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `${import.meta.env.VITE_API_BASE}/api/auth/refresh`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!res.ok) throw new Error("Session invalid");
+
+        const data = await res.json();
+
+        if (!data?.token || !data?.user) {
+          throw new Error("Invalid refresh response");
+        }
+
+        setToken(data.token);
+        saveUser(data.user);
+        setUser(data.user);
+      } catch (e) {
+        console.warn("Session expired. Clearing auth.");
+        clearToken();
+        clearUser();
+        setUser(null);
+      } finally {
+        setReady(true);
+      }
+    }
+
+    bootAuth();
   }, []);
+
+  /* ========================================================= */
 
   function defaultRedirect() {
     if (!user) return "/login";
@@ -93,7 +151,13 @@ export default function App() {
     }
   }
 
-  if (!ready) return <div style={{ padding: 40 }}>Loading...</div>;
+  if (!ready) {
+    return (
+      <div style={{ padding: 40 }}>
+        Validating session…
+      </div>
+    );
+  }
 
   return (
     <BrowserRouter>
@@ -125,8 +189,6 @@ export default function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="trading" element={<TradingRoom />} />
           <Route path="notifications" element={<Notifications />} />
-
-          {/* NEW */}
           <Route path="global" element={<GlobalControl />} />
         </Route>
 
