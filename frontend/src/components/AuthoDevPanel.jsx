@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+// frontend/src/components/AuthoDevPanel.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { readAloud } from "./ReadAloud";
 
 /* ================= STORAGE ================= */
@@ -9,32 +10,26 @@ function safeGet(key) {
 function safeSet(key, value) {
   try { localStorage.setItem(key, value); } catch {}
 }
-
 function getRoomId() {
   if (typeof window === "undefined") return "root";
   return window.location.pathname.replace(/\/+$/, "") || "root";
 }
-
 function getUser() {
   try { return JSON.parse(localStorage.getItem("as_user") || "null"); }
   catch { return null; }
 }
-
 function getStorageKey() {
   const user = getUser();
   const tenant = user?.companyId || user?.company || "unknown";
   return `authodev.panel.${tenant}.${getRoomId()}`;
 }
 
-/* ================= COMPONENT ================= */
-
 export default function AuthoDevPanel({
   title = "",
   endpoint = "/api/ai/chat",
   getContext,
 }) {
-  const storageKey = getStorageKey();
-
+  const storageKey = useMemo(() => getStorageKey(), []);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -49,12 +44,11 @@ export default function AuthoDevPanel({
 
   useEffect(() => {
     const raw = safeGet(storageKey);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        setMessages(Array.isArray(parsed?.messages) ? parsed.messages : []);
-      } catch {}
-    }
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      setMessages(Array.isArray(parsed?.messages) ? parsed.messages : []);
+    } catch {}
   }, [storageKey]);
 
   useEffect(() => {
@@ -65,72 +59,84 @@ export default function AuthoDevPanel({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  /* ================= VOICE INPUT (ChatGPT-like) ================= */
+  /* ================= VOICE ================= */
 
   function startListening() {
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
       alert("Voice input not supported in this browser.");
       return;
     }
 
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.lang = "en-US";
-      recognition.continuous = true;
-      recognition.interimResults = true;
+    // stop any previous session
+    try { recognitionRef.current?.stop(); } catch {}
 
-      recognition.onstart = () => setListening(true);
-      recognition.onend = () => setListening(false);
+    const rec = new SR();
+    rec.lang = "en-US";
+    rec.interimResults = true;
 
-      recognition.onresult = (e) => {
-        // build full transcript (including interim)
-        let transcript = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          transcript += e.results[i][0].transcript;
-        }
-        setInput((prev) => {
-          // if user already typed some text, append intelligently
-          const p = (prev || "").trim();
-          const t = (transcript || "").trim();
-          if (!p) return t;
-          // don’t spam duplicates
-          if (p.endsWith(t)) return p;
-          return `${p} ${t}`.trim();
-        });
-      };
+    rec.onstart = () => setListening(true);
+    rec.onend = () => setListening(false);
 
-      recognition.onerror = () => {
-        setListening(false);
-      };
+    rec.onresult = (e) => {
+      // take best current transcript
+      const last = e.results?.[e.results.length - 1];
+      const text = last?.[0]?.transcript || "";
+      if (text) setInput(text);
+    };
 
-      recognition.start();
-      recognitionRef.current = recognition;
-    } catch {
-      alert("Voice input failed to start.");
-      setListening(false);
-    }
+    rec.onerror = () => setListening(false);
+
+    recognitionRef.current = rec;
+    rec.start();
   }
 
   function stopListening() {
-    try {
-      recognitionRef.current?.stop();
-    } catch {}
+    try { recognitionRef.current?.stop(); } catch {}
     setListening(false);
+  }
+
+  /* ================= ACTIONS ================= */
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // fallback
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+  }
+
+  async function shareText(text) {
+    if (!navigator.share) {
+      await copyText(text);
+      return;
+    }
+    try {
+      await navigator.share({ text });
+    } catch {
+      // user cancelled share -> do nothing (prevents that Promise rejection spam)
+    }
+  }
+
+  function setReaction(index, type) {
+    setMessages((m) =>
+      m.map((msg, i) => (i === index ? { ...msg, reaction: type } : msg))
+    );
   }
 
   /* ================= SEND ================= */
 
-  async function sendMessage(textOverride = null) {
-    const messageText = (textOverride ?? input).trim();
+  async function sendMessage(regenText = null) {
+    const messageText = (regenText || input).trim();
     if (!messageText || loading) return;
 
-    // If this is a regenerate request, don’t add another user bubble
-    const isRegenerate = typeof textOverride === "string" && textOverride.trim();
-
-    if (!isRegenerate) {
+    if (!regenText) {
       setMessages((m) => [
         ...m,
         { role: "user", text: messageText, ts: new Date().toLocaleTimeString() },
@@ -142,15 +148,11 @@ export default function AuthoDevPanel({
 
     try {
       const ctx = typeof getContext === "function" ? getContext() : {};
-
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          message: messageText,
-          context: ctx,
-        }),
+        body: JSON.stringify({ message: messageText, context: ctx }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -182,40 +184,16 @@ export default function AuthoDevPanel({
     }
   }
 
-  /* ================= ACTIONS ================= */
-
-  async function copyText(text) {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      // ignore
-    }
-  }
-
-  async function shareText(text) {
-    try {
-      if (navigator.share) {
-        await navigator.share({ text });
-      } else {
-        await copyText(text);
-      }
-    } catch {
-      // ✅ user cancelled share → don’t throw / don’t spam
-    }
-  }
-
-  function setReaction(index, type) {
-    setMessages((m) =>
-      m.map((msg, i) => (i === index ? { ...msg, reaction: type } : msg))
-    );
-  }
+  /* ================= UI ================= */
 
   return (
     <div className="advisor-wrap">
-      {/* optional tiny title line (kept empty for your design) */}
-      {title ? <div className="advisor-miniTitle">{title}</div> : null}
+      {/* HEADER (stays) */}
+      <div className="advisor-miniTitle">
+        {title || "Advisor"}
+      </div>
 
-      {/* MESSAGES */}
+      {/* FEED (scrolls only) */}
       <div className="advisor-feed">
         {messages.map((m, i) => (
           <div key={i} className={`advisor-row ${m.role}`}>
@@ -224,8 +202,8 @@ export default function AuthoDevPanel({
             {m.role === "ai" && (
               <div className="advisor-actions">
                 <button onClick={() => readAloud(m.speakText)} title="Read aloud">🔊</button>
-                <button onClick={() => copyText(m.text)} title="Copy">📋</button>
-                <button onClick={() => shareText(m.text)} title="Share">📤</button>
+                <button onClick={() => copyText(m.text)} title="Copy">⧉</button>
+                <button onClick={() => shareText(m.text)} title="Share">⇪</button>
 
                 <button
                   className={m.reaction === "up" ? "active" : ""}
@@ -250,35 +228,40 @@ export default function AuthoDevPanel({
             <div className="advisor-ts">{m.ts}</div>
           </div>
         ))}
+
         <div ref={bottomRef} />
       </div>
 
-      {/* INPUT (ChatGPT-like: mic LEFT, send RIGHT, bars center when listening) */}
+      {/* INPUT (stays) */}
       <div className="advisor-inputBar">
-        <button
-          className="advisor-micBtn"
-          onClick={listening ? stopListening : startListening}
-          title={listening ? "Pause voice" : "Voice"}
-        >
-          {listening ? "■" : "🎙"}
-        </button>
+        {/* MIC LEFT */}
+        {!listening ? (
+          <button className="advisor-micBtn" onClick={startListening} title="Voice">
+            🎙
+          </button>
+        ) : (
+          <button className="advisor-micBtn" onClick={stopListening} title="Stop">
+            ■
+          </button>
+        )}
 
+        {/* CENTER INPUT */}
         <div className="advisor-inputCenter">
           <textarea
             className="advisor-textarea"
-            placeholder="Message AutoShield Advisor…"
+            placeholder="Ask about threats, posture, compliance…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             rows={1}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                stopListening();
                 sendMessage();
               }
             }}
           />
 
+          {/* VOICE BARS (only while listening) */}
           {listening && (
             <div className="advisor-bars" aria-hidden="true">
               <span />
@@ -290,12 +273,10 @@ export default function AuthoDevPanel({
           )}
         </div>
 
+        {/* SEND RIGHT */}
         <button
           className="advisor-sendBtn"
-          onClick={() => {
-            stopListening();
-            sendMessage();
-          }}
+          onClick={() => sendMessage()}
           disabled={loading || !input.trim()}
           title="Send"
         >
@@ -303,7 +284,7 @@ export default function AuthoDevPanel({
         </button>
       </div>
 
-      {loading && <div className="advisor-loading">Thinking…</div>}
+      {loading && <div className="advisor-loading">Analyzing…</div>}
     </div>
   );
 }
