@@ -1,6 +1,6 @@
 // frontend/src/App.jsx
-// FULL ROLE-STRUCTURED ROUTING — HARDENED + STABLE
-// Phase 2 Architecture Lock
+// FULL ROLE-STRUCTURED ROUTING — HARDENED + ADMIN GLOBAL READY
+// Phase 3 Architecture Lock
 
 import React, { useEffect, useState } from "react";
 import {
@@ -71,10 +71,6 @@ export default function App() {
   useEffect(() => {
     const stored = getSavedUser();
     setUser(stored || null);
-
-    // 🔎 DEBUG — Remove later if desired
-    console.log("HYDRATED USER:", stored);
-
     setReady(true);
   }, []);
 
@@ -131,12 +127,19 @@ export default function App() {
           <Route path="compliance" element={<Compliance />} />
           <Route path="policies" element={<Policies />} />
           <Route path="reports" element={<Reports />} />
-          <Route path="trading" element={<TradingRoom />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="trading" element={<TradingRoom />} />
+
+          {/* 🔒 Admin Global Routes (Reserved – Next Step) */}
+          {/* Example:
+              <Route path="global/companies" element={<GlobalCompanies />} />
+              <Route path="global/small-companies" element={<GlobalSmallCompanies />} />
+              <Route path="global/users" element={<GlobalUsers />} />
+          */}
         </Route>
 
         {/* ================= MANAGER ================= */}
-        {/* Admin allowed to view manager */}
+        {/* Admin allowed to enter Manager room */}
 
         <Route
           path="/manager/*"
@@ -153,12 +156,12 @@ export default function App() {
           <Route path="vulnerabilities" element={<Vulnerabilities />} />
           <Route path="compliance" element={<Compliance />} />
           <Route path="reports" element={<Reports />} />
-          <Route path="trading" element={<TradingRoom />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="trading" element={<TradingRoom />} />
         </Route>
 
         {/* ================= COMPANY ================= */}
-        {/* Manager + Admin global visibility */}
+        {/* Manager + Admin visibility */}
 
         <Route
           path="/company/*"
