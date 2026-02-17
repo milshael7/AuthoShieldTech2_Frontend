@@ -1,9 +1,5 @@
 // frontend/src/layouts/AdminLayout.jsx
-// Admin Layout — Enterprise SOC Architecture (FINAL)
-// Right Advisor dock: STICKY (doesn't move)
-// Only message feed scrolls (ChatGPT-style)
-// Collapsible: when closed, panel is truly gone (content expands)
-// Top-right Advisor button/tab (not in the middle)
+// Admin Layout — Enterprise SOC Architecture (GLOBAL STRUCTURE LOCKED)
 
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -15,8 +11,6 @@ import "../styles/layout.css";
 export default function AdminLayout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
-
-  // ✅ Advisor dock open/close (persisted)
   const [advisorOpen, setAdvisorOpen] = useState(true);
 
   useEffect(() => {
@@ -57,22 +51,79 @@ export default function AdminLayout() {
         </div>
 
         <nav className="layout-nav">
-          <NavLink to="." end onClick={closeMenu}>Security Posture</NavLink>
-          <NavLink to="assets" onClick={closeMenu}>Assets</NavLink>
-          <NavLink to="threats" onClick={closeMenu}>Threats</NavLink>
-          <NavLink to="incidents" onClick={closeMenu}>Incidents</NavLink>
-          <NavLink to="vulnerabilities" onClick={closeMenu}>Vulnerabilities</NavLink>
-          <NavLink to="vulnerability-center" onClick={closeMenu}>Vulnerability Center</NavLink>
-          <NavLink to="compliance" onClick={closeMenu}>Compliance</NavLink>
-          <NavLink to="policies" onClick={closeMenu}>Policies</NavLink>
-          <NavLink to="reports" onClick={closeMenu}>Reports</NavLink>
-          <NavLink to="trading" onClick={closeMenu}>Trading Command</NavLink>
-          <NavLink to="notifications" onClick={closeMenu}>Notifications</NavLink>
+
+          {/* ===== ADMIN CORE ===== */}
+          <NavLink to="." end onClick={closeMenu}>
+            Security Posture
+          </NavLink>
+
+          <NavLink to="assets" onClick={closeMenu}>
+            Assets
+          </NavLink>
+
+          <NavLink to="threats" onClick={closeMenu}>
+            Threats
+          </NavLink>
+
+          <NavLink to="incidents" onClick={closeMenu}>
+            Incidents
+          </NavLink>
+
+          <NavLink to="vulnerabilities" onClick={closeMenu}>
+            Vulnerabilities
+          </NavLink>
+
+          <NavLink to="vulnerability-center" onClick={closeMenu}>
+            Vulnerability Center
+          </NavLink>
+
+          <NavLink to="compliance" onClick={closeMenu}>
+            Compliance
+          </NavLink>
+
+          <NavLink to="policies" onClick={closeMenu}>
+            Policies
+          </NavLink>
+
+          <NavLink to="reports" onClick={closeMenu}>
+            Reports
+          </NavLink>
+
+          <NavLink to="notifications" onClick={closeMenu}>
+            Notifications
+          </NavLink>
 
           <hr style={{ opacity: 0.18 }} />
 
-          <NavLink to="/manager" onClick={closeMenu}>Manager Global View</NavLink>
-          <NavLink to="/company" onClick={closeMenu}>Company Global View</NavLink>
+          {/* ===== MANAGER ROOM ===== */}
+          <NavLink to="/manager" onClick={closeMenu}>
+            Manager Room
+          </NavLink>
+
+          {/* ===== TRADING ROOM ===== */}
+          <NavLink to="trading" onClick={closeMenu}>
+            Trading Room
+          </NavLink>
+
+          <hr style={{ opacity: 0.18 }} />
+
+          {/* ===== GLOBAL OVERSIGHT ===== */}
+          <div className="nav-section-label">
+            Global Oversight
+          </div>
+
+          <NavLink to="/company" onClick={closeMenu}>
+            Global Companies
+          </NavLink>
+
+          <NavLink to="/small-company" onClick={closeMenu}>
+            Global Small Companies
+          </NavLink>
+
+          <NavLink to="/user" onClick={closeMenu}>
+            Global Users
+          </NavLink>
+
         </nav>
 
         <button className="btn logout-btn" onClick={logout}>
@@ -88,11 +139,10 @@ export default function AdminLayout() {
           </section>
         </main>
 
-        {/* ✅ Dock exists in layout, but truly collapses to width:0 */}
         <aside className={`enterprise-ai-panel ${advisorOpen ? "open" : "collapsed"}`}>
           <div className="enterprise-ai-inner">
             <AuthoDevPanel
-              title="" // no big header title
+              title=""
               getContext={() => ({
                 role: "admin",
                 location: window.location.pathname,
@@ -104,14 +154,14 @@ export default function AdminLayout() {
         </aside>
       </div>
 
-      {/* ✅ TOP-RIGHT TAB (always reachable, not covering your tools) */}
+      {/* ===== Floating Toggle ===== */}
       <button
         className="advisor-fab"
         onClick={() => setAdvisor(!advisorOpen)}
         title={advisorOpen ? "Close Advisor" : "Open Advisor"}
-        aria-label={advisorOpen ? "Close Advisor" : "Open Advisor"}
       >
         {advisorOpen ? "›" : "AuthoShield Advisor"}
       </button>
     </div>
   );
+}
