@@ -1,5 +1,9 @@
 // frontend/src/layouts/AdminLayout.jsx
-// Admin Layout — Enterprise SOC Architecture (GLOBAL STRUCTURE LOCKED)
+// Admin Layout — SUPREME CONTROL ARCHITECTURE
+// - Admin has full override power
+// - Structured Manager / Trading / Global grouping
+// - Sticky Advisor Dock (true collapse)
+// - Clean enterprise navigation hierarchy
 
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -12,6 +16,9 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [advisorOpen, setAdvisorOpen] = useState(true);
+  const [globalOpen, setGlobalOpen] = useState(true);
+
+  /* ================= ADVISOR STATE ================= */
 
   useEffect(() => {
     try {
@@ -27,6 +34,8 @@ export default function AdminLayout() {
     } catch {}
   }
 
+  /* ================= LOGOUT ================= */
+
   function logout() {
     clearToken();
     clearUser();
@@ -37,6 +46,8 @@ export default function AdminLayout() {
     setMenuOpen(false);
   }
 
+  /* ================= UI ================= */
+
   return (
     <div className={`layout-root enterprise ${menuOpen ? "sidebar-open" : ""}`}>
       {menuOpen && <div className="sidebar-overlay" onClick={closeMenu} />}
@@ -46,13 +57,13 @@ export default function AdminLayout() {
         <div className="layout-brand">
           <Logo size="md" />
           <span className="muted" style={{ fontSize: 12 }}>
-            Admin Control
+            Supreme Admin
           </span>
         </div>
 
         <nav className="layout-nav">
 
-          {/* ===== ADMIN CORE ===== */}
+          {/* ===== ADMIN CORE SYSTEM ===== */}
           <NavLink to="." end onClick={closeMenu}>
             Security Posture
           </NavLink>
@@ -95,9 +106,13 @@ export default function AdminLayout() {
 
           <hr style={{ opacity: 0.18 }} />
 
-          {/* ===== MANAGER ROOM ===== */}
+          {/* ===== MANAGER CONTROL ROOM ===== */}
+          <div className="nav-section-label">
+            Operational Oversight
+          </div>
+
           <NavLink to="/manager" onClick={closeMenu}>
-            Manager Room
+            Manager Control Room
           </NavLink>
 
           {/* ===== TRADING ROOM ===== */}
@@ -107,22 +122,29 @@ export default function AdminLayout() {
 
           <hr style={{ opacity: 0.18 }} />
 
-          {/* ===== GLOBAL OVERSIGHT ===== */}
-          <div className="nav-section-label">
-            Global Oversight
+          {/* ===== GLOBAL OVERSIGHT GROUP ===== */}
+          <div
+            className="nav-section-label clickable"
+            onClick={() => setGlobalOpen(v => !v)}
+          >
+            Global Oversight {globalOpen ? "▾" : "▸"}
           </div>
 
-          <NavLink to="/company" onClick={closeMenu}>
-            Global Companies
-          </NavLink>
+          {globalOpen && (
+            <>
+              <NavLink to="/company" onClick={closeMenu}>
+                Global Companies
+              </NavLink>
 
-          <NavLink to="/small-company" onClick={closeMenu}>
-            Global Small Companies
-          </NavLink>
+              <NavLink to="/small-company" onClick={closeMenu}>
+                Global Small Companies
+              </NavLink>
 
-          <NavLink to="/user" onClick={closeMenu}>
-            Global Users
-          </NavLink>
+              <NavLink to="/user" onClick={closeMenu}>
+                Global Users
+              </NavLink>
+            </>
+          )}
 
         </nav>
 
@@ -133,13 +155,19 @@ export default function AdminLayout() {
 
       {/* ================= MAIN + ADVISOR ================= */}
       <div className="enterprise-main">
+
         <main className="layout-main">
           <section className="layout-content">
             <Outlet />
           </section>
         </main>
 
-        <aside className={`enterprise-ai-panel ${advisorOpen ? "open" : "collapsed"}`}>
+        {/* ===== STICKY ADVISOR DOCK ===== */}
+        <aside
+          className={`enterprise-ai-panel ${
+            advisorOpen ? "open" : "collapsed"
+          }`}
+        >
           <div className="enterprise-ai-inner">
             <AuthoDevPanel
               title=""
@@ -147,14 +175,16 @@ export default function AdminLayout() {
                 role: "admin",
                 location: window.location.pathname,
                 scope: "global-visibility",
-                access: "full-control",
+                access: "full-override",
+                authority: "supreme",
               })}
             />
           </div>
         </aside>
+
       </div>
 
-      {/* ===== Floating Toggle ===== */}
+      {/* ===== FLOATING TOP-RIGHT TOGGLE ===== */}
       <button
         className="advisor-fab"
         onClick={() => setAdvisor(!advisorOpen)}
