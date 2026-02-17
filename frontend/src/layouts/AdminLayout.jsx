@@ -1,7 +1,5 @@
 // frontend/src/layouts/AdminLayout.jsx
-// Admin Layout — Enterprise SOC Architecture (FINAL STABLE)
-// Collapsible Right AuthoShield Advisor Dock
-// Production Ready
+// Admin Layout — Enterprise SOC Architecture (LOCKED PANEL VERSION)
 
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -22,7 +20,7 @@ export default function AdminLayout() {
 
   return (
     <div className="layout-root enterprise">
-      
+
       {/* ================= SIDEBAR ================= */}
       <aside className="layout-sidebar admin">
         <div className="layout-brand">
@@ -66,32 +64,35 @@ export default function AdminLayout() {
           </section>
         </main>
 
-        {/* RIGHT AI DOCK */}
+        {/* RIGHT AI PANEL */}
         <aside
           className={`enterprise-ai-panel ${
             advisorOpen ? "open" : "collapsed"
           }`}
         >
-          {/* Toggle Button */}
-          <button
-            className="advisor-tab"
-            onClick={() => setAdvisorOpen((v) => !v)}
-            title={advisorOpen ? "Collapse Advisor" : "Open AuthoShield Advisor"}
-          >
-            {advisorOpen ? "‹" : "AuthoShield Advisor"}
-          </button>
-
-          <div className="enterprise-ai-inner">
-            <AuthoDevPanel
-              title=""
-              getContext={() => ({
-                role: "admin",
-                location: window.location.pathname,
-                access: "full-control",
-                scope: "global-visibility",
-              })}
-            />
+          {/* TOP FIXED TOGGLE */}
+          <div className="advisor-top-toggle">
+            <button
+              onClick={() => setAdvisorOpen(v => !v)}
+              title={advisorOpen ? "Collapse Advisor" : "Open AuthoShield Advisor"}
+            >
+              {advisorOpen ? "‹" : "AuthoShield"}
+            </button>
           </div>
+
+          {advisorOpen && (
+            <div className="enterprise-ai-inner">
+              <AuthoDevPanel
+                title=""
+                getContext={() => ({
+                  role: "admin",
+                  location: window.location.pathname,
+                  access: "full-control",
+                  scope: "global-visibility",
+                })}
+              />
+            </div>
+          )}
         </aside>
 
       </div>
