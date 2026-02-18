@@ -1,1 +1,111 @@
+/* ==============================================
+   LIGHT ENTERPRISE FRAMEWORK
+============================================== */
 
+.enterprise-root {
+  display: flex;
+  height: 100vh;
+  background: #f5f7fb;
+  color: #111;
+}
+
+/* ================= SIDEBAR ================= */
+
+.enterprise-sidebar {
+  width: 72px;
+  background: #ffffff;
+  border-right: 1px solid #e5e7eb;
+  transition: width .25s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.enterprise-sidebar.open {
+  width: 220px;
+}
+
+.sidebar-top {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-toggle {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  background: white;
+  cursor: pointer;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+}
+
+.sidebar-nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: #333;
+  font-weight: 500;
+}
+
+.sidebar-nav a.active {
+  background: #e6f0ff;
+  color: #0052cc;
+}
+
+.icon {
+  width: 24px;
+  text-align: center;
+}
+
+/* ================= MAIN ================= */
+
+.enterprise-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.enterprise-content {
+  flex: 1;
+  padding: 32px;
+  overflow: auto;
+}
+
+/* ================= ADVISOR ================= */
+
+.enterprise-advisor {
+  width: 380px;
+  border-left: 1px solid #e5e7eb;
+  background: #ffffff;
+  transition: width .25s ease;
+}
+
+.enterprise-advisor.collapsed {
+  width: 0;
+  overflow: hidden;
+  border-left: none;
+}
+
+.advisor-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 999;
+  background: #0052cc;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
