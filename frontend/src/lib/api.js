@@ -1,6 +1,6 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — MASTER STABLE BUILD
-   Unified endpoints + overview compatibility layer
+   AUTOSHIELD FRONTEND API LAYER — MULTI-TENANT SECURE BUILD
+   X-Company-Id enforced automatically
    ========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
@@ -53,6 +53,17 @@ function joinUrl(base, path) {
   return `${cleanBase}${cleanPath}`;
 }
 
+function getActiveCompanyId() {
+  try {
+    const raw = localStorage.getItem("as_active_company");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.id || null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchWithTimeout(url, options = {}, ms = REQUEST_TIMEOUT) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
@@ -68,6 +79,10 @@ async function fetchWithTimeout(url, options = {}, ms = REQUEST_TIMEOUT) {
     clearTimeout(id);
   }
 }
+
+/* =========================================================
+   CORE REQUEST
+========================================================= */
 
 async function req(
   path,
@@ -86,6 +101,12 @@ async function req(
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
+  /* 🔥 MULTI-TENANT HEADER */
+  const activeCompanyId = getActiveCompanyId();
+  if (activeCompanyId) {
+    headers["X-Company-Id"] = activeCompanyId;
+  }
+
   const res = await fetchWithTimeout(joinUrl(API_BASE, path), {
     method,
     headers,
@@ -98,6 +119,7 @@ async function req(
     data = await res.json();
   } catch {}
 
+  /* ---------- TOKEN REFRESH ---------- */
   if (res.status === 401 && auth && retry && getToken()) {
     try {
       const refreshRes = await fetchWithTimeout(
@@ -138,7 +160,7 @@ async function req(
 
 /* =========================================================
    API SURFACE
-   ========================================================= */
+========================================================= */
 
 export const api = {
 
@@ -167,22 +189,6 @@ export const api = {
   adminCompanies: () => req("/api/admin/companies"),
   adminNotifications: () => req("/api/admin/notifications"),
 
-  /* ---------- ADMIN TOOL GOVERNANCE ---------- */
-  adminCompanyTools: (companyId) =>
-    req(`/api/admin/companies/${encodeURIComponent(companyId)}/tools`),
-
-  adminBlockTool: (companyId, toolId) =>
-    req(
-      `/api/admin/companies/${encodeURIComponent(companyId)}/tools/${encodeURIComponent(toolId)}/block`,
-      { method: "POST" }
-    ),
-
-  adminUnblockTool: (companyId, toolId) =>
-    req(
-      `/api/admin/companies/${encodeURIComponent(companyId)}/tools/${encodeURIComponent(toolId)}/unblock`,
-      { method: "POST" }
-    ),
-
   /* ---------- MANAGER ---------- */
   managerOverview: () => req("/api/manager/overview"),
   managerUsers: () => req("/api/manager/users"),
@@ -190,35 +196,21 @@ export const api = {
   managerAudit: (limit = 200) =>
     req(`/api/manager/audit?limit=${encodeURIComponent(limit)}`),
 
-  /* ---------- SECURITY MODULES ---------- */
-  vulnerabilities: () => req("/api/security/vulnerabilities"),
-  vulnerabilityOverview: () => req("/api/security/vulnerability-overview"),
-  vulnerabilityCenter: () => req("/api/security/vulnerability-center"),
-
-  compliance: () => req("/api/security/compliance"),
-  complianceOverview: () => req("/api/security/compliance-overview"),
-
-  policies: () => req("/api/security/policies"),
-  policiesOverview: () => req("/api/security/policies-overview"),
-
-  reports: () => req("/api/security/reports"),
-  reportSummary: () => req("/api/security/report-summary"),
-
-  attackSurfaceOverview: () => req("/api/security/attack-surface"),
-
-  assets: () => req("/api/security/assets"),
-  usersOverview: () => req("/api/security/users-overview"),
-
+  /* ---------- SECURITY ---------- */
   postureSummary: () => req("/api/security/posture-summary"),
   postureChecks: () => req("/api/security/posture-checks"),
+
+  vulnerabilities: () => req("/api/security/vulnerabilities"),
+  compliance: () => req("/api/security/compliance"),
+  policies: () => req("/api/security/policies"),
+  reports: () => req("/api/security/reports"),
+
+  assets: () => req("/api/security/assets"),
 
   /* ---------- INCIDENTS ---------- */
   incidents: () => req("/api/incidents"),
   createIncident: (payload) =>
     req("/api/incidents", { method: "POST", body: payload }),
-
-  /* ---------- THREAT ---------- */
-  threatFeed: () => req("/api/threat-feed"),
 
   /* ---------- AI ---------- */
   aiChat: (message, context) =>
