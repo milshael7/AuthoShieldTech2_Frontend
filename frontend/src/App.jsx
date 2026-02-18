@@ -1,6 +1,7 @@
 // frontend/src/App.jsx
 // FULL ROLE-STRUCTURED ROUTING — MULTI-TENANT HARDENED
-// FIXED: Safe Silent Refresh (No Login Loop)
+// Company Dashboard V2 Activated
+// Safe Silent Refresh (No Login Loop)
 
 import React, { useEffect, useState } from "react";
 import {
@@ -51,9 +52,13 @@ import TradingRoom from "./pages/TradingRoom.jsx";
 import VulnerabilityCenter from "./pages/VulnerabilityCenter.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
-/* ================= ADMIN GLOBAL ================= */
+/* ================= ADMIN ================= */
 
 import GlobalControl from "./pages/admin/GlobalControl.jsx";
+
+/* ================= NEW DASHBOARD ================= */
+
+import CompanyDashboardV2 from "./pages/company/CompanyDashboardV2.jsx";
 
 /* ========================================================= */
 
@@ -94,11 +99,11 @@ export default function App() {
         return;
       }
 
-      // 🔥 Trust existing session immediately
+      // Trust existing session immediately
       setUser(storedUser);
       setReady(true);
 
-      // 🔥 Attempt silent refresh in background
+      // Silent refresh in background
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
@@ -133,9 +138,7 @@ export default function App() {
           saveUser(data.user);
           setUser(data.user);
         }
-
-      } catch (e) {
-        // 🚫 Do NOT clear auth on network failure
+      } catch {
         console.warn("Silent refresh failed. Keeping session.");
       }
     }
@@ -220,7 +223,7 @@ export default function App() {
             <Route path="notifications" element={<Notifications />} />
           </Route>
 
-          {/* COMPANY */}
+          {/* COMPANY — V2 ACTIVE */}
           <Route
             path="/company/*"
             element={
@@ -229,7 +232,7 @@ export default function App() {
               </RoleGuard>
             }
           >
-            <Route index element={<Posture />} />
+            <Route index element={<CompanyDashboardV2 />} />
             <Route path="assets" element={<Assets />} />
             <Route path="incidents" element={<Incidents />} />
             <Route path="notifications" element={<Notifications />} />
