@@ -16,9 +16,19 @@ export function CompanyProvider({ children }) {
       if (!company) {
         setActiveCompanyId(null);
         setActiveCompanyName("All Companies");
+
+        localStorage.removeItem("as_active_company");
       } else {
         setActiveCompanyId(company.id);
         setActiveCompanyName(company.name);
+
+        localStorage.setItem(
+          "as_active_company",
+          JSON.stringify({
+            id: company.id,
+            name: company.name,
+          })
+        );
       }
     }
   }), [activeCompanyId, activeCompanyName]);
@@ -32,7 +42,10 @@ export function CompanyProvider({ children }) {
 
 export function useCompany() {
   const context = useContext(CompanyContext);
+
   if (!context) {
     throw new Error("useCompany must be used inside CompanyProvider");
   }
+
   return context;
+}
