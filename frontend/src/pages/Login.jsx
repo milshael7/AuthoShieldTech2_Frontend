@@ -19,35 +19,19 @@ export default function Login() {
     try {
       const result = await api.login(email, password);
 
-      console.log("LOGIN RESPONSE:", result);
+      const token = result?.token;
+      const user = result?.user;
 
-      const token =
-        result?.token ||
-        result?.jwt ||
-        result?.access_token ||
-        result?.accessToken ||
-        result?.data?.token ||
-        result?.data?.access_token ||
-        "";
-
-      const user =
-        result?.user ||
-        result?.data?.user ||
-        null;
-
-      if (!token) {
+      if (!token || !user) {
         throw new Error("Invalid login response from server");
       }
 
+      // Save session
       setToken(token);
-      if (user) saveUser(user);
+      saveUser(user);
 
-      const role = String(user?.role || "").toLowerCase();
-
-      if (role === "admin") navigate("/admin");
-      else if (role === "manager") navigate("/manager");
-      else if (role === "company") navigate("/company");
-      else navigate("/user");
+      // 🔥 Force full reload so App rehydrates correctly
+      window.location.href = redirectByRole(user.role);
 
     } catch (err) {
       alert(err?.message || "Login failed");
@@ -55,6 +39,18 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  function redirectByRole(role) {
+    const r = String(role || "").toLowerCase();
+
+    if (r === "admin") return "/admin";
+    if (r === "manager") return "/manager";
+    if (r === "company") return "/company";
+    if (r === "small_company") return "/small-company";
+    if (r === "individual") return "/user";
+
+    return "/login";
+  }
 
   const reset = async (e) => {
     e.preventDefault();
