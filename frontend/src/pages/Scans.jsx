@@ -1,23 +1,43 @@
 // frontend/src/pages/Scans.jsx
-// Scan History — Payment Aware • Status Aware • Revenue Ready
+// Scan History — Live Polling • Payment Retry • Modal Report Viewer
 
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getToken } from "../lib/api";
+import { getToken, getSavedUser } from "../lib/api";
 
 export default function Scans() {
   const [scans, setScans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedReport, setSelectedReport] = useState(null);
+
   const navigate = useNavigate();
+
+  /* ================= LOAD SCANS ================= */
 
   useEffect(() => {
     loadScans();
   }, []);
 
-  async function loadScans() {
+  /* ================= AUTO POLLING ================= */
+
+  useEffect(() => {
+    const hasActive = scans.some(
+      (s) => s.status === "running" || s.status === "pending"
+    );
+
+    if (!hasActive) return;
+
+    const interval = setInterval(() => {
+      loadScans(false);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [scans]);
+
+  async function loadScans(showLoader = true) {
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
       setError("");
 
       const token = getToken();
@@ -41,9 +61,48 @@ export default function Scans() {
     } catch (e) {
       setError(e.message);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   }
+
+  /* ================= PAYMENT RETRY ================= */
+
+  async function retryPayment(scan) {
+    try {
+      const token = getToken();
+      const user = getSavedUser();
+
+      const res = await fetch(
+        `${import.meta.env.VITE_API_BASE}/api/public-scans`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            toolId: scan.toolId,
+            email: user?.email,
+            inputData: scan.inputData,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Payment retry failed");
+      }
+
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      }
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  /* ================= HELPERS ================= */
 
   function renderStatus(scan) {
     switch (scan.status) {
@@ -65,6 +124,8 @@ export default function Scans() {
     return new Date(d).toLocaleString();
   }
 
+  /* ================= RENDER ================= */
+
   return (
     <div className="pageWrap">
       <div className="pageTop">
@@ -78,10 +139,9 @@ export default function Scans() {
       </div>
 
       {loading && <p>Loading scans...</p>}
-
       {error && <p className="error">{error}</p>}
 
-      {!loading && !error && scans.length === 0 && (
+      {!loading && scans.length === 0 && (
         <div className="emptyState">
           <p>No scans yet.</p>
           <button
@@ -126,13 +186,21 @@ export default function Scans() {
                 )}
 
                 {scan.status === "awaiting_payment" && (
-                  <p className="warnText">
-                    Payment required before processing.
-                  </p>
+                  <>
+                    <p className="warnText">
+                      Payment required before processing.
+                    </p>
+                    <button
+                      className="primaryBtn"
+                      onClick={() => retryPayment(scan)}
+                    >
+                      Complete Payment
+                    </button>
+                  </>
                 )}
 
                 {scan.status === "running" && (
-                  <p>Scan in progress. Results coming shortly.</p>
+                  <p>Scan in progress. Auto-refreshing…</p>
                 )}
               </div>
 
@@ -140,11 +208,7 @@ export default function Scans() {
                 <div className="scanFooter">
                   <button
                     className="secondaryBtn"
-                    onClick={() =>
-                      alert(
-                        JSON.stringify(scan.result, null, 2)
-                      )
-                    }
+                    onClick={() => setSelectedReport(scan)}
                   >
                     View Full Report
                   </button>
@@ -152,6 +216,44 @@ export default function Scans() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ================= REPORT MODAL ================= */}
+
+      {selectedReport && (
+        <div className="modalOverlay">
+          <div className="modalCard">
+            <h3>{selectedReport.toolName} Report</h3>
+
+            <p>
+              <strong>Risk Score:</strong>{" "}
+              {selectedReport.result?.overview?.riskScore}
+            </p>
+            <p>
+              <strong>Risk Level:</strong>{" "}
+              {selectedReport.result?.overview?.riskLevel}
+            </p>
+
+            <p style={{ marginTop: 12 }}>
+              <strong>Findings:</strong>
+            </p>
+            <ul>
+              {selectedReport.result?.findings?.map(
+                (f, i) => (
+                  <li key={i}>{f}</li>
+                )
+              )}
+            </ul>
+
+            <button
+              className="primaryBtn"
+              onClick={() => setSelectedReport(null)}
+              style={{ marginTop: 20 }}
+            >
+              Close
+            </button>
+          </div>
         </div>
       )}
     </div>
