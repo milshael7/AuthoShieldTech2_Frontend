@@ -1,6 +1,7 @@
 /* =========================================================
    AUTOSHIELD FRONTEND API LAYER — STABLE BUILD
    FIXED: No Infinite Refresh Loop
+   + AutoProtect Integrated
    ========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
@@ -117,7 +118,6 @@ async function req(
     data = await res.json();
   } catch {}
 
-  /* 🔥 IMPORTANT CHANGE */
   if (res.status === 401 && auth) {
     clearToken();
     clearUser();
@@ -169,6 +169,23 @@ export const api = {
   meNotifications: () => req("/api/me/notifications"),
   markMyNotificationRead: (id) =>
     req(`/api/me/notifications/${id}/read`, { method: "POST" }),
+
+  /* ================= AUTOPROTECT ================= */
+
+  autoprotecStatus: () =>
+    req("/api/autoprotect/status"),
+
+  autoprotecEnable: () =>
+    req("/api/autoprotect/enable", { method: "POST" }),
+
+  autoprotecDisable: () =>
+    req("/api/autoprotect/disable", { method: "POST" }),
+
+  autoprotecCreateProject: (payload) =>
+    req("/api/autoprotect/project", {
+      method: "POST",
+      body: payload,
+    }),
 
   /* ================= ADMIN ================= */
 
