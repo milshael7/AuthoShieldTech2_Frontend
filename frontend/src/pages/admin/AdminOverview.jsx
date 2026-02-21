@@ -1,11 +1,13 @@
 // frontend/src/pages/admin/AdminOverview.jsx
-// Executive Command Center v4
-// Revenue Intelligence → Compliance Integrity → SOC Operations
+// Executive Command Center v5
+// Revenue → Subscriber Growth → Compliance → SOC
 
 import React, { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 
 import RevenueTrendChart from "../../components/RevenueTrendChart";
+import SubscriberGrowthChart from "../../components/SubscriberGrowthChart";
+
 import SecurityPostureDashboard from "../../components/SecurityPostureDashboard";
 import SecurityFeedPanel from "../../components/SecurityFeedPanel";
 import SecurityPipeline from "../../components/SecurityPipeline";
@@ -107,10 +109,16 @@ export default function AdminOverview() {
       </div>
 
       {/* ======================================================
-          REVENUE INTELLIGENCE CHART
+          REVENUE INTELLIGENCE
       ====================================================== */}
 
       <RevenueTrendChart />
+
+      {/* ======================================================
+          SUBSCRIBER GROWTH
+      ====================================================== */}
+
+      <SubscriberGrowthChart />
 
       {/* ======================================================
           COMPLIANCE & INTEGRITY
