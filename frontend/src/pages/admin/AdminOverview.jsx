@@ -1,12 +1,13 @@
 // frontend/src/pages/admin/AdminOverview.jsx
-// Executive Command Center v5
-// Revenue → Subscriber Growth → Compliance → SOC
+// Executive Command Center v6
+// Revenue → Subscriber Growth → Refund Risk → Compliance → SOC
 
 import React, { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 
 import RevenueTrendChart from "../../components/RevenueTrendChart";
 import SubscriberGrowthChart from "../../components/SubscriberGrowthChart";
+import RefundDisputeChart from "../../components/RefundDisputeChart";
 
 import SecurityPostureDashboard from "../../components/SecurityPostureDashboard";
 import SecurityFeedPanel from "../../components/SecurityFeedPanel";
@@ -119,6 +120,12 @@ export default function AdminOverview() {
       ====================================================== */}
 
       <SubscriberGrowthChart />
+
+      {/* ======================================================
+          FINANCIAL RISK TIMELINE
+      ====================================================== */}
+
+      <RefundDisputeChart />
 
       {/* ======================================================
           COMPLIANCE & INTEGRITY
