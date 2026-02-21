@@ -1,7 +1,6 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — STABLE BUILD
-   FIXED: No Infinite Refresh Loop
-   + AutoProtect Integrated
+   AUTOSHIELD FRONTEND API LAYER — EXECUTIVE BUILD
+   Stable • No Infinite Refresh • Executive Intelligence Ready
    ========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
@@ -82,7 +81,7 @@ async function fetchWithTimeout(url, options = {}, ms = REQUEST_TIMEOUT) {
 }
 
 /* =========================================================
-   CORE REQUEST (NO AUTO REFRESH LOOP)
+   CORE REQUEST
 ========================================================= */
 
 async function req(
@@ -172,22 +171,27 @@ export const api = {
 
   /* ================= AUTOPROTECT ================= */
 
-  autoprotecStatus: () =>
-    req("/api/autoprotect/status"),
-
+  autoprotecStatus: () => req("/api/autoprotect/status"),
   autoprotecEnable: () =>
     req("/api/autoprotect/enable", { method: "POST" }),
-
   autoprotecDisable: () =>
     req("/api/autoprotect/disable", { method: "POST" }),
-
   autoprotecCreateProject: (payload) =>
     req("/api/autoprotect/project", {
       method: "POST",
       body: payload,
     }),
 
-  /* ================= ADMIN ================= */
+  /* ================= ADMIN EXECUTIVE ================= */
+
+  adminMetrics: () =>
+    req("/api/admin/metrics"),
+
+  adminComplianceReport: () =>
+    req("/api/admin/compliance/report"),
+
+  adminComplianceHistory: (limit = 20) =>
+    req(`/api/admin/compliance/history?limit=${encodeURIComponent(limit)}`),
 
   adminUsers: () => req("/api/admin/users"),
   adminCompanies: () => req("/api/admin/companies"),
@@ -228,7 +232,7 @@ export const api = {
   /* ================= HEALTH ================= */
 
   warmup: () =>
-    fetch(joinUrl(API_BASE, "/api/health"), {
+    fetch(joinUrl(API_BASE, "/health"), {
       method: "GET",
       credentials: "include",
     }).catch(() => null),
