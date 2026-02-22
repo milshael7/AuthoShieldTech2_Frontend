@@ -1,6 +1,6 @@
 // frontend/src/layouts/AdminLayout.jsx
-// Enterprise Admin Layout — Command Architecture v1
-// System Intelligence + Scope + Advisor
+// Enterprise Admin Layout — Command Architecture v2
+// Mobile-Aware • Institutional Grade • Structural Hardened
 
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -11,16 +11,18 @@ import Logo from "../components/Logo.jsx";
 import "../styles/layout.css";
 
 export default function AdminLayout() {
+
   const navigate = useNavigate();
   const { activeCompanyId, activeCompanyName, setCompany, clearScope } = useCompany();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [advisorOpen, setAdvisorOpen] = useState(true);
-  const [globalOpen, setGlobalOpen] = useState(true);
   const [companies, setCompanies] = useState([]);
   const [systemState, setSystemState] = useState(null);
 
-  /* ================= LOAD SYSTEM HEALTH ================= */
+  const isMobile = window.innerWidth < 900;
+
+  /* ================= SYSTEM HEALTH ================= */
 
   useEffect(() => {
     async function loadHealth() {
@@ -36,7 +38,7 @@ export default function AdminLayout() {
     return () => clearInterval(interval);
   }, []);
 
-  /* ================= LOAD COMPANIES ================= */
+  /* ================= COMPANIES ================= */
 
   useEffect(() => {
     async function loadCompanies() {
@@ -76,41 +78,53 @@ export default function AdminLayout() {
     <div className={`layout-root enterprise ${menuOpen ? "sidebar-open" : ""}`}>
 
       {/* ================= SIDEBAR ================= */}
-      <aside className="layout-sidebar admin">
+      <aside className={`layout-sidebar admin ${isMobile && !menuOpen ? "collapsed" : ""}`}>
         <div className="layout-brand">
           <Logo size="md" />
           <span className="muted" style={{ fontSize: 12 }}>
-            Enterprise Admin
+            Enterprise Administration
           </span>
         </div>
 
         <nav className="layout-nav">
           <NavLink to="." end>Dashboard</NavLink>
           <NavLink to="assets">Assets</NavLink>
-          <NavLink to="threats">Threats</NavLink>
-          <NavLink to="incidents">Incidents</NavLink>
-          <NavLink to="vulnerabilities">Vulnerabilities</NavLink>
-          <NavLink to="compliance">Compliance</NavLink>
-          <NavLink to="reports">Reports</NavLink>
-          <NavLink to="notifications">Notifications</NavLink>
+          <NavLink to="threats">Threat Intelligence</NavLink>
+          <NavLink to="incidents">Incident Management</NavLink>
+          <NavLink to="vulnerabilities">Vulnerability Oversight</NavLink>
+          <NavLink to="compliance">Regulatory Compliance</NavLink>
+          <NavLink to="reports">Executive Reporting</NavLink>
+          <NavLink to="notifications">System Notifications</NavLink>
 
           <hr />
 
-          <div className="nav-section-label">Oversight</div>
-          <NavLink to="/manager">Manager Control</NavLink>
-          <NavLink to="/company">Companies</NavLink>
-          <NavLink to="/user">Users</NavLink>
+          <div className="nav-section-label">Operational Oversight</div>
+          <NavLink to="/manager">Manager Command</NavLink>
+          <NavLink to="/company">Corporate Entities</NavLink>
+          <NavLink to="/user">User Governance</NavLink>
         </nav>
 
         <button className="btn logout-btn" onClick={logout}>
-          Log out
+          Secure Log Out
         </button>
       </aside>
 
-      {/* ================= MAIN AREA ================= */}
+      {/* ================= MAIN ================= */}
       <div className="enterprise-main">
 
-        {/* 🔥 TOP INTELLIGENCE BAR */}
+        {/* 🔥 MOBILE HAMBURGER */}
+        {isMobile && (
+          <div style={{ padding: "10px 16px" }}>
+            <button
+              className="btn"
+              onClick={() => setMenuOpen(v => !v)}
+            >
+              ☰ Menu
+            </button>
+          </div>
+        )}
+
+        {/* SYSTEM STATUS BAR */}
         <div
           style={{
             padding: "10px 24px",
@@ -122,32 +136,34 @@ export default function AdminLayout() {
           }}
         >
           <div>
-            <strong>System Status:</strong>{" "}
-            <span style={{ color: getStatusColor(), fontWeight: 600 }}>
+            <strong>Global Security Status:</strong>{" "}
+            <span style={{ color: getStatusColor(), fontWeight: 700 }}>
               {systemState?.securityStatus || "Loading..."}
             </span>
           </div>
 
           <div style={{ fontSize: 13, opacity: 0.7 }}>
-            Last Check:{" "}
+            Last Compliance Audit:{" "}
             {systemState?.lastComplianceCheck
               ? new Date(systemState.lastComplianceCheck).toLocaleString()
               : "-"}
           </div>
         </div>
 
-        {/* 🔥 SCOPE BAR */}
+        {/* SCOPE BAR */}
         <div
           style={{
             padding: "12px 24px",
             borderBottom: "1px solid rgba(255,255,255,.06)",
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "center"
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "12px"
           }}
         >
           <div>
-            <b>Scope:</b> {activeCompanyName}
+            <b>Operational Scope:</b> {activeCompanyName}
           </div>
 
           <select
@@ -155,7 +171,7 @@ export default function AdminLayout() {
             onChange={handleCompanySelect}
             style={{ minWidth: 220 }}
           >
-            <option value="">All Companies</option>
+            <option value="">All Entities</option>
             {companies.map(c => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -164,20 +180,20 @@ export default function AdminLayout() {
           </select>
         </div>
 
-        {/* MAIN CONTENT */}
+        {/* CONTENT */}
         <main className="layout-main">
           <section className="layout-content">
             <Outlet />
           </section>
         </main>
 
-        {/* ADVISOR */}
+        {/* ADVISOR PANEL */}
         <aside className={`enterprise-ai-panel ${advisorOpen ? "open" : "collapsed"}`}>
           <div className="enterprise-ai-inner">
             <AuthoDevPanel
               getContext={() => ({
                 role: "admin",
-                scope: activeCompanyId ? "company" : "global",
+                scope: activeCompanyId ? "entity" : "global",
                 systemStatus: systemState?.securityStatus,
               })}
             />
