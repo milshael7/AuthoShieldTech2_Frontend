@@ -1,322 +1,215 @@
 /* =========================================================
-   AUTOSHIELD PLATFORM UI — INSTITUTIONAL HARDENED
-   FINAL TRUST-GRADE VERSION
-   + EXECUTIVE INTELLIGENCE LAYER
+   AUTOSHIELD TERMINAL LAYER — TRADING ROOM
    ========================================================= */
 
-:root{
-  --p-bg: rgba(255,255,255,.05);
-  --p-bg-soft: rgba(0,0,0,.40);
-  --p-border: rgba(255,255,255,.12);
-
-  --p-accent: #5EC6FF;
-  --p-accent-soft: rgba(94,198,255,.18);
-
-  --p-ok: #2bd576;
-  --p-warn: #ffd166;
-  --p-bad: #ff5a5f;
-
-  --p-text: rgba(255,255,255,.96);
-  --p-muted: rgba(255,255,255,.60);
-
-  --p-radius: 20px;
-  --p-radius-sm: 14px;
+.terminalRoot {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,255,255,.04),
+      rgba(0,0,0,.55)
+    );
 }
 
-/* =============================
-   BASE CARDS
-   ============================= */
-.platformCard,
-.postureCard,
-.card{
+/* ================= TOP BAR ================= */
+
+.terminalTopbar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,255,255,.06),
+      rgba(0,0,0,.55)
+    );
+
+  border-bottom: 1px solid var(--p-border);
+  backdrop-filter: blur(6px);
+}
+
+.terminalSymbol {
+  font-weight: 800;
+  letter-spacing: .6px;
+}
+
+/* ================= BUY / SELL ================= */
+
+.terminalActions {
+  display: flex;
+  gap: 12px;
+}
+
+.terminalBuy,
+.terminalSell {
+  padding: 6px 18px;
+  border-radius: 999px;
+  font-weight: 800;
+  border: 1px solid var(--p-border);
+  cursor: pointer;
+  transition: .2s ease;
+}
+
+.terminalBuy {
+  background: rgba(43,213,118,.15);
+  color: var(--p-ok);
+}
+
+.terminalSell {
+  background: rgba(255,90,95,.15);
+  color: var(--p-bad);
+}
+
+.terminalBuy:hover,
+.terminalSell:hover {
+  transform: translateY(-1px);
+}
+
+/* ================= BODY ================= */
+
+.terminalBody {
+  flex: 1;
+  display: flex;
+  position: relative;
+}
+
+/* ================= LEFT TOOL RAIL ================= */
+
+.terminalRail {
+  width: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 14px;
+  gap: 18px;
+
   background:
     linear-gradient(
       180deg,
       rgba(255,255,255,.05),
-      rgba(0,0,0,.45)
+      rgba(0,0,0,.65)
     );
-  border:1px solid var(--p-border);
-  border-radius:var(--p-radius);
-  padding:26px;
-  backdrop-filter: blur(8px);
-  transition: all .25s ease;
+
+  border-right: 1px solid var(--p-border);
 }
 
-.platformCard:hover,
-.postureCard:hover,
-.card:hover{
-  border-color: var(--p-accent-soft);
+.terminalRailItem {
+  font-size: 16px;
+  cursor: pointer;
+  opacity: .7;
+  transition: .2s ease;
 }
 
-/* =============================
-   GRID STRUCTURE
-   ============================= */
-.postureWrap{
-  display:grid;
-  grid-template-columns:minmax(0,1fr) 420px;
-  gap:28px;
-  align-items:start;
-}
-
-@media (max-width:1100px){
-  .postureWrap{
-    grid-template-columns:1fr;
-  }
-}
-
-/* =============================
-   KPI GRID
-   ============================= */
-.kpiGrid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
-  gap:18px;
-  margin:26px 0;
-}
-
-.kpiCard{
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255,255,255,.08),
-      rgba(0,0,0,.35)
-    );
-  border:1px solid var(--p-border);
-  border-radius:var(--p-radius-sm);
-  padding:16px;
-  transition:.2s ease;
-}
-
-.kpiCard:hover{
-  border-color: var(--p-accent-soft);
-}
-
-.kpiCard small{
-  font-size:12px;
-  color:var(--p-muted);
-  letter-spacing:.5px;
-}
-
-.kpiCard b{
-  display:block;
-  margin-top:6px;
-  font-size:22px;
-  font-weight:900;
-}
-
-/* =============================
-   BUTTONS
-   ============================= */
-.btn{
-  padding:10px 18px;
-  border-radius:999px;
-  font-weight:700;
-  border:1px solid var(--p-border);
-  cursor:pointer;
-  transition:.2s ease;
-  background:rgba(255,255,255,.06);
-  color:var(--p-text);
-}
-
-.btn.ok{
-  background:rgba(43,213,118,.15);
-  color:var(--p-ok);
-}
-
-.btn.warn{
-  background:rgba(255,209,102,.18);
-  color:var(--p-warn);
-}
-
-.btn.primary{
-  background: var(--p-accent-soft);
+.terminalRailItem:hover {
+  opacity: 1;
   color: var(--p-accent);
 }
 
-.btn:hover{
-  transform:translateY(-1px);
-  opacity:.9;
-}
+/* ================= CHART AREA ================= */
 
-/* =============================
-   BADGES
-   ============================= */
-.badge{
-  display:inline-block;
-  padding:5px 12px;
-  border-radius:999px;
-  font-size:12px;
-  font-weight:900;
-  border:1px solid var(--p-border);
-  background:rgba(0,0,0,.45);
-}
-
-.badge.warn{
-  background:rgba(255,209,102,.18);
-  color:var(--p-warn);
-}
-
-.badge.ok{
-  background:rgba(43,213,118,.18);
-  color:var(--p-ok);
-}
-
-/* =========================================================
-   EXECUTIVE INTELLIGENCE LAYER
-   ========================================================= */
-
-.kpiCard.executive {
+.terminalChartArea {
+  flex: 1;
   position: relative;
-  overflow: hidden;
+  transition: margin .2s ease;
 }
 
-.kpiCard.executive::after {
-  content: "";
+.terminalChartSurface {
+  width: 100%;
+  height: 100%;
+}
+
+/* ================= TRADE PANEL ================= */
+
+.terminalPanel {
   position: absolute;
   top: 0;
+  bottom: 0;
   right: 0;
-  width: 4px;
-  height: 100%;
-  background: var(--p-accent);
-  opacity: .6;
-}
 
-.metric-positive {
-  color: var(--p-ok);
-}
-
-.metric-negative {
-  color: var(--p-bad);
-}
-
-.metric-warning {
-  color: var(--p-warn);
-}
-
-.metric-neutral {
-  color: var(--p-muted);
-}
-
-.executivePanel {
   display: flex;
-  gap: 32px;
-  flex-wrap: wrap;
+  flex-direction: column;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,255,255,.06),
+      rgba(0,0,0,.55)
+    );
+
+  border-left: 1px solid var(--p-border);
+  backdrop-filter: blur(8px);
+  z-index: 50;
 }
 
-.executiveBlock {
-  flex: 1;
-  min-width: 260px;
-}
-
-.executiveBlock h3 {
-  margin-bottom: 14px;
-  font-weight: 800;
-  letter-spacing: .5px;
-}
-
-.integrityBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  font-size: 12px;
+.terminalPanelHeader {
+  padding: 14px 18px;
   font-weight: 900;
-  border: 1px solid var(--p-border);
+  letter-spacing: .5px;
+  cursor: move;
+
+  background: rgba(0,0,0,.35);
+  border-bottom: 1px solid var(--p-border);
 }
 
-.integrityBadge.ok {
+.terminalPanelBody {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ================= FLOATING MODE ================= */
+
+.terminalPanel.floating {
+  height: 420px;
+  border-radius: var(--p-radius-sm);
+  border: 1px solid var(--p-border);
+
+  box-shadow:
+    0 0 0 1px rgba(94,198,255,.15),
+    0 10px 40px rgba(0,0,0,.45);
+}
+
+/* ================= RESIZE HANDLE ================= */
+
+.terminalResize {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+/* ================= AI METRICS ================= */
+
+.terminalAIMetrics {
+  font-size: 13px;
+  color: var(--p-muted);
+  line-height: 1.6;
+}
+
+.terminalConfirm {
+  padding: 10px;
+  border-radius: 999px;
+  font-weight: 800;
+  border: 1px solid var(--p-border);
+  cursor: pointer;
+  transition: .2s ease;
+}
+
+.terminalConfirm.buy {
   background: rgba(43,213,118,.18);
   color: var(--p-ok);
 }
 
-.integrityBadge.fail {
+.terminalConfirm.sell {
   background: rgba(255,90,95,.18);
   color: var(--p-bad);
-}
-
-.executiveDivider {
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255,255,255,.15),
-    transparent
-  );
-  margin: 10px 0 20px 0;
-}
-
-.executiveGlow {
-  box-shadow:
-    0 0 0 1px rgba(94,198,255,.15),
-    0 0 25px rgba(94,198,255,.06);
-}
-
-.sectionTitle {
-  font-weight: 900;
-  letter-spacing: .6px;
-  margin-bottom: 16px;
-}
-
-/* =============================
-   GLOBAL EXECUTIVE RISK BANNER
-   ============================= */
-
-.executiveBanner {
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:28px;
-  padding:20px 28px;
-  border-radius:var(--p-radius);
-  margin-bottom:32px;
-  border:1px solid var(--p-border);
-  backdrop-filter: blur(10px);
-  transition:.3s ease;
-}
-
-.executiveBanner.loading{
-  opacity:.6;
-}
-
-.bannerBlock{
-  display:flex;
-  flex-direction:column;
-}
-
-.bannerBlock small{
-  font-size:12px;
-  color:var(--p-muted);
-  letter-spacing:.5px;
-}
-
-.bannerBlock b{
-  font-size:22px;
-  font-weight:900;
-}
-
-.bannerStatus{
-  font-weight:900;
-  letter-spacing:.08em;
-  font-size:13px;
-}
-
-/* STATES */
-
-.bannerStable{
-  background:rgba(43,213,118,.10);
-  border-color:rgba(43,213,118,.35);
-  color:var(--p-ok);
-}
-
-.bannerElevated{
-  background:rgba(255,209,102,.10);
-  border-color:rgba(255,209,102,.35);
-  color:var(--p-warn);
-}
-
-.bannerCritical{
-  background:rgba(255,90,95,.10);
-  border-color:rgba(255,90,95,.45);
-  color:var(--p-bad);
 }
