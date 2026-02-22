@@ -1,218 +1,257 @@
-import React, { useEffect, useState, useMemo } from "react";
+// frontend/src/pages/TradingRoom.jsx
+import React, { useEffect, useRef, useState } from "react";
+import { createChart } from "lightweight-charts";
 
-const API_BASE = "/api";
-
-/* ================= HELPERS ================= */
-
-function money(v) {
-  if (v == null) return "—";
-  return `$${Number(v).toFixed(2)}`;
-}
-
-function pct(v) {
-  if (v == null) return "—";
-  return `${(Number(v) * 100).toFixed(2)}%`;
-}
-
-/* =========================================================
-   TRADING COMMAND CENTER
-========================================================= */
+const API_BASE = "/api/trading";
 
 export default function TradingRoom() {
-  const [paper, setPaper] = useState(null);
-  const [live, setLive] = useState(null);
-  const [risk, setRisk] = useState(null);
-  const [prices, setPrices] = useState({});
-  const [wsStatus, setWsStatus] = useState("disconnected");
 
-  /* ================= SNAPSHOTS ================= */
+  /* ================= STATE ================= */
 
-  async function loadSnapshots() {
+  const chartRef = useRef(null);
+  const chartInstance = useRef(null);
+  const candleSeries = useRef(null);
+
+  const [snapshot, setSnapshot] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelDocked, setPanelDocked] = useState(true);
+  const [panelWidth, setPanelWidth] = useState(380);
+  const [side, setSide] = useState("BUY");
+
+  const [dragging, setDragging] = useState(false);
+  const [position, setPosition] = useState({ x: 200, y: 100 });
+
+  /* ================= SNAPSHOT LOAD ================= */
+
+  async function loadSnapshot() {
     try {
-      const [paperRes, liveRes, riskRes] = await Promise.all([
-        fetch(`${API_BASE}/trading/paper/snapshot`).then(r => r.json()),
-        fetch(`${API_BASE}/trading/live/snapshot`).then(r => r.json()),
-        fetch(`${API_BASE}/trading/risk/snapshot`).then(r => r.json()),
-      ]);
-
-      if (paperRes.ok) setPaper(paperRes.snapshot);
-      if (liveRes.ok) setLive(liveRes.snapshot);
-      if (riskRes.ok) setRisk(riskRes.risk);
+      const res = await fetch(`${API_BASE}/dashboard/snapshot`);
+      const data = await res.json();
+      if (data.ok) setSnapshot(data);
     } catch (e) {
-      console.error("Trading load failed", e);
+      console.error("Trading snapshot error", e);
     }
   }
 
   useEffect(() => {
-    loadSnapshots();
-    const interval = setInterval(loadSnapshots, 5000);
-    return () => clearInterval(interval);
+    loadSnapshot();
+    const i = setInterval(loadSnapshot, 4000);
+    return () => clearInterval(i);
   }, []);
 
-  /* ================= WEBSOCKET ================= */
+  /* ================= CHART INIT ================= */
 
   useEffect(() => {
-    const protocol =
-      window.location.protocol === "https:" ? "wss:" : "ws:";
+    if (!chartRef.current) return;
 
-    const ws = new WebSocket(
-      `${protocol}//${window.location.host}/ws/market`
-    );
+    chartInstance.current = createChart(chartRef.current, {
+      layout: {
+        background: { color: "#111827" },
+        textColor: "#eaf1ff",
+      },
+      grid: {
+        vertLines: { color: "rgba(255,255,255,0.05)" },
+        horzLines: { color: "rgba(255,255,255,0.05)" },
+      },
+      width: chartRef.current.clientWidth,
+      height: chartRef.current.clientHeight,
+      rightPriceScale: { borderColor: "rgba(255,255,255,0.06)" },
+      timeScale: { borderColor: "rgba(255,255,255,0.06)" },
+    });
 
-    ws.onopen = () => setWsStatus("connected");
-    ws.onclose = () => setWsStatus("disconnected");
-    ws.onerror = () => setWsStatus("error");
+    candleSeries.current = chartInstance.current.addCandlestickSeries();
 
-    ws.onmessage = (msg) => {
-      try {
-        const data = JSON.parse(msg.data);
-        if (data.type === "tick") {
-          setPrices(prev => ({
-            ...prev,
-            [data.symbol]: data.price,
-          }));
-        }
-      } catch {}
-    };
+    window.addEventListener("resize", () => {
+      chartInstance.current.applyOptions({
+        width: chartRef.current.clientWidth,
+        height: chartRef.current.clientHeight,
+      });
+    });
 
-    return () => ws.close();
   }, []);
 
-  /* ================= DERIVED ================= */
+  /* ================= PANEL TOGGLE ================= */
 
-  const position = paper?.position;
-  const hasPosition = !!position;
+  function togglePanel(type) {
+    setSide(type);
+    if (!panelOpen) {
+      setPanelOpen(true);
+      setPanelDocked(true);
+    } else {
+      if (panelDocked) {
+        setPanelOpen(false);
+      } else {
+        setPanelDocked(true);
+      }
+    }
+  }
 
-  /* =========================================================
-     UI
-  ========================================================= */
+  /* ================= DRAG ================= */
+
+  function onDragStart(e) {
+    setDragging(true);
+  }
+
+  function onDrag(e) {
+    if (!dragging) return;
+    setPosition({
+      x: e.clientX - 150,
+      y: e.clientY - 20,
+    });
+  }
+
+  function onDragEnd() {
+    setDragging(false);
+    setPanelDocked(false);
+  }
+
+  useEffect(() => {
+    window.addEventListener("mousemove", onDrag);
+    window.addEventListener("mouseup", onDragEnd);
+    return () => {
+      window.removeEventListener("mousemove", onDrag);
+      window.removeEventListener("mouseup", onDragEnd);
+    };
+  }, [dragging]);
+
+  /* ================= RENDER ================= */
 
   return (
-    <div className="trading-room">
+    <div className="trading-root">
 
-      {/* ================= HEADER ================= */}
+      {/* ================= TOP BAR ================= */}
 
-      <div className="trading-header">
-        <h2>Trading Command Center</h2>
+      <div className="trading-topbar">
+        <div className="symbol">BTCUSDT</div>
+
+        <div className="controls">
+          <button className="buyBtn" onClick={() => togglePanel("BUY")}>BUY</button>
+          <button className="sellBtn" onClick={() => togglePanel("SELL")}>SELL</button>
+        </div>
+      </div>
+
+      {/* ================= MAIN ================= */}
+
+      <div className="trading-body">
+
+        <div className="left-rail">
+          <div className="rail-item">✏</div>
+          <div className="rail-item">📐</div>
+          <div className="rail-item">📊</div>
+        </div>
 
         <div
-          className={`badge ${
-            wsStatus === "connected"
-              ? "ok"
-              : wsStatus === "error"
-              ? "warn"
-              : ""
-          }`}
+          className={`chart-area ${panelOpen && panelDocked ? "withPanel" : ""}`}
+          style={{
+            marginRight:
+              panelOpen && panelDocked ? panelWidth : 0,
+          }}
         >
-          Feed: {wsStatus.toUpperCase()}
+          <div ref={chartRef} className="chart-surface" />
         </div>
-      </div>
 
-      {/* ================= ALERT ================= */}
+        {/* ================= PANEL ================= */}
 
-      {risk?.halted && (
-        <div className="trading-alert">
-          Trading Halted — {risk.haltReason || "Risk Governor Active"}
-        </div>
-      )}
-
-      {/* ================= MARKET GRID ================= */}
-
-      <div className="trading-card">
-        <h3>Live Market Stream</h3>
-
-        {Object.keys(prices).length === 0 ? (
-          <div className="muted">Waiting for market ticks…</div>
-        ) : (
-          <div className="trading-market-grid">
-            {Object.entries(prices).map(([symbol, price]) => (
-              <div key={symbol} className="trading-ticker">
-                <span>{symbol}</span>
-                <span>{price}</span>
-              </div>
-            ))}
+        {panelOpen && panelDocked && (
+          <div
+            className="trade-panel docked"
+            style={{ width: panelWidth }}
+          >
+            <PanelContent
+              side={side}
+              snapshot={snapshot}
+              onDragStart={onDragStart}
+              resizable
+              setWidth={setPanelWidth}
+            />
           </div>
         )}
-      </div>
 
-      {/* ================= MAIN GRID ================= */}
-
-      <div className="trading-grid">
-
-        {/* ===== PAPER ENGINE ===== */}
-        <div className="trading-card">
-          <h3>Paper Engine</h3>
-
-          <div>Equity: {money(paper?.equity)}</div>
-          <div>Peak: {money(paper?.peakEquity)}</div>
-          <div>Trades: {paper?.trades?.length || 0}</div>
-
-          <hr style={{ opacity: 0.15 }} />
-
-          <h4>Active Position</h4>
-
-          {hasPosition ? (
-            <>
-              <div>Quantity: {position.qty}</div>
-              <div>Entry: {money(position.entry)}</div>
-            </>
-          ) : (
-            <div className="muted">No open position</div>
-          )}
-        </div>
-
-        {/* ===== LIVE ENGINE ===== */}
-        <div className="trading-card">
-          <h3>Live Engine</h3>
-
-          <div>Mode: {live?.mode || "—"}</div>
-          <div>Equity: {money(live?.equity)}</div>
-          <div>Margin Used: {money(live?.marginUsed)}</div>
-
-          <div>
-            Liquidation:{" "}
-            {live?.liquidation ? (
-              <span className="status-negative">YES ⚠</span>
-            ) : (
-              "No"
-            )}
+        {panelOpen && !panelDocked && (
+          <div
+            className="trade-panel floating"
+            style={{
+              left: position.x,
+              top: position.y,
+              width: panelWidth,
+            }}
+          >
+            <PanelContent
+              side={side}
+              snapshot={snapshot}
+              onDragStart={onDragStart}
+              resizable
+              setWidth={setPanelWidth}
+            />
           </div>
-        </div>
-
-        {/* ===== RISK ENGINE ===== */}
-        <div className="trading-card">
-          <h3>Risk Engine</h3>
-
-          <div>
-            Halted:{" "}
-            {risk?.halted ? (
-              <span className="status-negative">YES</span>
-            ) : (
-              "No"
-            )}
-          </div>
-
-          <div>Multiplier: {risk?.riskMultiplier?.toFixed(2)}</div>
-          <div>Drawdown: {pct(risk?.drawdown)}</div>
-          <div>Reason: {risk?.haltReason || "—"}</div>
-        </div>
-
-        {/* ===== PERFORMANCE ===== */}
-        <div className="trading-card">
-          <h3>Performance Snapshot</h3>
-
-          <div>Paper Equity: {money(paper?.equity)}</div>
-          <div>Live Equity: {money(live?.equity)}</div>
-
-          <div>
-            Delta:{" "}
-            {money(
-              (live?.equity || 0) - (paper?.equity || 0)
-            )}
-          </div>
-        </div>
+        )}
 
       </div>
     </div>
+  );
+}
+
+/* ================= PANEL CONTENT ================= */
+
+function PanelContent({ side, snapshot, onDragStart, resizable, setWidth }) {
+
+  return (
+    <>
+      <div className="panel-header" onMouseDown={onDragStart}>
+        {side} ORDER
+      </div>
+
+      <div className="panel-body">
+
+        <div className="input-group">
+          <label>Quantity</label>
+          <input type="number" placeholder="0.01" />
+        </div>
+
+        <div className="input-group">
+          <label>Order Type</label>
+          <select>
+            <option>Market</option>
+            <option>Limit</option>
+          </select>
+        </div>
+
+        <div className="ai-block">
+          <div>AI Confidence: {snapshot?.ai?.stats?.winRate?.toFixed?.(2) || "—"}</div>
+          <div>Risk Multiplier: {snapshot?.risk?.riskMultiplier?.toFixed?.(2) || "—"}</div>
+        </div>
+
+        <button className={`confirmBtn ${side === "BUY" ? "buy" : "sell"}`}>
+          Confirm {side}
+        </button>
+      </div>
+
+      {resizable && (
+        <div
+          className="resize-handle"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startWidth = parseInt(
+              document.querySelector(".trade-panel").offsetWidth,
+              10
+            );
+
+            function onMove(ev) {
+              const newWidth = startWidth - (ev.clientX - startX);
+              setWidth(Math.max(320, Math.min(newWidth, 600)));
+            }
+
+            function onUp() {
+              window.removeEventListener("mousemove", onMove);
+              window.removeEventListener("mouseup", onUp);
+            }
+
+            window.addEventListener("mousemove", onMove);
+            window.addEventListener("mouseup", onUp);
+          }}
+        />
+      )}
+    </>
   );
 }
