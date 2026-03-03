@@ -1,5 +1,5 @@
 // frontend/src/pages/admin/AdminOverview.jsx
-// Executive Command Center — Lifecycle + Audit Upgrade Integrated
+// Executive Command Center — Full Operator Stabilized + Manual/Auto Integrated
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useSecurity } from "../../context/SecurityContext.jsx";
@@ -60,6 +60,7 @@ export default function AdminOverview() {
   const { integrityAlert } = useSecurity();
 
   const [mode, setMode] = useState("platform");
+  const [operatorMode, setOperatorMode] = useState("automatic"); // automatic | manual
   const [tick, setTick] = useState(Date.now());
   const [enginePaused, setEnginePaused] = useState(false);
   const [engineSpeed, setEngineSpeed] = useState("normal");
@@ -103,7 +104,7 @@ export default function AdminOverview() {
 
   useEffect(() => {
 
-    if (enginePaused) return;
+    if (enginePaused || operatorMode === "manual") return;
 
     const interval = setInterval(() => {
 
@@ -135,9 +136,7 @@ export default function AdminOverview() {
               deadline,
               status: "NEW",
               assignedTo: null,
-              activity: [
-                { time: new Date(), action: "CREATED" }
-              ]
+              activity: [{ time: new Date(), action: "CREATED" }]
             });
           }
         });
@@ -154,11 +153,13 @@ export default function AdminOverview() {
 
     return () => clearInterval(interval);
 
-  }, [enginePaused, engineSpeed]);
+  }, [enginePaused, engineSpeed, operatorMode]);
 
-  /* ================= SLA ESCALATION ================= */
+  /* ================= SLA AUTO ESCALATION ================= */
 
   useEffect(() => {
+
+    if (operatorMode === "manual") return;
 
     setGlobalQueue(prev =>
       prev.map(alert => {
@@ -194,64 +195,41 @@ export default function AdminOverview() {
       })
     );
 
-  }, [tick]);
+  }, [tick, operatorMode]);
 
   /* ================= ACTIONS ================= */
 
   const logActivity = (alert, action) => ({
     ...alert,
-    activity: [
-      { time: new Date(), action },
-      ...alert.activity
-    ]
+    activity: [{ time: new Date(), action }, ...alert.activity]
   });
 
   const updateStatus = (id, status) => {
     setGlobalQueue(prev =>
       prev.map(a => {
         if (a.id !== id) return a;
-
-        let updated = { ...a };
-
-        if (status === "ACKNOWLEDGED" && a.status === "NEW") {
-          updated = logActivity(a, "ACKNOWLEDGED");
-          updated.status = "ACKNOWLEDGED";
-        }
-
-        if (status === "INVESTIGATING" && a.status === "ACKNOWLEDGED") {
-          updated = logActivity(a, "INVESTIGATING");
-          updated.status = "INVESTIGATING";
-        }
-
-        if (status === "RESOLVED") {
-          updated = logActivity(a, "RESOLVED");
-          updated.status = "RESOLVED";
-          updated.resolvedAt = new Date();
-        }
-
-        return updated;
+        return logActivity({ ...a, status }, status);
       })
     );
   };
 
   const assignAlert = (id, who) => {
     setGlobalQueue(prev =>
-      prev.map(a => {
-        if (a.id !== id) return a;
-        return logActivity({ ...a, assignedTo: who }, `ASSIGNED_${who}`);
-      })
+      prev.map(a => a.id === id ? logActivity({ ...a, assignedTo: who }, `ASSIGNED_${who}`) : a)
     );
   };
 
   const manualEscalate = (id) => {
     setGlobalQueue(prev =>
-      prev.map(a => {
-        if (a.id !== id) return a;
-        const newPriority = bumpPriority(a.priority);
-        return logActivity({ ...a, priority: newPriority }, "MANUAL_ESCALATE");
-      })
+      prev.map(a =>
+        a.id === id
+          ? logActivity({ ...a, priority: bumpPriority(a.priority) }, "MANUAL_ESCALATE")
+          : a
+      )
     );
   };
+
+  /* ================= FILTERING ================= */
 
   const filteredQueue = useMemo(() => {
     if (filter === "OPEN") return globalQueue.filter(a => a.status !== "RESOLVED");
@@ -260,11 +238,18 @@ export default function AdminOverview() {
     return globalQueue;
   }, [globalQueue, filter, tick]);
 
+  const fleetStats = useMemo(() => ({
+    P1: globalQueue.filter(a => a.priority === "P1").length,
+    Breached: globalQueue.filter(a => a.deadline - tick <= 0).length,
+    Open: globalQueue.filter(a => a.status !== "RESOLVED").length
+  }), [globalQueue, tick]);
+
   /* ================= RENDER ================= */
 
   return (
     <div style={{ maxWidth: 1500, margin: "0 auto", display: "flex", flexDirection: "column", gap: 40 }}>
 
+      {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between" }}>
         <div className="sectionTitle">
           {mode === "platform" ? "Platform Command Center" : "Operator Console"}
@@ -276,12 +261,47 @@ export default function AdminOverview() {
         </select>
       </div>
 
+      {/* ================= OPERATOR MODE ================= */}
+
       {mode === "operator" && (
         <>
+          {/* SUMMARY STRIP */}
+          <div className="postureCard">
+            <b>P1:</b> {fleetStats.P1} |
+            <b> Open:</b> {fleetStats.Open} |
+            <b> Breached:</b> {fleetStats.Breached}
+          </div>
+
+          {/* MODE + ENGINE CONTROLS */}
+          <div className="postureCard" style={{ display: "flex", gap: 15, alignItems: "center" }}>
+            <select value={operatorMode} onChange={(e) => setOperatorMode(e.target.value)}>
+              <option value="automatic">Automatic Mode</option>
+              <option value="manual">Manual Mode</option>
+            </select>
+
+            <button className="btn" onClick={() => setEnginePaused(!enginePaused)}>
+              {enginePaused ? "Resume Engine" : "Pause Engine"}
+            </button>
+
+            <select value={engineSpeed} onChange={(e) => setEngineSpeed(e.target.value)}>
+              <option value="slow">Slow</option>
+              <option value="normal">Normal</option>
+              <option value="aggressive">Aggressive</option>
+            </select>
+
+            <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+              <option value="ALL">All</option>
+              <option value="OPEN">Open</option>
+              <option value="BREACHED">Breached</option>
+              <option value="P1">P1 Only</option>
+            </select>
+          </div>
+
+          {/* GLOBAL QUEUE */}
           <div className="postureCard executivePanel">
             <h3>🔴 GLOBAL THREAT QUEUE</h3>
 
-            <div style={{ height: 500, overflowY: "auto" }}>
+            <div style={{ height: 450, overflowY: "auto" }}>
               {filteredQueue.map(alert => {
 
                 const companyName = companies.find(c => c.id === alert.companyId)?.name;
@@ -291,9 +311,9 @@ export default function AdminOverview() {
                   <div key={alert.id} style={{ padding: 12, borderBottom: "1px solid rgba(255,255,255,.06)" }}>
                     <div><b>{companyName}</b></div>
                     <div>
-                      Priority: {alert.priority} | 
-                      SLA: {formatCountdown(remaining)} | 
-                      Status: {alert.status} | 
+                      Priority: {alert.priority} |
+                      SLA: {formatCountdown(remaining)} |
+                      Status: {alert.status} |
                       Assigned: {alert.assignedTo || "Unassigned"}
                     </div>
 
@@ -309,8 +329,34 @@ export default function AdminOverview() {
               })}
             </div>
           </div>
+
+          {/* INCIDENT REGISTRY */}
+          <div className="postureCard">
+            <h3>🚨 Escalated Incidents</h3>
+            {incidentRegistry.map(incident => (
+              <div key={incident.id} style={{ padding: 6 }}>
+                {companies.find(c => c.id === incident.companyId)?.name} — {incident.priority}
+              </div>
+            ))}
+          </div>
+
+          {/* FLEET OVERVIEW */}
+          <div className="postureCard">
+            <h3>🏢 Fleet Overview</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 15 }}>
+              {companies.map(c => (
+                <div key={c.id} className="postureCard">
+                  <b>{c.name}</b>
+                  <div>Risk: {companyState[c.id].risk}</div>
+                  <div>Status: {companyState[c.id].containment}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </>
       )}
+
+      {/* ================= PLATFORM MODE ================= */}
 
       {mode === "platform" && (
         <>
@@ -328,7 +374,6 @@ export default function AdminOverview() {
           <SecurityFeedPanel />
         </>
       )}
-
     </div>
   );
 }
