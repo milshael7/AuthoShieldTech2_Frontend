@@ -1,5 +1,5 @@
 // frontend/src/pages/admin/AdminOverview.jsx
-// Executive Command Center — Layer 8 (Live SLA Countdown Engine)
+// Executive Command Center — Layer 9 (Auto Escalation + Lock Engine)
 
 import React, { useEffect, useState } from "react";
 import { useSecurity } from "../../context/SecurityContext.jsx";
@@ -36,6 +36,13 @@ function priorityFromRisk(risk) {
   return "P4";
 }
 
+function bumpPriority(priority) {
+  if (priority === "P4") return "P3";
+  if (priority === "P3") return "P2";
+  if (priority === "P2") return "P1";
+  return "P1";
+}
+
 function slaDuration(priority) {
   switch (priority) {
     case "P1": return 5 * 60 * 1000;
@@ -60,7 +67,6 @@ export default function AdminOverview() {
   const { integrityAlert } = useSecurity();
 
   const [mode, setMode] = useState("platform");
-  const [selectedCompanyId, setSelectedCompanyId] = useState(null);
   const [tick, setTick] = useState(Date.now());
 
   const companies = [
@@ -85,7 +91,7 @@ export default function AdminOverview() {
   const [globalQueue, setGlobalQueue] = useState([]);
   const [incidentRegistry, setIncidentRegistry] = useState([]);
 
-  /* ================= GLOBAL TICK (LIVE TIMER) ================= */
+  /* ================= GLOBAL TIMER ================= */
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -126,7 +132,7 @@ export default function AdminOverview() {
             const createdAt = Date.now();
             const deadline = createdAt + slaDuration(priority);
 
-            const alert = {
+            newAlerts.push({
               id: `${id}-${Date.now()}`,
               companyId: id,
               risk: newRisk,
@@ -135,16 +141,8 @@ export default function AdminOverview() {
               createdAt,
               deadline,
               status: "NEW",
-              escalated: priority === "P1"
-            };
-
-            newAlerts.push(alert);
-
-            if (priority === "P1") {
-              setIncidentRegistry(prevInc =>
-                [{ ...alert, escalatedAt: new Date() }, ...prevInc]
-              );
-            }
+              escalatedLocked: false
+            });
           }
         });
 
@@ -164,36 +162,54 @@ export default function AdminOverview() {
 
   }, []);
 
-  /* ================= ALERT ACTIONS ================= */
+  /* ================= AUTO ESCALATION ENGINE ================= */
 
-  const updateAlertStatus = (alertId, newStatus) => {
+  useEffect(() => {
+
     setGlobalQueue(prev =>
-      prev.map(alert =>
-        alert.id === alertId
-          ? { ...alert, status: newStatus }
-          : alert
-      )
-    );
-  };
+      prev.map(alert => {
 
-  const escalateAlert = (alert) => {
-    if (alert.escalated) return;
+        if (alert.status === "RESOLVED") return alert;
+
+        const remaining = alert.deadline - tick;
+
+        if (remaining <= 0 && !alert.escalatedLocked) {
+
+          const newPriority = bumpPriority(alert.priority);
+          const newDeadline = Date.now() + slaDuration(newPriority);
+
+          const escalatedAlert = {
+            ...alert,
+            priority: newPriority,
+            deadline: newDeadline,
+            escalatedLocked: true,
+            autoEscalated: true
+          };
+
+          setIncidentRegistry(prevInc =>
+            [{ ...escalatedAlert, escalatedAt: new Date() }, ...prevInc]
+          );
+
+          return escalatedAlert;
+        }
+
+        return alert;
+      })
+    );
+
+  }, [tick]);
+
+  /* ================= ACTIONS ================= */
+
+  const resolveAlert = (alert) => {
 
     setGlobalQueue(prev =>
       prev.map(a =>
         a.id === alert.id
-          ? { ...a, escalated: true }
+          ? { ...a, status: "RESOLVED" }
           : a
       )
     );
-
-    setIncidentRegistry(prev =>
-      [{ ...alert, escalatedAt: new Date() }, ...prev]
-    );
-  };
-
-  const resolveAlert = (alert) => {
-    updateAlertStatus(alert.id, "RESOLVED");
 
     setCompanyState(prev => ({
       ...prev,
@@ -216,34 +232,22 @@ export default function AdminOverview() {
   return (
     <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", flexDirection: "column", gap: 40 }}>
 
-      {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between" }}>
         <div className="sectionTitle">
-          {mode === "platform"
-            ? "Platform Command Center"
-            : "Operator Console"}
+          {mode === "platform" ? "Platform Command Center" : "Operator Console"}
         </div>
 
-        <select
-          value={mode}
-          onChange={(e) => setMode(e.target.value)}
-        >
+        <select value={mode} onChange={(e) => setMode(e.target.value)}>
           <option value="platform">Platform View</option>
           <option value="operator">Operator View</option>
         </select>
       </div>
 
-      {/* ================= OPERATOR MODE ================= */}
-
       {mode === "operator" && (
         <div className="postureCard executivePanel">
           <h3>🔴 ACTIVE GLOBAL THREAT QUEUE</h3>
 
-          <div style={{ height: 400, overflowY: "auto", marginTop: 15 }}>
-            {globalQueue.length === 0 && (
-              <div className="muted">No active threats.</div>
-            )}
-
+          <div style={{ height: 420, overflowY: "auto", marginTop: 15 }}>
             {globalQueue.map(alert => {
 
               const companyName = companies.find(c => c.id === alert.companyId)?.name;
@@ -272,29 +276,25 @@ export default function AdminOverview() {
                         {formatCountdown(remaining)}
                       </b>
                     </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 6 }}>
-                    {!alert.escalated && (
-                      <button className="btn warn"
-                        onClick={() => escalateAlert(alert)}>
-                        Escalate
-                      </button>
+                    {alert.autoEscalated && (
+                      <div style={{ fontSize: 11, color: "#ff4d4f" }}>
+                        AUTO-ESCALATED (LOCKED)
+                      </div>
                     )}
-
-                    <button className="btn primary"
-                      onClick={() => resolveAlert(alert)}>
-                      Resolve
-                    </button>
                   </div>
+
+                  <button
+                    className="btn primary"
+                    onClick={() => resolveAlert(alert)}
+                  >
+                    Resolve
+                  </button>
                 </div>
               );
             })}
           </div>
         </div>
       )}
-
-      {/* ================= PLATFORM MODE ================= */}
 
       {mode === "platform" && (
         <>
