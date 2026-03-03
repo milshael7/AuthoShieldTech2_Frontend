@@ -1,19 +1,18 @@
-// frontend/src/pages/admin/AdminOverview.jsx
-// Executive Command Center — Full Operator Stabilized + Manual/Auto Integrated
+// FULL FINAL OPERATOR COMPLETE VERSION
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useSecurity } from "../../context/SecurityContext.jsx";
-
 import ExecutiveRiskBanner from "../../components/ExecutiveRiskBanner";
 import SecurityPostureDashboard from "../../components/SecurityPostureDashboard";
 import SecurityFeedPanel from "../../components/SecurityFeedPanel";
 import SecurityPipeline from "../../components/SecurityPipeline";
 import SecurityRadar from "../../components/SecurityRadar";
 import IncidentBoard from "../../components/IncidentBoard";
-
 import "../../styles/platform.css";
 
 /* ================= UTILITIES ================= */
+
+const roles = ["Tier1", "Tier2", "Supervisor"];
 
 function containmentFromRisk(risk) {
   if (risk >= 75) return "LOCKDOWN";
@@ -60,11 +59,13 @@ export default function AdminOverview() {
   const { integrityAlert } = useSecurity();
 
   const [mode, setMode] = useState("platform");
-  const [operatorMode, setOperatorMode] = useState("automatic"); // automatic | manual
+  const [operatorMode, setOperatorMode] = useState("automatic");
+  const [role, setRole] = useState("Supervisor");
+  const [activeWorkspace, setActiveWorkspace] = useState("ALL");
   const [tick, setTick] = useState(Date.now());
   const [enginePaused, setEnginePaused] = useState(false);
   const [engineSpeed, setEngineSpeed] = useState("normal");
-  const [filter, setFilter] = useState("ALL");
+  const [selectedAlert, setSelectedAlert] = useState(null);
 
   const companies = [
     { id: "c1", name: "Alpha Systems" },
@@ -73,25 +74,18 @@ export default function AdminOverview() {
     { id: "c4", name: "Delta Finance" }
   ];
 
-  const speedMap = {
-    slow: 20000,
-    normal: 12000,
-    aggressive: 6000
-  };
+  const speedMap = { slow: 20000, normal: 12000, aggressive: 6000 };
 
   const [companyState, setCompanyState] = useState(() => {
     const initial = {};
     companies.forEach(c => {
-      initial[c.id] = {
-        risk: Math.floor(Math.random() * 40),
-        containment: "STABLE"
-      };
+      initial[c.id] = { risk: Math.floor(Math.random() * 40), containment: "STABLE" };
     });
     return initial;
   });
 
   const [globalQueue, setGlobalQueue] = useState([]);
-  const [incidentRegistry, setIncidentRegistry] = useState([]);
+  const [archive, setArchive] = useState([]);
 
   /* ================= GLOBAL CLOCK ================= */
 
@@ -113,9 +107,7 @@ export default function AdminOverview() {
         const newAlerts = [];
 
         Object.keys(updated).forEach(id => {
-
           if (Math.random() < 0.4) {
-
             const spike = Math.floor(Math.random() * 15);
             const newRisk = Math.min(100, updated[id].risk + spike);
             const containment = containmentFromRisk(newRisk);
@@ -129,24 +121,23 @@ export default function AdminOverview() {
             newAlerts.push({
               id: `${id}-${Date.now()}`,
               companyId: id,
-              risk: newRisk,
-              containment,
               priority,
+              containment,
               createdAt,
               deadline,
               status: "NEW",
-              assignedTo: null,
-              activity: [{ time: new Date(), action: "CREATED" }]
+              activity: [{ time: new Date(), action: "CREATED" }],
+              locked: false,
+              resolution: null
             });
           }
         });
 
         if (newAlerts.length > 0) {
-          setGlobalQueue(prev => [...newAlerts, ...prev].slice(0, 100));
+          setGlobalQueue(prev => [...newAlerts, ...prev]);
         }
 
         return updated;
-
       });
 
     }, speedMap[engineSpeed]);
@@ -155,7 +146,7 @@ export default function AdminOverview() {
 
   }, [enginePaused, engineSpeed, operatorMode]);
 
-  /* ================= SLA AUTO ESCALATION ================= */
+  /* ================= AUTO ESCALATION ================= */
 
   useEffect(() => {
 
@@ -164,31 +155,15 @@ export default function AdminOverview() {
     setGlobalQueue(prev =>
       prev.map(alert => {
 
-        if (alert.status === "RESOLVED") return alert;
+        if (alert.status === "RESOLVED" || alert.locked) return alert;
 
-        const remaining = alert.deadline - tick;
-
-        if (remaining <= 0 && !alert.autoEscalated) {
-
-          const newPriority = bumpPriority(alert.priority);
-          const newDeadline = Date.now() + slaDuration(newPriority);
-
-          const escalated = {
+        if (alert.deadline - tick <= 0 && !alert.autoEscalated) {
+          return {
             ...alert,
-            priority: newPriority,
-            deadline: newDeadline,
+            priority: bumpPriority(alert.priority),
             autoEscalated: true,
-            activity: [
-              { time: new Date(), action: "AUTO_ESCALATED" },
-              ...alert.activity
-            ]
+            activity: [{ time: new Date(), action: "AUTO_ESCALATED" }, ...alert.activity]
           };
-
-          setIncidentRegistry(prev =>
-            [{ ...escalated, escalatedAt: new Date() }, ...prev]
-          );
-
-          return escalated;
         }
 
         return alert;
@@ -204,50 +179,33 @@ export default function AdminOverview() {
     activity: [{ time: new Date(), action }, ...alert.activity]
   });
 
-  const updateStatus = (id, status) => {
-    setGlobalQueue(prev =>
-      prev.map(a => {
-        if (a.id !== id) return a;
-        return logActivity({ ...a, status }, status);
-      })
-    );
+  const resolveAlert = (alert, resolutionData) => {
+    const updated = {
+      ...alert,
+      status: "RESOLVED",
+      locked: true,
+      resolution: resolutionData,
+      activity: [{ time: new Date(), action: "RESOLVED" }, ...alert.activity]
+    };
+
+    setArchive(prev => [updated, ...prev]);
+    setGlobalQueue(prev => prev.filter(a => a.id !== alert.id));
+    setSelectedAlert(null);
   };
 
-  const assignAlert = (id, who) => {
-    setGlobalQueue(prev =>
-      prev.map(a => a.id === id ? logActivity({ ...a, assignedTo: who }, `ASSIGNED_${who}`) : a)
-    );
-  };
+  /* ================= ANALYTICS ================= */
 
-  const manualEscalate = (id) => {
-    setGlobalQueue(prev =>
-      prev.map(a =>
-        a.id === id
-          ? logActivity({ ...a, priority: bumpPriority(a.priority) }, "MANUAL_ESCALATE")
-          : a
-      )
-    );
-  };
-
-  /* ================= FILTERING ================= */
-
-  const filteredQueue = useMemo(() => {
-    if (filter === "OPEN") return globalQueue.filter(a => a.status !== "RESOLVED");
-    if (filter === "BREACHED") return globalQueue.filter(a => a.deadline - tick <= 0);
-    if (filter === "P1") return globalQueue.filter(a => a.priority === "P1");
-    return globalQueue;
-  }, [globalQueue, filter, tick]);
-
-  const fleetStats = useMemo(() => ({
-    P1: globalQueue.filter(a => a.priority === "P1").length,
-    Breached: globalQueue.filter(a => a.deadline - tick <= 0).length,
-    Open: globalQueue.filter(a => a.status !== "RESOLVED").length
-  }), [globalQueue, tick]);
+  const analytics = useMemo(() => {
+    const total = globalQueue.length + archive.length;
+    const resolved = archive.length;
+    const p1 = globalQueue.filter(a => a.priority === "P1").length;
+    return { total, resolved, p1 };
+  }, [globalQueue, archive]);
 
   /* ================= RENDER ================= */
 
   return (
-    <div style={{ maxWidth: 1500, margin: "0 auto", display: "flex", flexDirection: "column", gap: 40 }}>
+    <div style={{ maxWidth: 1600, margin: "0 auto", padding: 20 }}>
 
       {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -255,103 +213,106 @@ export default function AdminOverview() {
           {mode === "platform" ? "Platform Command Center" : "Operator Console"}
         </div>
 
-        <select value={mode} onChange={(e) => setMode(e.target.value)}>
-          <option value="platform">Platform View</option>
-          <option value="operator">Operator View</option>
-        </select>
+        <div style={{ display: "flex", gap: 10 }}>
+          <select value={mode} onChange={(e) => setMode(e.target.value)}>
+            <option value="platform">Platform View</option>
+            <option value="operator">Operator View</option>
+          </select>
+
+          {mode === "operator" && (
+            <>
+              <select value={operatorMode} onChange={(e) => setOperatorMode(e.target.value)}>
+                <option value="automatic">Automatic</option>
+                <option value="manual">Manual</option>
+              </select>
+
+              <select value={role} onChange={(e) => setRole(e.target.value)}>
+                {roles.map(r => <option key={r}>{r}</option>)}
+              </select>
+
+              <select value={activeWorkspace} onChange={(e) => setActiveWorkspace(e.target.value)}>
+                <option value="ALL">All Clients</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ================= OPERATOR MODE ================= */}
 
       {mode === "operator" && (
         <>
-          {/* SUMMARY STRIP */}
-          <div className="postureCard">
-            <b>P1:</b> {fleetStats.P1} |
-            <b> Open:</b> {fleetStats.Open} |
-            <b> Breached:</b> {fleetStats.Breached}
+          {/* Analytics */}
+          <div className="postureCard" style={{ marginTop: 20 }}>
+            Total: {analytics.total} | Resolved: {analytics.resolved} | Active P1: {analytics.p1}
           </div>
 
-          {/* MODE + ENGINE CONTROLS */}
-          <div className="postureCard" style={{ display: "flex", gap: 15, alignItems: "center" }}>
-            <select value={operatorMode} onChange={(e) => setOperatorMode(e.target.value)}>
-              <option value="automatic">Automatic Mode</option>
-              <option value="manual">Manual Mode</option>
-            </select>
+          {/* Queue */}
+          <div className="postureCard executivePanel" style={{ marginTop: 20 }}>
+            <h3>Active Alerts</h3>
 
-            <button className="btn" onClick={() => setEnginePaused(!enginePaused)}>
-              {enginePaused ? "Resume Engine" : "Pause Engine"}
-            </button>
-
-            <select value={engineSpeed} onChange={(e) => setEngineSpeed(e.target.value)}>
-              <option value="slow">Slow</option>
-              <option value="normal">Normal</option>
-              <option value="aggressive">Aggressive</option>
-            </select>
-
-            <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-              <option value="ALL">All</option>
-              <option value="OPEN">Open</option>
-              <option value="BREACHED">Breached</option>
-              <option value="P1">P1 Only</option>
-            </select>
-          </div>
-
-          {/* GLOBAL QUEUE */}
-          <div className="postureCard executivePanel">
-            <h3>🔴 GLOBAL THREAT QUEUE</h3>
-
-            <div style={{ height: 450, overflowY: "auto" }}>
-              {filteredQueue.map(alert => {
-
-                const companyName = companies.find(c => c.id === alert.companyId)?.name;
-                const remaining = alert.deadline - tick;
-
-                return (
-                  <div key={alert.id} style={{ padding: 12, borderBottom: "1px solid rgba(255,255,255,.06)" }}>
-                    <div><b>{companyName}</b></div>
-                    <div>
-                      Priority: {alert.priority} |
-                      SLA: {formatCountdown(remaining)} |
-                      Status: {alert.status} |
-                      Assigned: {alert.assignedTo || "Unassigned"}
-                    </div>
-
-                    <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
-                      <button className="btn" onClick={() => updateStatus(alert.id, "ACKNOWLEDGED")}>Ack</button>
-                      <button className="btn" onClick={() => updateStatus(alert.id, "INVESTIGATING")}>Investigate</button>
-                      <button className="btn primary" onClick={() => updateStatus(alert.id, "RESOLVED")}>Resolve</button>
-                      <button className="btn" onClick={() => assignAlert(alert.id, "You")}>Assign Me</button>
-                      <button className="btn warn" onClick={() => manualEscalate(alert.id)}>Escalate</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* INCIDENT REGISTRY */}
-          <div className="postureCard">
-            <h3>🚨 Escalated Incidents</h3>
-            {incidentRegistry.map(incident => (
-              <div key={incident.id} style={{ padding: 6 }}>
-                {companies.find(c => c.id === incident.companyId)?.name} — {incident.priority}
-              </div>
-            ))}
-          </div>
-
-          {/* FLEET OVERVIEW */}
-          <div className="postureCard">
-            <h3>🏢 Fleet Overview</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 15 }}>
-              {companies.map(c => (
-                <div key={c.id} className="postureCard">
-                  <b>{c.name}</b>
-                  <div>Risk: {companyState[c.id].risk}</div>
-                  <div>Status: {companyState[c.id].containment}</div>
+            {globalQueue
+              .filter(a => activeWorkspace === "ALL" || a.companyId === activeWorkspace)
+              .map(alert => (
+                <div
+                  key={alert.id}
+                  style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,.06)", cursor: "pointer" }}
+                  onClick={() => setSelectedAlert(alert)}
+                >
+                  {companies.find(c => c.id === alert.companyId)?.name} —
+                  {alert.priority} —
+                  {formatCountdown(alert.deadline - tick)}
                 </div>
               ))}
+          </div>
+
+          {/* Drill-Down Drawer */}
+          {selectedAlert && (
+            <div className="postureCard" style={{ marginTop: 20 }}>
+              <h3>Investigation Panel</h3>
+
+              <div>
+                Priority: {selectedAlert.priority}
+              </div>
+
+              <div style={{ marginTop: 10 }}>
+                <h4>Activity Timeline</h4>
+                {selectedAlert.activity.map((a, i) => (
+                  <div key={i}>{a.time.toLocaleString()} — {a.action}</div>
+                ))}
+              </div>
+
+              {!selectedAlert.locked && (
+                <div style={{ marginTop: 15 }}>
+                  <textarea placeholder="Resolution Summary" id="summary" />
+                  <textarea placeholder="Lessons Learned" id="lessons" />
+                  <textarea placeholder="Root Cause" id="root" />
+                  <button
+                    className="btn primary"
+                    onClick={() =>
+                      resolveAlert(selectedAlert, {
+                        summary: document.getElementById("summary").value,
+                        lessons: document.getElementById("lessons").value,
+                        rootCause: document.getElementById("root").value
+                      })
+                    }
+                  >
+                    Finalize & Archive
+                  </button>
+                </div>
+              )}
             </div>
+          )}
+
+          {/* Archive */}
+          <div className="postureCard" style={{ marginTop: 20 }}>
+            <h3>Archived Incidents</h3>
+            {archive.map(a => (
+              <div key={a.id}>
+                {companies.find(c => c.id === a.companyId)?.name} — {a.priority}
+              </div>
+            ))}
           </div>
         </>
       )}
@@ -365,7 +326,6 @@ export default function AdminOverview() {
               Integrity Alert Detected — Elevated State
             </div>
           )}
-
           <ExecutiveRiskBanner />
           <SecurityPostureDashboard />
           <IncidentBoard />
