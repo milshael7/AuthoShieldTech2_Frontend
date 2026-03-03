@@ -1,26 +1,15 @@
 // frontend/src/pages/admin/AdminOverview.jsx
-// Executive Command Center — Operator Autonomous Threat Engine (Layer 4)
+// Executive Command Center — Global Priority SOC Engine (Layer 5)
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { api } from "../../lib/api";
-import { useSecurity } from "../../context/SecurityContext.jsx";
-
-import ExecutiveRiskBanner from "../../components/ExecutiveRiskBanner";
-import SecurityPostureDashboard from "../../components/SecurityPostureDashboard";
-import SecurityFeedPanel from "../../components/SecurityFeedPanel";
-import SecurityPipeline from "../../components/SecurityPipeline";
-import SecurityRadar from "../../components/SecurityRadar";
-import IncidentBoard from "../../components/IncidentBoard";
-
+import React, { useEffect, useState } from "react";
 import "../../styles/platform.css";
 
 /* ========================================================= */
 
 function riskLevel(score) {
-  const s = Number(score || 0);
-  if (s >= 75) return { label: "CRITICAL", cls: "warn" };
-  if (s >= 50) return { label: "ELEVATED", cls: "warn" };
-  if (s >= 25) return { label: "MODERATE", cls: "warn" };
+  if (score >= 75) return { label: "CRITICAL", cls: "warn" };
+  if (score >= 50) return { label: "ELEVATED", cls: "warn" };
+  if (score >= 25) return { label: "MODERATE", cls: "warn" };
   return { label: "STABLE", cls: "ok" };
 }
 
@@ -35,38 +24,44 @@ function containmentFromRisk(risk) {
 
 export default function AdminOverview() {
 
-  const { integrityAlert } = useSecurity();
-
-  const [mode, setMode] = useState("platform");
+  const [mode, setMode] = useState("operator");
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
 
-  const mockCompanies = [
+  const companies = [
     { id: "c1", name: "Alpha Systems" },
     { id: "c2", name: "Beta Holdings" },
     { id: "c3", name: "Gamma Logistics" },
     { id: "c4", name: "Delta Finance" }
   ];
 
-  /* ================= STATE ================= */
+  /* ================= COMPANY STATE ================= */
 
   const [companyState, setCompanyState] = useState(() => {
     const initial = {};
-    mockCompanies.forEach(c => {
+    companies.forEach(c => {
       initial[c.id] = {
         risk: Math.floor(Math.random() * 40),
-        isolated: 0,
-        locked: 0,
         log: []
       };
     });
     return initial;
   });
 
-  const selectedCompany = mockCompanies.find(c => c.id === selectedCompanyId);
-  const current = selectedCompany ? companyState[selectedCompany.id] : null;
+  const [globalQueue, setGlobalQueue] = useState([]);
 
   /* ========================================================= */
-  /* ================= THREAT ENGINE ========================= */
+  /* ================= PRIORITY ENGINE ======================= */
+  /* ========================================================= */
+
+  const calculatePriority = (risk, containment) => {
+    let score = risk;
+    if (containment === "LOCKDOWN") score += 30;
+    if (containment === "MONITORING") score += 15;
+    return score;
+  };
+
+  /* ========================================================= */
+  /* ================= THREAT INJECTION ====================== */
   /* ========================================================= */
 
   useEffect(() => {
@@ -75,95 +70,129 @@ export default function AdminOverview() {
 
       setCompanyState(prev => {
         const updated = { ...prev };
+        const newQueueEntries = [];
 
         Object.keys(updated).forEach(id => {
 
-          // 40% chance of threat injection
           if (Math.random() < 0.4) {
+
             const spike = Math.floor(Math.random() * 15);
             const newRisk = Math.min(100, updated[id].risk + spike);
+            const containment = containmentFromRisk(newRisk);
 
             updated[id] = {
               ...updated[id],
               risk: newRisk,
-              log: [
-                { time: new Date(), msg: `Threat spike detected (+${spike})` },
-                ...updated[id].log
-              ]
+              containment
             };
+
+            const priority = calculatePriority(newRisk, containment);
+
+            newQueueEntries.push({
+              id: `${id}-${Date.now()}`,
+              companyId: id,
+              risk: newRisk,
+              containment,
+              priority,
+              time: new Date()
+            });
           }
-
-          // Auto containment adjustment
-          updated[id].containment = containmentFromRisk(updated[id].risk);
-
         });
 
+        if (newQueueEntries.length > 0) {
+          setGlobalQueue(prevQueue =>
+            [...newQueueEntries, ...prevQueue]
+              .sort((a, b) => b.priority - a.priority)
+              .slice(0, 20)
+          );
+        }
+
         return updated;
+
       });
 
-    }, 12000); // 12 seconds enterprise pacing
+    }, 12000);
 
     return () => clearInterval(interval);
 
   }, []);
 
-  /* ========================================================= */
-  /* ================= ACTION ENGINE ========================= */
-  /* ========================================================= */
-
-  const reduceRisk = (companyId, amount, msg) => {
-    setCompanyState(prev => ({
-      ...prev,
-      [companyId]: {
-        ...prev[companyId],
-        risk: Math.max(0, prev[companyId].risk - amount),
-        log: [
-          { time: new Date(), msg },
-          ...prev[companyId].log
-        ]
-      }
-    }));
-  };
+  const selectedCompany = companies.find(c => c.id === selectedCompanyId);
+  const current = selectedCompany ? companyState[selectedCompany.id] : null;
 
   /* ========================================================= */
 
   return (
-    <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", flexDirection: "column", gap: 40 }}>
+    <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", flexDirection: "column", gap: 30 }}>
 
-      {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <div className="sectionTitle">
-          {mode === "platform"
-            ? "Platform Command Center"
-            : selectedCompany
-              ? `${selectedCompany.name} — Operator Console`
-              : "Operator Fleet"}
-        </div>
-
-        <select
-          value={mode}
-          onChange={(e) => {
-            setSelectedCompanyId(null);
-            setMode(e.target.value);
-          }}
-        >
-          <option value="platform">Platform View</option>
+        <div className="sectionTitle">Global SOC Command</div>
+        <select value={mode} onChange={(e) => setMode(e.target.value)}>
           <option value="operator">Operator View</option>
         </select>
       </div>
 
-      {/* ================= OPERATOR MODE ================= */}
+      {/* ================= GLOBAL QUEUE ================= */}
 
       {mode === "operator" && (
         <>
+          <div className="postureCard executivePanel">
+            <h3>🔴 ACTIVE GLOBAL THREAT QUEUE</h3>
+
+            {globalQueue.length === 0 && (
+              <div className="muted">No active global threats.</div>
+            )}
+
+            {globalQueue.map(alert => (
+              <div
+                key={alert.id}
+                style={{
+                  padding: "8px 0",
+                  borderBottom: "1px solid rgba(255,255,255,.06)",
+                  display: "flex",
+                  justifyContent: "space-between"
+                }}
+              >
+                <div>
+                  <b>{companies.find(c => c.id === alert.companyId)?.name}</b>
+                  <div style={{ fontSize: 12, opacity: 0.6 }}>
+                    {alert.containment} — Risk {alert.risk}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="badge warn">
+                    P{alert.priority}
+                  </span>
+
+                  <button
+                    className="btn"
+                    style={{ marginLeft: 10 }}
+                    onClick={() => setSelectedCompanyId(alert.companyId)}
+                  >
+                    Enter
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* ================= FLEET GRID ================= */}
+
           {!selectedCompany && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 24 }}>
-              {mockCompanies.map(c => {
+              {companies.map(c => {
                 const state = companyState[c.id];
                 const badge = riskLevel(state.risk);
+                const glow = state.risk >= 75 ? "0 0 15px rgba(255,0,0,.6)" : "none";
+
                 return (
-                  <div key={c.id} className="postureCard" style={{ cursor: "pointer" }}
-                       onClick={() => setSelectedCompanyId(c.id)}>
+                  <div
+                    key={c.id}
+                    className="postureCard"
+                    style={{ cursor: "pointer", boxShadow: glow }}
+                    onClick={() => setSelectedCompanyId(c.id)}
+                  >
                     <h4>{c.name}</h4>
                     <div>Risk: <span className={`badge ${badge.cls}`}>{state.risk}</span></div>
                     <div>Status: {containmentFromRisk(state.risk)}</div>
@@ -173,99 +202,21 @@ export default function AdminOverview() {
             </div>
           )}
 
+          {/* ================= COMPANY CONSOLE ================= */}
+
           {selectedCompany && current && (
             <>
               <button className="btn" onClick={() => setSelectedCompanyId(null)}>
-                ← Exit Console
+                ← Back to Fleet
               </button>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 20 }}>
-                <div className="kpiCard">
-                  <small>Risk</small>
-                  <b className={`badge ${riskLevel(current.risk).cls}`}>
-                    {current.risk}
-                  </b>
-                </div>
-
-                <div className="kpiCard">
-                  <small>Status</small>
-                  <b>{containmentFromRisk(current.risk)}</b>
-                </div>
-
-                <div className="kpiCard">
-                  <small>Isolated</small>
-                  <b>{current.isolated}</b>
-                </div>
-
-                <div className="kpiCard">
-                  <small>Locked</small>
-                  <b>{current.locked}</b>
-                </div>
-              </div>
-
-              {/* ACTIONS */}
               <div className="postureCard executivePanel">
-                <h3>Operator Actions</h3>
-
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
-                  <button className="btn warn"
-                    onClick={() => reduceRisk(selectedCompany.id, 15, "Endpoint isolated")}>
-                    Force Endpoint Isolation
-                  </button>
-
-                  <button className="btn warn"
-                    onClick={() => reduceRisk(selectedCompany.id, 10, "Suspicious account locked")}>
-                    Lock Suspicious Account
-                  </button>
-
-                  <button className="btn primary"
-                    onClick={() => reduceRisk(selectedCompany.id, 20, "Incident escalated and contained")}>
-                    Escalate Incident
-                  </button>
-
-                  <button className="btn"
-                    onClick={() => reduceRisk(selectedCompany.id, 8, "Deep scan completed")}>
-                    Trigger Deep Scan
-                  </button>
-                </div>
-              </div>
-
-              {/* LOG */}
-              <div className="postureCard">
-                <h3>Live Threat Log</h3>
-
-                {current.log.length === 0 && (
-                  <div className="muted">No recent activity.</div>
-                )}
-
-                {current.log.map((entry, i) => (
-                  <div key={i} style={{ padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
-                    <small>{entry.time.toLocaleTimeString()}</small>
-                    <div><b>{entry.msg}</b></div>
-                  </div>
-                ))}
+                <h3>{selectedCompany.name}</h3>
+                <div>Risk: {current.risk}</div>
+                <div>Status: {containmentFromRisk(current.risk)}</div>
               </div>
             </>
           )}
-        </>
-      )}
-
-      {/* ================= PLATFORM MODE ================= */}
-
-      {mode === "platform" && (
-        <>
-          {integrityAlert && (
-            <div className="dashboard-warning">
-              Integrity Alert Detected — Elevated State
-            </div>
-          )}
-
-          <ExecutiveRiskBanner />
-          <SecurityPostureDashboard />
-          <IncidentBoard />
-          <SecurityPipeline />
-          <SecurityRadar />
-          <SecurityFeedPanel />
         </>
       )}
 
