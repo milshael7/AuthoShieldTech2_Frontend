@@ -1793,7 +1793,6 @@ function NotificationBoard({
   );
 }
 /* ================= GLOBAL ADMIN EARTH ================= */
-
 function formatCompactCount(n) {
   if (!n || n <= 0) return "";
   if (n < 1000) return String(n);
