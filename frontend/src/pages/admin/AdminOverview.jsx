@@ -1,7 +1,8 @@
 // frontend/src/pages/admin/AdminOverview.jsx
-// Executive Command Center — Structured Enterprise Layout
+// Executive Command Center — Corporate Operational Version
 
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useSecurity } from "../../context/SecurityContext.jsx";
 
@@ -33,6 +34,8 @@ function riskLevel(score) {
 /* ========================================================= */
 
 export default function AdminOverview() {
+  const navigate = useNavigate();
+
   const {
     riskScore,
     integrityAlert,
@@ -117,6 +120,35 @@ export default function AdminOverview() {
         <span className={`badge ${healthBadge.cls}`}>
           HEALTH {healthIndex.toFixed(0)}
         </span>
+      </div>
+
+      {/* ================= CORPORATE COMMAND ROW ================= */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: 14
+        }}
+      >
+        <button className="btn" onClick={() => navigate("/admin/security")}>
+          SOC Operations
+        </button>
+
+        <button className="btn" onClick={() => navigate("/admin/incidents")}>
+          Incident Command
+        </button>
+
+        <button className="btn" onClick={() => navigate("/admin/risk")}>
+          Risk Monitor
+        </button>
+
+        <button className="btn" onClick={() => navigate("/admin/audit")}>
+          Audit Explorer
+        </button>
+
+        <button className="btn" onClick={() => navigate("/admin/companies")}>
+          Company Oversight
+        </button>
       </div>
 
       {integrityAlert && (
