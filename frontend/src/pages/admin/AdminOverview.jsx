@@ -1,5 +1,5 @@
 // frontend/src/pages/admin/AdminOverview.jsx
-// Executive Command Center — Layer 7 (Escalation + Priority Engine)
+// Executive Command Center — Layer 8 (Live SLA Countdown Engine)
 
 import React, { useEffect, useState } from "react";
 import { useSecurity } from "../../context/SecurityContext.jsx";
@@ -36,6 +36,23 @@ function priorityFromRisk(risk) {
   return "P4";
 }
 
+function slaDuration(priority) {
+  switch (priority) {
+    case "P1": return 5 * 60 * 1000;
+    case "P2": return 15 * 60 * 1000;
+    case "P3": return 30 * 60 * 1000;
+    default: return 60 * 60 * 1000;
+  }
+}
+
+function formatCountdown(ms) {
+  if (ms <= 0) return "BREACHED";
+  const totalSec = Math.floor(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${min}:${sec.toString().padStart(2, "0")}`;
+}
+
 /* ========================================================= */
 
 export default function AdminOverview() {
@@ -44,6 +61,7 @@ export default function AdminOverview() {
 
   const [mode, setMode] = useState("platform");
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
+  const [tick, setTick] = useState(Date.now());
 
   const companies = [
     { id: "c1", name: "Alpha Systems" },
@@ -51,8 +69,6 @@ export default function AdminOverview() {
     { id: "c3", name: "Gamma Logistics" },
     { id: "c4", name: "Delta Finance" }
   ];
-
-  /* ================= COMPANY STATE ================= */
 
   const [companyState, setCompanyState] = useState(() => {
     const initial = {};
@@ -68,6 +84,15 @@ export default function AdminOverview() {
 
   const [globalQueue, setGlobalQueue] = useState([]);
   const [incidentRegistry, setIncidentRegistry] = useState([]);
+
+  /* ================= GLOBAL TICK (LIVE TIMER) ================= */
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   /* ================= THREAT ENGINE ================= */
 
@@ -98,20 +123,23 @@ export default function AdminOverview() {
               ]
             };
 
+            const createdAt = Date.now();
+            const deadline = createdAt + slaDuration(priority);
+
             const alert = {
               id: `${id}-${Date.now()}`,
               companyId: id,
               risk: newRisk,
               containment,
               priority,
-              time: new Date(),
+              createdAt,
+              deadline,
               status: "NEW",
               escalated: priority === "P1"
             };
 
             newAlerts.push(alert);
 
-            // Auto-escalate P1
             if (priority === "P1") {
               setIncidentRegistry(prevInc =>
                 [{ ...alert, escalatedAt: new Date() }, ...prevInc]
@@ -165,7 +193,6 @@ export default function AdminOverview() {
   };
 
   const resolveAlert = (alert) => {
-
     updateAlertStatus(alert.id, "RESOLVED");
 
     setCompanyState(prev => ({
@@ -184,9 +211,6 @@ export default function AdminOverview() {
     }));
   };
 
-  const selectedCompany = companies.find(c => c.id === selectedCompanyId);
-  const current = selectedCompany ? companyState[selectedCompany.id] : null;
-
   /* ========================================================= */
 
   return (
@@ -197,17 +221,12 @@ export default function AdminOverview() {
         <div className="sectionTitle">
           {mode === "platform"
             ? "Platform Command Center"
-            : selectedCompany
-              ? `${selectedCompany.name} — Operator Console`
-              : "Operator Fleet"}
+            : "Operator Console"}
         </div>
 
         <select
           value={mode}
-          onChange={(e) => {
-            setSelectedCompanyId(null);
-            setMode(e.target.value);
-          }}
+          onChange={(e) => setMode(e.target.value)}
         >
           <option value="platform">Platform View</option>
           <option value="operator">Operator View</option>
@@ -217,137 +236,62 @@ export default function AdminOverview() {
       {/* ================= OPERATOR MODE ================= */}
 
       {mode === "operator" && (
-        <>
+        <div className="postureCard executivePanel">
+          <h3>🔴 ACTIVE GLOBAL THREAT QUEUE</h3>
 
-          {/* GLOBAL QUEUE */}
-          <div className="postureCard executivePanel">
-            <h3>🔴 ACTIVE GLOBAL THREAT QUEUE</h3>
+          <div style={{ height: 400, overflowY: "auto", marginTop: 15 }}>
+            {globalQueue.length === 0 && (
+              <div className="muted">No active threats.</div>
+            )}
 
-            <div style={{
-              height: 350,
-              overflowY: "auto",
-              marginTop: 15,
-              borderTop: "1px solid rgba(255,255,255,.05)"
-            }}>
+            {globalQueue.map(alert => {
 
-              {globalQueue.length === 0 && (
-                <div className="muted">No active threats.</div>
-              )}
+              const companyName = companies.find(c => c.id === alert.companyId)?.name;
+              const remaining = alert.deadline - tick;
+              const breached = remaining <= 0;
 
-              {globalQueue.map(alert => {
-
-                const companyName = companies.find(c => c.id === alert.companyId)?.name;
-                const isResolved = alert.status === "RESOLVED";
-
-                return (
-                  <div
-                    key={alert.id}
-                    style={{
-                      padding: "10px 0",
-                      borderBottom: "1px solid rgba(255,255,255,.06)",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      opacity: isResolved ? 0.4 : 1
-                    }}
-                  >
-                    <div>
-                      <b>{companyName}</b>
-                      <div style={{ fontSize: 12, opacity: 0.6 }}>
-                        {alert.containment} — Risk {alert.risk}
-                      </div>
-                      <div style={{ fontSize: 11 }}>
-                        Priority: <b>{alert.priority}</b> | Status: <b>{alert.status}</b>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 6 }}>
-
-                      {!isResolved && (
-                        <>
-                          {!alert.escalated && (
-                            <button className="btn warn"
-                              onClick={() => escalateAlert(alert)}>
-                              Escalate
-                            </button>
-                          )}
-
-                          {alert.status !== "RESOLVED" && (
-                            <button className="btn primary"
-                              onClick={() => resolveAlert(alert)}>
-                              Resolve
-                            </button>
-                          )}
-                        </>
-                      )}
-
-                      <button
-                        className="btn"
-                        onClick={() => setSelectedCompanyId(alert.companyId)}
-                      >
-                        Enter
-                      </button>
-
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* INCIDENT REGISTRY */}
-          <div className="postureCard">
-            <h3>🚨 ACTIVE ESCALATED INCIDENTS</h3>
-
-            <div style={{
-              height: 220,
-              overflowY: "auto",
-              marginTop: 10
-            }}>
-              {incidentRegistry.length === 0 && (
-                <div className="muted">No escalated incidents.</div>
-              )}
-
-              {incidentRegistry.map(incident => (
+              return (
                 <div
-                  key={incident.id}
+                  key={alert.id}
                   style={{
-                    padding: "8px 0",
-                    borderBottom: "1px solid rgba(255,255,255,.06)"
+                    padding: "12px 0",
+                    borderBottom: "1px solid rgba(255,255,255,.06)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    background: breached ? "rgba(255,0,0,.08)" : "transparent"
                   }}
                 >
-                  <b>{companies.find(c => c.id === incident.companyId)?.name}</b>
-                  <div style={{ fontSize: 12 }}>
-                    Priority: {incident.priority} | Risk: {incident.risk}
+                  <div>
+                    <b>{companyName}</b>
+                    <div style={{ fontSize: 12, opacity: 0.6 }}>
+                      {alert.containment} — Risk {alert.risk}
+                    </div>
+                    <div style={{ fontSize: 12 }}>
+                      Priority: <b>{alert.priority}</b> | SLA:{" "}
+                      <b style={{ color: breached ? "#ff4d4f" : "#eaf1ff" }}>
+                        {formatCountdown(remaining)}
+                      </b>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {!alert.escalated && (
+                      <button className="btn warn"
+                        onClick={() => escalateAlert(alert)}>
+                        Escalate
+                      </button>
+                    )}
+
+                    <button className="btn primary"
+                      onClick={() => resolveAlert(alert)}>
+                      Resolve
+                    </button>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
-
-          {/* FLEET GRID */}
-          {!selectedCompany && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 24 }}>
-              {companies.map(c => {
-                const state = companyState[c.id];
-                const badge = riskLevel(state.risk);
-
-                return (
-                  <div
-                    key={c.id}
-                    className="postureCard"
-                    style={{ cursor: "pointer" }}
-                    onClick={() => setSelectedCompanyId(c.id)}
-                  >
-                    <h4>{c.name}</h4>
-                    <div>Risk: <span className={`badge ${badge.cls}`}>{state.risk}</span></div>
-                    <div>Status: {state.containment}</div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-        </>
+        </div>
       )}
 
       {/* ================= PLATFORM MODE ================= */}
