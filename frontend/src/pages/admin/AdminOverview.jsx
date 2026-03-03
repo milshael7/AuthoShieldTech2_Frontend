@@ -1,5 +1,5 @@
 // frontend/src/pages/admin/AdminOverview.jsx
-// Executive Command Center — Layer 9 (Auto Escalation + Lock Engine)
+// Executive Command Center — Operator Split Layout (Queue + Incidents + Fleet)
 
 import React, { useEffect, useState } from "react";
 import { useSecurity } from "../../context/SecurityContext.jsx";
@@ -81,8 +81,7 @@ export default function AdminOverview() {
     companies.forEach(c => {
       initial[c.id] = {
         risk: Math.floor(Math.random() * 40),
-        containment: "STABLE",
-        log: []
+        containment: "STABLE"
       };
     });
     return initial;
@@ -94,9 +93,7 @@ export default function AdminOverview() {
   /* ================= GLOBAL TIMER ================= */
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTick(Date.now());
-    }, 1000);
+    const timer = setInterval(() => setTick(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -120,13 +117,8 @@ export default function AdminOverview() {
             const priority = priorityFromRisk(newRisk);
 
             updated[id] = {
-              ...updated[id],
               risk: newRisk,
-              containment,
-              log: [
-                { time: new Date(), msg: `Threat spike detected (+${spike})` },
-                ...updated[id].log
-              ]
+              containment
             };
 
             const createdAt = Date.now();
@@ -140,16 +132,14 @@ export default function AdminOverview() {
               priority,
               createdAt,
               deadline,
-              status: "NEW",
-              escalatedLocked: false
+              escalatedLocked: false,
+              status: "NEW"
             });
           }
         });
 
         if (newAlerts.length > 0) {
-          setGlobalQueue(prevQueue =>
-            [...newAlerts, ...prevQueue].slice(0, 100)
-          );
+          setGlobalQueue(prev => [...newAlerts, ...prev].slice(0, 100));
         }
 
         return updated;
@@ -162,7 +152,7 @@ export default function AdminOverview() {
 
   }, []);
 
-  /* ================= AUTO ESCALATION ENGINE ================= */
+  /* ================= AUTO ESCALATION ================= */
 
   useEffect(() => {
 
@@ -186,8 +176,8 @@ export default function AdminOverview() {
             autoEscalated: true
           };
 
-          setIncidentRegistry(prevInc =>
-            [{ ...escalatedAlert, escalatedAt: new Date() }, ...prevInc]
+          setIncidentRegistry(prev =>
+            [{ ...escalatedAlert, escalatedAt: new Date() }, ...prev]
           );
 
           return escalatedAlert;
@@ -199,39 +189,20 @@ export default function AdminOverview() {
 
   }, [tick]);
 
-  /* ================= ACTIONS ================= */
-
   const resolveAlert = (alert) => {
-
     setGlobalQueue(prev =>
       prev.map(a =>
-        a.id === alert.id
-          ? { ...a, status: "RESOLVED" }
-          : a
+        a.id === alert.id ? { ...a, status: "RESOLVED" } : a
       )
     );
-
-    setCompanyState(prev => ({
-      ...prev,
-      [alert.companyId]: {
-        ...prev[alert.companyId],
-        risk: Math.max(0, prev[alert.companyId].risk - 10),
-        containment: containmentFromRisk(
-          Math.max(0, prev[alert.companyId].risk - 10)
-        ),
-        log: [
-          { time: new Date(), msg: "Threat resolved by operator" },
-          ...prev[alert.companyId].log
-        ]
-      }
-    }));
   };
 
   /* ========================================================= */
 
   return (
-    <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", flexDirection: "column", gap: 40 }}>
+    <div style={{ maxWidth: 1500, margin: "0 auto", display: "flex", flexDirection: "column", gap: 40 }}>
 
+      {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between" }}>
         <div className="sectionTitle">
           {mode === "platform" ? "Platform Command Center" : "Operator Console"}
@@ -243,58 +214,106 @@ export default function AdminOverview() {
         </select>
       </div>
 
+      {/* ================= OPERATOR MODE ================= */}
+
       {mode === "operator" && (
-        <div className="postureCard executivePanel">
-          <h3>🔴 ACTIVE GLOBAL THREAT QUEUE</h3>
+        <>
+          {/* SPLIT TOP ROW */}
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 30 }}>
 
-          <div style={{ height: 420, overflowY: "auto", marginTop: 15 }}>
-            {globalQueue.map(alert => {
+            {/* GLOBAL QUEUE */}
+            <div className="postureCard executivePanel">
+              <h3>🔴 ACTIVE GLOBAL THREAT QUEUE</h3>
 
-              const companyName = companies.find(c => c.id === alert.companyId)?.name;
-              const remaining = alert.deadline - tick;
-              const breached = remaining <= 0;
+              <div style={{ height: 420, overflowY: "auto", marginTop: 15 }}>
+                {globalQueue.map(alert => {
 
-              return (
-                <div
-                  key={alert.id}
-                  style={{
-                    padding: "12px 0",
-                    borderBottom: "1px solid rgba(255,255,255,.06)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    background: breached ? "rgba(255,0,0,.08)" : "transparent"
-                  }}
-                >
-                  <div>
-                    <b>{companyName}</b>
-                    <div style={{ fontSize: 12, opacity: 0.6 }}>
-                      {alert.containment} — Risk {alert.risk}
-                    </div>
-                    <div style={{ fontSize: 12 }}>
-                      Priority: <b>{alert.priority}</b> | SLA:{" "}
-                      <b style={{ color: breached ? "#ff4d4f" : "#eaf1ff" }}>
-                        {formatCountdown(remaining)}
-                      </b>
-                    </div>
-                    {alert.autoEscalated && (
-                      <div style={{ fontSize: 11, color: "#ff4d4f" }}>
-                        AUTO-ESCALATED (LOCKED)
+                  const companyName = companies.find(c => c.id === alert.companyId)?.name;
+                  const remaining = alert.deadline - tick;
+                  const breached = remaining <= 0;
+
+                  return (
+                    <div
+                      key={alert.id}
+                      style={{
+                        padding: "12px 0",
+                        borderBottom: "1px solid rgba(255,255,255,.06)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        background: breached ? "rgba(255,0,0,.08)" : "transparent"
+                      }}
+                    >
+                      <div>
+                        <b>{companyName}</b>
+                        <div style={{ fontSize: 12 }}>
+                          Priority: <b>{alert.priority}</b> | SLA:{" "}
+                          <b style={{ color: breached ? "#ff4d4f" : "#eaf1ff" }}>
+                            {formatCountdown(remaining)}
+                          </b>
+                        </div>
+                        {alert.autoEscalated && (
+                          <div style={{ fontSize: 11, color: "#ff4d4f" }}>
+                            AUTO-ESCALATED (LOCKED)
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  <button
-                    className="btn primary"
-                    onClick={() => resolveAlert(alert)}
+                      <button className="btn primary" onClick={() => resolveAlert(alert)}>
+                        Resolve
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* INCIDENT REGISTRY */}
+            <div className="postureCard">
+              <h3>🚨 ESCALATED INCIDENTS</h3>
+
+              <div style={{ height: 420, overflowY: "auto", marginTop: 15 }}>
+                {incidentRegistry.map(incident => (
+                  <div
+                    key={incident.id}
+                    style={{
+                      padding: "8px 0",
+                      borderBottom: "1px solid rgba(255,255,255,.06)"
+                    }}
                   >
-                    Resolve
-                  </button>
-                </div>
-              );
-            })}
+                    <b>{companies.find(c => c.id === incident.companyId)?.name}</b>
+                    <div style={{ fontSize: 12 }}>
+                      Priority: {incident.priority}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
           </div>
-        </div>
+
+          {/* FLEET GRID */}
+          <div className="postureCard">
+            <h3>🏢 FLEET OVERVIEW</h3>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginTop: 20 }}>
+              {companies.map(c => {
+                const state = companyState[c.id];
+                const badge = riskLevel(state.risk);
+
+                return (
+                  <div key={c.id} className="postureCard">
+                    <h4>{c.name}</h4>
+                    <div>Risk: <span className={`badge ${badge.cls}`}>{state.risk}</span></div>
+                    <div>Status: {state.containment}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
+
+      {/* ================= PLATFORM MODE ================= */}
 
       {mode === "platform" && (
         <>
