@@ -1,8 +1,7 @@
 // frontend/src/pages/admin/AdminOverview.jsx
-// Executive Command Center — Corporate Operational Version
+// Executive Command Center — Platform + Operator Mode
 
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useSecurity } from "../../context/SecurityContext.jsx";
 
@@ -34,7 +33,6 @@ function riskLevel(score) {
 /* ========================================================= */
 
 export default function AdminOverview() {
-  const navigate = useNavigate();
 
   const {
     riskScore,
@@ -44,6 +42,9 @@ export default function AdminOverview() {
 
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const [mode, setMode] = useState("platform"); // "platform" | "operator"
+  const [selectedCompany, setSelectedCompany] = useState(null);
 
   const canvasRef = useRef(null);
   const [riskHistory, setRiskHistory] = useState([]);
@@ -99,6 +100,15 @@ export default function AdminOverview() {
 
   const healthBadge = riskLevel(healthIndex);
 
+  /* ================= MOCK COMPANIES (replace with API later) ================= */
+
+  const mockCompanies = [
+    { id: "c1", name: "Alpha Systems", risk: 22 },
+    { id: "c2", name: "Beta Holdings", risk: 61 },
+    { id: "c3", name: "Gamma Logistics", risk: 38 },
+    { id: "c4", name: "Delta Finance", risk: 12 }
+  ];
+
   if (loading) {
     return <div className="dashboard-loading">Loading Executive Center…</div>;
   }
@@ -114,144 +124,205 @@ export default function AdminOverview() {
         gap: 40
       }}
     >
+
       {/* ================= HEADER ================= */}
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div className="sectionTitle">Executive Command Center</div>
-        <span className={`badge ${healthBadge.cls}`}>
-          HEALTH {healthIndex.toFixed(0)}
-        </span>
+        <div className="sectionTitle">
+          {mode === "platform" ? "Platform Command Center" : "Operator Command Center"}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <span className={`badge ${healthBadge.cls}`}>
+            HEALTH {healthIndex.toFixed(0)}
+          </span>
+
+          {/* MODE SWITCH */}
+          <select
+            value={mode}
+            onChange={(e) => {
+              setSelectedCompany(null);
+              setMode(e.target.value);
+            }}
+            style={{
+              background: "rgba(255,255,255,.05)",
+              color: "#eaf1ff",
+              border: "1px solid rgba(255,255,255,.15)",
+              padding: "6px 10px",
+              borderRadius: 6
+            }}
+          >
+            <option value="platform">Platform View</option>
+            <option value="operator">Operator View</option>
+          </select>
+        </div>
       </div>
 
-      {/* ================= CORPORATE COMMAND ROW ================= */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: 14
-        }}
-      >
-        <button className="btn" onClick={() => navigate("/admin/security")}>
-          SOC Operations
-        </button>
+      {/* ================= OPERATOR MODE ================= */}
 
-        <button className="btn" onClick={() => navigate("/admin/incidents")}>
-          Incident Command
-        </button>
+      {mode === "operator" && (
+        <div className="postureCard">
+          <h3 style={{ marginBottom: 20 }}>
+            {selectedCompany ? `Viewing: ${selectedCompany.name}` : "Protected Companies"}
+          </h3>
 
-        <button className="btn" onClick={() => navigate("/admin/risk")}>
-          Risk Monitor
-        </button>
+          {!selectedCompany && (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 20
+              }}
+            >
+              {mockCompanies.map((c) => {
+                const badge = riskLevel(c.risk);
+                return (
+                  <div
+                    key={c.id}
+                    className="postureCard"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => setSelectedCompany(c)}
+                  >
+                    <h4>{c.name}</h4>
+                    <div style={{ marginTop: 10 }}>
+                      Risk: <span className={`badge ${badge.cls}`}>{c.risk}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-        <button className="btn" onClick={() => navigate("/admin/audit")}>
-          Audit Explorer
-        </button>
+          {selectedCompany && (
+            <div>
+              <button
+                className="btn"
+                style={{ marginBottom: 20 }}
+                onClick={() => setSelectedCompany(null)}
+              >
+                ← Back to All Companies
+              </button>
 
-        <button className="btn" onClick={() => navigate("/admin/companies")}>
-          Company Oversight
-        </button>
-      </div>
-
-      {integrityAlert && (
-        <div className="dashboard-warning">
-          Integrity Alert Detected — Elevated State
+              <div className="muted">
+                Company-specific operational view would render here.
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      <ExecutiveRiskBanner />
+      {/* ================= PLATFORM MODE CONTENT ================= */}
 
-      {/* ================= TOP ROW ================= */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 28
-        }}
-      >
-        <div className="postureCard executivePanel">
-          <h3>Platform Health</h3>
-          <p style={{ fontSize: 32, fontWeight: 700 }}>
-            {healthIndex.toFixed(0)}
-          </p>
-        </div>
+      {mode === "platform" && (
+        <>
+          {integrityAlert && (
+            <div className="dashboard-warning">
+              Integrity Alert Detected — Elevated State
+            </div>
+          )}
 
-        <div className="postureCard">
-          <h3>Live Risk Drift</h3>
-          <canvas
-            ref={canvasRef}
-            width={800}
-            height={200}
-            style={{ width: "100%", height: 200 }}
-          />
-        </div>
-      </div>
+          <ExecutiveRiskBanner />
 
-      {/* ================= KPI ROW ================= */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: 20
-        }}
-      >
-        <div className="kpiCard executive">
-          <small>Total Revenue</small>
-          <b>${fmtMoney(metrics?.totalRevenue)}</b>
-        </div>
+          {/* ================= TOP ROW ================= */}
 
-        <div className="kpiCard executive">
-          <small>Active Subscribers</small>
-          <b>{metrics?.activeSubscribers || 0}</b>
-        </div>
-
-        <div className="kpiCard executive">
-          <small>MRR</small>
-          <b>${fmtMoney(metrics?.MRR)}</b>
-        </div>
-
-        <div className="kpiCard executive">
-          <small>Churn Rate</small>
-          <b>{metrics?.churnRate ?? 0}</b>
-        </div>
-      </div>
-
-      {/* ================= SECURITY OPS ================= */}
-      <div className="sectionTitle">Security Operations</div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 28
-        }}
-      >
-        <SecurityPostureDashboard />
-        <IncidentBoard />
-      </div>
-
-      <SecurityPipeline />
-      <SecurityRadar />
-      <SecurityFeedPanel />
-
-      {/* ================= AUDIT ================= */}
-      <div className="postureCard">
-        <h3>Recent Audit Events</h3>
-        {(auditFeed || []).slice(0, 8).map((e, i) => (
           <div
-            key={i}
             style={{
-              padding: "8px 0",
-              borderBottom: "1px solid rgba(255,255,255,.06)",
-              display: "flex",
-              justifyContent: "space-between"
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 28
             }}
           >
-            <small style={{ opacity: 0.7 }}>
-              {new Date(e?.ts || Date.now()).toLocaleTimeString()}
-            </small>
-            <div><b>{e?.action || "UNKNOWN"}</b></div>
+            <div className="postureCard executivePanel">
+              <h3>Platform Health</h3>
+              <p style={{ fontSize: 32, fontWeight: 700 }}>
+                {healthIndex.toFixed(0)}
+              </p>
+            </div>
+
+            <div className="postureCard">
+              <h3>Live Risk Drift</h3>
+              <canvas
+                ref={canvasRef}
+                width={800}
+                height={200}
+                style={{ width: "100%", height: 200 }}
+              />
+            </div>
           </div>
-        ))}
-      </div>
+
+          {/* ================= KPI ROW ================= */}
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: 20
+            }}
+          >
+            <div className="kpiCard executive">
+              <small>Total Revenue</small>
+              <b>${fmtMoney(metrics?.totalRevenue)}</b>
+            </div>
+
+            <div className="kpiCard executive">
+              <small>Active Subscribers</small>
+              <b>{metrics?.activeSubscribers || 0}</b>
+            </div>
+
+            <div className="kpiCard executive">
+              <small>MRR</small>
+              <b>${fmtMoney(metrics?.MRR)}</b>
+            </div>
+
+            <div className="kpiCard executive">
+              <small>Churn Rate</small>
+              <b>{metrics?.churnRate ?? 0}</b>
+            </div>
+          </div>
+
+          {/* ================= SECURITY OPS ================= */}
+
+          <div className="sectionTitle">Security Operations</div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 28
+            }}
+          >
+            <SecurityPostureDashboard />
+            <IncidentBoard />
+          </div>
+
+          <SecurityPipeline />
+          <SecurityRadar />
+          <SecurityFeedPanel />
+
+          {/* ================= AUDIT ================= */}
+
+          <div className="postureCard">
+            <h3>Recent Audit Events</h3>
+            {(auditFeed || []).slice(0, 8).map((e, i) => (
+              <div
+                key={i}
+                style={{
+                  padding: "8px 0",
+                  borderBottom: "1px solid rgba(255,255,255,.06)",
+                  display: "flex",
+                  justifyContent: "space-between"
+                }}
+              >
+                <small style={{ opacity: 0.7 }}>
+                  {new Date(e?.ts || Date.now()).toLocaleTimeString()}
+                </small>
+                <div><b>{e?.action || "UNKNOWN"}</b></div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
     </div>
   );
 }
