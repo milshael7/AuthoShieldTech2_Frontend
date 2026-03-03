@@ -1,5 +1,6 @@
 // frontend/src/pages/admin/AdminOverview.jsx
 // Executive Command Center — FULL MERGED MASTER (Menu + Automatic/Manual + Company Plug + Drill + Archive)
+// + Work Policy Gating (Hours/Days/Vacation) Integrated
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useSecurity } from "../../context/SecurityContext.jsx";
@@ -65,6 +66,58 @@ function safeStr(v) {
   return String(v ?? "").trim();
 }
 
+/* ================= WORK POLICY =================
+   Option B:
+   - Alerts do NOT generate outside work hours.
+   - Per company policy (workDays + start/end + vacation).
+*/
+
+const DEFAULT_POLICY = {
+  timezone: "Local", // placeholder; later backend can store IANA tz (America/New_York etc)
+  workDays: [1, 2, 3, 4, 5], // Mon-Fri
+  startHour: 9, // 0-23
+  endHour: 17, // 0-23, end is exclusive
+  vacationMode: false,
+};
+
+function normalizePolicy(policy) {
+  const p = policy || {};
+  return {
+    timezone: safeStr(p.timezone) || "Local",
+    workDays: Array.isArray(p.workDays) && p.workDays.length ? p.workDays : [1,2,3,4,5],
+    startHour: Number.isFinite(Number(p.startHour)) ? Number(p.startHour) : 9,
+    endHour: Number.isFinite(Number(p.endHour)) ? Number(p.endHour) : 17,
+    vacationMode: Boolean(p.vacationMode),
+  };
+}
+
+function isWithinWorkWindow(company) {
+  const policy = normalizePolicy(company?.policy);
+
+  if (policy.vacationMode) return false;
+
+  const now = new Date();
+  const day = now.getDay(); // 0-6
+  const hour = now.getHours();
+
+  if (!policy.workDays.includes(day)) return false;
+  if (hour < policy.startHour || hour >= policy.endHour) return false;
+
+  return true;
+}
+
+function policyBadge(company) {
+  const policy = normalizePolicy(company?.policy);
+  if (policy.vacationMode) return { label: "VACATION MODE", tone: "warn" };
+  return isWithinWorkWindow(company)
+    ? { label: "ACTIVE WINDOW", tone: "ok" }
+    : { label: "OUTSIDE HOURS", tone: "muted" };
+}
+
+function dayLabel(d) {
+  return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d] || String(d);
+}
+
 /* ================= COMPONENT ================= */
 
 export default function AdminOverview() {
@@ -91,10 +144,10 @@ export default function AdminOverview() {
 
   // ---- CLIENTS (mock for now; later replace with API) ----
   const [companies, setCompanies] = useState([
-    { id: "c1", name: "Alpha Systems" },
-    { id: "c2", name: "Beta Holdings" },
-    { id: "c3", name: "Gamma Logistics" },
-    { id: "c4", name: "Delta Finance" },
+    { id: "c1", name: "Alpha Systems", policy: { ...DEFAULT_POLICY, startHour: 9, endHour: 17 } },
+    { id: "c2", name: "Beta Holdings", policy: { ...DEFAULT_POLICY, startHour: 8, endHour: 16 } },
+    { id: "c3", name: "Gamma Logistics", policy: { ...DEFAULT_POLICY, startHour: 9, endHour: 18 } },
+    { id: "c4", name: "Delta Finance", policy: { ...DEFAULT_POLICY, startHour: 9, endHour: 17 } },
   ]);
 
   // Onboarding form (Plug Company)
@@ -105,6 +158,13 @@ export default function AdminOverview() {
     plan: "Standard",
     seats: 5,
     notes: "",
+
+    // NEW: work policy
+    timezone: "Local",
+    startHour: 9,
+    endHour: 17,
+    workDays: [1,2,3,4,5],
+    vacationMode: false,
   });
 
   const speedMap = useMemo(
@@ -143,6 +203,7 @@ export default function AdminOverview() {
   /* ================= THREAT ENGINE =================
      - Runs ONLY in operator view AND automatic mode
      - Pauses if enginePaused OR operatorMode === manual
+     - NEW: Per-company gating (hours/days/vacation)
   */
 
   useEffect(() => {
@@ -156,7 +217,13 @@ export default function AdminOverview() {
         const updated = { ...prev };
         const newAlerts = [];
 
-        Object.keys(updated).forEach((id) => {
+        // iterate companies (policy gating)
+        (companies || []).forEach((company) => {
+          const id = company.id;
+
+          // Option B: do NOT generate outside window
+          if (!isWithinWorkWindow(company)) return;
+
           // 40% chance spike
           if (Math.random() < 0.4) {
             const spike = Math.floor(Math.random() * 15);
@@ -196,7 +263,7 @@ export default function AdminOverview() {
     }, speedMap[engineSpeed]);
 
     return () => clearInterval(interval);
-  }, [mode, enginePaused, operatorMode, engineSpeed, speedMap]);
+  }, [mode, enginePaused, operatorMode, engineSpeed, speedMap, companies]);
 
   /* ================= SLA AUTO ESCALATION =================
      - Runs in operator view for automatic mode (but can still display in manual)
@@ -276,10 +343,7 @@ export default function AdminOverview() {
         if (a.id !== id) return a;
         if (a.locked) return a; // locked means no manual bump
         const newPriority = bumpPriority(a.priority);
-        return logActivity(
-          { ...a, priority: newPriority },
-          "MANUAL_ESCALATE"
-        );
+        return logActivity({ ...a, priority: newPriority }, "MANUAL_ESCALATE");
       })
     );
   };
@@ -288,10 +352,7 @@ export default function AdminOverview() {
     setGlobalQueue((prev) =>
       prev.map((a) => {
         if (a.id !== alert.id) return a;
-        return logActivity(
-          { ...a, resolution: payload },
-          "RESOLUTION_BUILT"
-        );
+        return logActivity({ ...a, resolution: payload }, "RESOLUTION_BUILT");
       })
     );
   };
@@ -301,12 +362,15 @@ export default function AdminOverview() {
     setGlobalQueue((prev) =>
       prev.map((a) =>
         a.id === alert.id
-          ? logActivity({ ...a, status: "RESOLVED", resolvedAt: new Date() }, "RESOLVED")
+          ? logActivity(
+              { ...a, status: "RESOLVED", resolvedAt: new Date() },
+              "RESOLVED"
+            )
           : a
       )
     );
 
-    // move to archive (kept separate)
+    // move to archive
     setArchive((prev) => {
       const snap = {
         ...alert,
@@ -322,14 +386,13 @@ export default function AdminOverview() {
   const baseQueue = useMemo(() => {
     let q = globalQueue;
 
-    // workspace filter
     if (workspace !== "ALL") {
       q = q.filter((a) => a.companyId === workspace);
     }
 
-    // status/priority filter
     if (filter === "OPEN") q = q.filter((a) => a.status !== "RESOLVED");
-    if (filter === "BREACHED") q = q.filter((a) => (a.deadline || 0) - tick <= 0);
+    if (filter === "BREACHED")
+      q = q.filter((a) => (a.deadline || 0) - tick <= 0);
     if (filter === "P1") q = q.filter((a) => a.priority === "P1");
 
     return q;
@@ -347,11 +410,7 @@ export default function AdminOverview() {
     return globalQueue.find((a) => a.id === selectedAlertId) || null;
   }, [selectedAlertId, globalQueue]);
 
-  /* ================= ROLE RULES (simple gating) =================
-     Tier1: can Ack/Investigate only, can't Resolve
-     Tier2: can Resolve, can't Assign Auto
-     Supervisor: everything
-  */
+  /* ================= ROLE RULES ================= */
 
   const canResolve = role !== "Tier1";
   const canAssignAuto = role === "Supervisor";
@@ -365,7 +424,19 @@ export default function AdminOverview() {
 
     const id = `c${Math.floor(Math.random() * 99999)}`;
 
-    setCompanies((prev) => [{ id, name }, ...prev]);
+    const newCompany = {
+      id,
+      name,
+      policy: normalizePolicy({
+        timezone: plug.timezone,
+        startHour: Number(plug.startHour),
+        endHour: Number(plug.endHour),
+        workDays: plug.workDays,
+        vacationMode: plug.vacationMode,
+      }),
+    };
+
+    setCompanies((prev) => [newCompany, ...prev]);
 
     setCompanyState((prev) => ({
       ...prev,
@@ -375,7 +446,7 @@ export default function AdminOverview() {
       },
     }));
 
-    // log an onboarding audit-style record into archive (as an example)
+    // audit-style record into archive (example)
     setArchive((prev) => [
       {
         id: `onboard-${id}-${nowTs()}`,
@@ -395,6 +466,9 @@ export default function AdminOverview() {
           { time: new Date(), action: `CONTACT_${safeStr(plug.contactEmail) || "N/A"}` },
           { time: new Date(), action: `PLAN_${safeStr(plug.plan) || "Standard"}` },
           { time: new Date(), action: `SEATS_${Number(plug.seats || 0)}` },
+          { time: new Date(), action: `WORKDAYS_${(plug.workDays || []).map(dayLabel).join("_")}` },
+          { time: new Date(), action: `WORKHOURS_${Number(plug.startHour)}-${Number(plug.endHour)}` },
+          { time: new Date(), action: plug.vacationMode ? "VACATION_ON" : "VACATION_OFF" },
         ],
         resolution: {
           summary: "Client onboarded into Operator Console.",
@@ -415,9 +489,24 @@ export default function AdminOverview() {
       plan: "Standard",
       seats: 5,
       notes: "",
+      timezone: "Local",
+      startHour: 9,
+      endHour: 17,
+      workDays: [1,2,3,4,5],
+      vacationMode: false,
     });
 
     setShowOnboarding(false);
+  };
+
+  const toggleWorkDay = (day) => {
+    setPlug((p) => {
+      const set = new Set(p.workDays || []);
+      if (set.has(day)) set.delete(day);
+      else set.add(day);
+      const next = Array.from(set).sort((a,b) => a-b);
+      return { ...p, workDays: next };
+    });
   };
 
   /* ================= RENDER ================= */
@@ -726,7 +815,7 @@ export default function AdminOverview() {
             </div>
           </div>
 
-          {/* FLEET OVERVIEW */}
+          {/* FLEET OVERVIEW (with Work Policy badge) */}
           <div className="postureCard">
             <h3>🏢 Fleet Overview</h3>
             <div
@@ -737,55 +826,74 @@ export default function AdminOverview() {
                 marginTop: 14,
               }}
             >
-              {companies.map((c) => (
-                <div key={c.id} className="postureCard">
-                  <b>{c.name}</b>
-                  <div style={{ marginTop: 8 }}>
-                    Risk: <b>{companyState[c.id]?.risk ?? 0}</b>
+              {companies.map((c) => {
+                const badge = policyBadge(c);
+                const pol = normalizePolicy(c.policy);
+
+                return (
+                  <div key={c.id} className="postureCard">
+                    <b>{c.name}</b>
+
+                    <div style={{ marginTop: 8 }}>
+                      Risk: <b>{companyState[c.id]?.risk ?? 0}</b>
+                    </div>
+                    <div>Status: {companyState[c.id]?.containment ?? "STABLE"}</div>
+
+                    <div style={{ marginTop: 8, fontSize: 12, opacity: 0.9 }}>
+                      Policy:{" "}
+                      <b className={badge.tone === "warn" ? "badge warn" : badge.tone === "ok" ? "badge ok" : "muted"}>
+                        {badge.label}
+                      </b>
+                    </div>
+
+                    <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
+                      Hours: {pol.startHour}:00–{pol.endHour}:00 • Days: {pol.workDays.map(dayLabel).join(", ")}
+                    </div>
+
+                    <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn"
+                        onClick={() => {
+                          setWorkspace(c.id);
+                          setMode("operator");
+                        }}
+                      >
+                        Focus Workspace
+                      </button>
+
+                      <button
+                        className="btn"
+                        onClick={() => {
+                          // manual inject alert (allowed even outside hours, because YOU are choosing to work)
+                          const createdAt = nowTs();
+                          const priority = "P3";
+                          const deadline = createdAt + slaDuration(priority);
+                          const alert = {
+                            id: `${c.id}-${createdAt}`,
+                            companyId: c.id,
+                            risk: companyState[c.id]?.risk ?? 0,
+                            containment: companyState[c.id]?.containment ?? "STABLE",
+                            priority,
+                            createdAt,
+                            deadline,
+                            status: "NEW",
+                            assignedTo: null,
+                            locked: false,
+                            autoEscalated: false,
+                            activity: [{ time: new Date(), action: "MANUAL_CREATED" }],
+                            resolution: null,
+                          };
+                          setGlobalQueue((prev) => [alert, ...prev].slice(0, 200));
+                          setMode("operator");
+                          setOperatorMode("manual");
+                        }}
+                      >
+                        Manual Inject Alert
+                      </button>
+                    </div>
                   </div>
-                  <div>Status: {companyState[c.id]?.containment ?? "STABLE"}</div>
-                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button
-                      className="btn"
-                      onClick={() => {
-                        setWorkspace(c.id);
-                        setMode("operator");
-                      }}
-                    >
-                      Focus Workspace
-                    </button>
-                    <button
-                      className="btn"
-                      onClick={() => {
-                        // create a manual alert in manual mode
-                        const createdAt = nowTs();
-                        const priority = "P3";
-                        const deadline = createdAt + slaDuration(priority);
-                        const alert = {
-                          id: `${c.id}-${createdAt}`,
-                          companyId: c.id,
-                          risk: companyState[c.id]?.risk ?? 0,
-                          containment: companyState[c.id]?.containment ?? "STABLE",
-                          priority,
-                          createdAt,
-                          deadline,
-                          status: "NEW",
-                          assignedTo: null,
-                          locked: false,
-                          autoEscalated: false,
-                          activity: [{ time: new Date(), action: "MANUAL_CREATED" }],
-                          resolution: null,
-                        };
-                        setGlobalQueue((prev) => [alert, ...prev].slice(0, 200));
-                        setMode("operator");
-                        setOperatorMode("manual");
-                      }}
-                    >
-                      Manual Inject Alert
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -888,6 +996,70 @@ export default function AdminOverview() {
                     placeholder="Anything special about this customer..."
                   />
                 </div>
+
+                {/* NEW POLICY FIELDS */}
+                <div>
+                  <small>Timezone</small>
+                  <input
+                    value={plug.timezone}
+                    onChange={(e) => setPlug((p) => ({ ...p, timezone: e.target.value }))}
+                    style={inputStyle}
+                    placeholder="Local (later: America/New_York)"
+                  />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div>
+                    <small>Start Hour (0-23)</small>
+                    <input
+                      type="number"
+                      min={0}
+                      max={23}
+                      value={plug.startHour}
+                      onChange={(e) => setPlug((p) => ({ ...p, startHour: Number(e.target.value || 0) }))}
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <small>End Hour (0-23)</small>
+                    <input
+                      type="number"
+                      min={1}
+                      max={24}
+                      value={plug.endHour}
+                      onChange={(e) => setPlug((p) => ({ ...p, endHour: Number(e.target.value || 0) }))}
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <small>Work Days</small>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+                    {[0,1,2,3,4,5,6].map((d) => {
+                      const active = (plug.workDays || []).includes(d);
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          className={`btn ${active ? "primary" : ""}`}
+                          onClick={() => toggleWorkDay(d)}
+                        >
+                          {dayLabel(d)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={plug.vacationMode}
+                    onChange={(e) => setPlug((p) => ({ ...p, vacationMode: e.target.checked }))}
+                  />
+                  <small>Vacation Mode (no alerts generated)</small>
+                </div>
               </div>
 
               <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
@@ -900,7 +1072,7 @@ export default function AdminOverview() {
               </div>
 
               <div style={{ marginTop: 10, opacity: 0.75, fontSize: 12 }}>
-                Right now this is mocked. When we connect backend, this becomes: create tenant + store contact + plan + seats.
+                Work Policy is enforced in Automatic Mode: alerts only generate during the company’s active work window.
               </div>
             </div>
           )}
