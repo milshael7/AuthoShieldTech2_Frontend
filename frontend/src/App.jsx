@@ -14,9 +14,12 @@ import {
 import { CompanyProvider } from "./context/CompanyContext";
 import { ToolProvider } from "./pages/tools/ToolContext.jsx";
 import { SecurityProvider } from "./context/SecurityContext.jsx";
+
 import { EventBusProvider } from "./core/EventBus.jsx";
 import { AIDecisionProvider } from "./core/AIDecisionBus.jsx";
+
 import BrainAdapter from "./core/BrainAdapter.jsx";
+import AutoDevEngine from "./core/AutoDevEngine.jsx";
 
 import PlatformGate from "./components/PlatformGate.jsx";
 
@@ -241,7 +244,13 @@ export default function App() {
   return (
     <EventBusProvider>
       <AIDecisionProvider>
+
+        {/* AI Brain → Event System */}
         <BrainAdapter />
+
+        {/* Platform self-diagnosis */}
+        <AutoDevEngine />
+
         <CompanyProvider>
           <ToolProvider user={ready ? user : null}>
             <SecurityProvider>
@@ -251,6 +260,7 @@ export default function App() {
             </SecurityProvider>
           </ToolProvider>
         </CompanyProvider>
+
       </AIDecisionProvider>
     </EventBusProvider>
   );
