@@ -1,6 +1,6 @@
 // frontend/src/context/SecurityContext.jsx
-// Security Context — Enterprise Hardened v3
-// 1008 Safe • Backoff Controlled • Status Accurate • Blueprint Aligned
+// Security Context — Enterprise Hardened v4
+// LIVE TELEMETRY ENABLED • TENANT AWARE • HEARTBEAT SAFE
 
 import React, {
   createContext,
@@ -11,7 +11,8 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import { getToken } from "../lib/api.js";
+
+import { getToken, api } from "../lib/api.js";
 
 const SecurityContext = createContext(null);
 
@@ -28,18 +29,24 @@ function safeJsonParse(s) {
 }
 
 export function SecurityProvider({ children }) {
+
   const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
 
   const [systemStatus, setSystemStatus] = useState("secure");
   const [integrityAlert, setIntegrityAlert] = useState(null);
+
   const [riskByCompany, setRiskByCompany] = useState({});
   const [exposureByCompany, setExposureByCompany] = useState({});
+
   const [auditFeed, setAuditFeed] = useState([]);
   const [deviceAlerts, setDeviceAlerts] = useState([]);
+
   const [wsStatus, setWsStatus] = useState("disconnected");
 
   const socketRef = useRef(null);
   const reconnectTimer = useRef(null);
+  const heartbeatRef = useRef(null);
+
   const backoffRef = useRef({
     attempt: 0,
     nextDelayMs: 1200,
@@ -48,13 +55,14 @@ export function SecurityProvider({ children }) {
   const tokenRef = useRef(getToken() || null);
   const forceStopRef = useRef(false);
 
-  /* ================= URL ================= */
+  /* ================= WS URL ================= */
 
   function buildWsUrl(token) {
     if (!API_BASE) return null;
 
     const httpUrl = new URL(API_BASE);
     const protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
+
     return `${protocol}//${httpUrl.host}/ws/market?token=${encodeURIComponent(
       token
     )}`;
@@ -69,8 +77,18 @@ export function SecurityProvider({ children }) {
     }
   };
 
+  const clearHeartbeat = () => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+  };
+
   const closeSocket = useCallback(() => {
+
     clearReconnect();
+    clearHeartbeat();
+
     forceStopRef.current = true;
 
     if (socketRef.current) {
@@ -81,20 +99,24 @@ export function SecurityProvider({ children }) {
     }
 
     setWsStatus("disconnected");
+
   }, []);
 
   /* ================= BACKOFF ================= */
 
   const scheduleReconnect = useCallback(() => {
+
     if (forceStopRef.current) return;
 
     clearReconnect();
 
     backoffRef.current.attempt += 1;
+
     setWsStatus("reconnecting");
 
     const base = Math.min(15000, backoffRef.current.nextDelayMs);
     const jitter = Math.floor(Math.random() * 400);
+
     const delay = base + jitter;
 
     backoffRef.current.nextDelayMs = Math.min(
@@ -105,18 +127,22 @@ export function SecurityProvider({ children }) {
     reconnectTimer.current = setTimeout(() => {
       connectSocket();
     }, delay);
+
   }, []);
 
   /* ================= MESSAGE ================= */
 
   const handleMessage = useCallback((raw) => {
+
     const data = typeof raw === "string" ? safeJsonParse(raw) : raw;
     if (!data || !data.type) return;
 
     const companyId = String(data.companyId || "global");
 
     switch (data.type) {
+
       case "risk_update":
+
         setRiskByCompany((prev) => ({
           ...prev,
           [companyId]: {
@@ -125,9 +151,11 @@ export function SecurityProvider({ children }) {
             updatedAt: now(),
           },
         }));
+
         break;
 
       case "asset_exposure_update":
+
         setExposureByCompany((prev) => ({
           ...prev,
           [companyId]: {
@@ -138,9 +166,11 @@ export function SecurityProvider({ children }) {
             updatedAt: now(),
           },
         }));
+
         break;
 
       case "integrity_alert":
+
         setIntegrityAlert(data);
         setSystemStatus("compromised");
 
@@ -155,17 +185,46 @@ export function SecurityProvider({ children }) {
             ...prev,
           ].slice(0, 150)
         );
+
         break;
 
       default:
         break;
     }
+
   }, []);
+
+  /* ================= HEARTBEAT ================= */
+
+  function startHeartbeat() {
+
+    clearHeartbeat();
+
+    heartbeatRef.current = setInterval(() => {
+
+      if (!socketRef.current) return;
+
+      if (socketRef.current.readyState !== 1) return;
+
+      try {
+        socketRef.current.send(
+          JSON.stringify({
+            type: "heartbeat",
+            ts: Date.now(),
+          })
+        );
+      } catch {}
+
+    }, 15000);
+
+  }
 
   /* ================= CONNECT ================= */
 
   const connectSocket = useCallback(() => {
+
     const token = getToken();
+
     tokenRef.current = token || null;
 
     if (!token) {
@@ -178,11 +237,13 @@ export function SecurityProvider({ children }) {
     forceStopRef.current = false;
 
     const wsUrl = buildWsUrl(token);
+
     if (!wsUrl) return;
 
     setWsStatus("connecting");
 
     let socket;
+
     try {
       socket = new WebSocket(wsUrl);
     } catch {
@@ -192,9 +253,14 @@ export function SecurityProvider({ children }) {
     }
 
     socket.onopen = () => {
+
       setWsStatus("connected");
+
       backoffRef.current.attempt = 0;
       backoffRef.current.nextDelayMs = 1200;
+
+      startHeartbeat();
+
     };
 
     socket.onmessage = (event) => {
@@ -208,9 +274,11 @@ export function SecurityProvider({ children }) {
     };
 
     socket.onclose = (event) => {
+
       socketRef.current = null;
 
-      // 1008 = policy violation (auth/device/subscription)
+      clearHeartbeat();
+
       if (event.code === 1008) {
         forceStopRef.current = true;
         setWsStatus("disconnected");
@@ -218,33 +286,76 @@ export function SecurityProvider({ children }) {
       }
 
       setWsStatus("disconnected");
+
       scheduleReconnect();
+
     };
 
     socketRef.current = socket;
+
   }, [closeSocket, handleMessage, scheduleReconnect, wsStatus]);
 
   /* ================= BOOT ================= */
 
   useEffect(() => {
+
     connectSocket();
+
     return () => closeSocket();
+
   }, [connectSocket, closeSocket]);
 
-  /* ================= TOKEN WATCHER ================= */
+  /* ================= TOKEN WATCH ================= */
 
   useEffect(() => {
+
     const t = setInterval(() => {
+
       const latest = getToken() || null;
+
       if (latest !== tokenRef.current) {
+
         tokenRef.current = latest;
+
         closeSocket();
+
         if (latest) connectSocket();
+
       }
+
     }, 5000);
 
     return () => clearInterval(t);
+
   }, [closeSocket, connectSocket]);
+
+  /* ================= REST TELEMETRY ================= */
+
+  useEffect(() => {
+
+    async function loadSecurityState() {
+
+      try {
+
+        const summary = await api.postureSummary();
+
+        if (summary?.riskByCompany)
+          setRiskByCompany(summary.riskByCompany);
+
+        if (summary?.exposureByCompany)
+          setExposureByCompany(summary.exposureByCompany);
+
+      } catch {}
+
+    }
+
+    loadSecurityState();
+
+    const interval = setInterval(loadSecurityState, 30000);
+
+    return () => clearInterval(interval);
+
+  }, []);
 
   /* ================= HELPERS ================= */
 
@@ -276,6 +387,7 @@ export function SecurityProvider({ children }) {
 
       auditFeed,
       deviceAlerts,
+
       pushAudit,
       pushDeviceAlert,
     }),
