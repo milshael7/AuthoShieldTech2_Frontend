@@ -54,6 +54,13 @@ import AuditExplorer from "./pages/admin/AuditExplorer.jsx";
 import AdminToolGovernance from "./pages/admin/AdminToolGovernance.jsx";
 import AdminCompanyRoom from "./pages/admin/AdminCompanyRoom.jsx";
 
+/* NEW ADMIN MODULES */
+import CorporateEntities from "./pages/admin/CorporateEntities.jsx";
+import UserGovernance from "./pages/admin/UserGovernance.jsx";
+
+/* MANAGER MODULE */
+import ManagerCommand from "./pages/manager/ManagerCommand.jsx";
+
 /* SECURITY */
 import SecurityOverview from "./components/security/SecurityOverview.jsx";
 import RiskMonitor from "./pages/RiskMonitor.jsx";
@@ -90,6 +97,8 @@ function AppRoutes({ user, ready }) {
         <Route path="soc" element={<SOC />} />
         <Route path="companies" element={<AdminCompanies />} />
         <Route path="company/:companyId" element={<AdminCompanyRoom />} />
+        <Route path="corporate" element={<CorporateEntities />} />
+        <Route path="user-governance" element={<UserGovernance />} />
         <Route path="assets" element={<Assets />} />
         <Route path="incidents" element={<Incidents />} />
         <Route path="vulnerabilities" element={<Vulnerabilities />} />
@@ -115,6 +124,7 @@ function AppRoutes({ user, ready }) {
         }
       >
         <Route index element={<SOC />} />
+        <Route path="command" element={<ManagerCommand />} />
         <Route path="intelligence" element={<Intelligence />} />
         <Route path="assets" element={<Assets />} />
         <Route path="incidents" element={<Incidents />} />
@@ -245,10 +255,7 @@ export default function App() {
     <EventBusProvider>
       <AIDecisionProvider>
 
-        {/* AI Brain → Event System */}
         <BrainAdapter />
-
-        {/* Platform self-diagnosis */}
         <AutoDevEngine />
 
         <CompanyProvider>
