@@ -1,6 +1,6 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v7 (TRADING FIXED)
-   Stable • No Crash • Trading Synced
+   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v8
+   404 SAFE • SOC READY • TRADING SAFE
 ========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
@@ -75,6 +75,7 @@ async function req(path, { method = "GET", body, auth = true } = {}) {
   }
 
   let res;
+
   try {
     res = await fetchWithTimeout(joinUrl(API_BASE, path), {
       method,
@@ -107,6 +108,7 @@ async function req(path, { method = "GET", body, auth = true } = {}) {
 /* ================= API OBJECT ================= */
 
 const api = {
+
   /* AUTH */
   login: (email, password) =>
     req("/api/auth/login", {
@@ -128,14 +130,8 @@ const api = {
   incidents: () => req("/api/incidents"),
 
   /* SECURITY */
-  postureSummary: () => req("/api/security/posture-summary"),
-  compliance: () => req("/api/security/compliance"),
-  vulnerabilities: () => req("/api/security/vulnerabilities"),
   securityEvents: () => req("/api/security/events"),
-  sessionMonitor: () => req("/api/security/sessions"),
-
-  /* 🔥 TRADING (FIXED) */
-  tradingLiveSnapshot: () => req("/api/trading/live-snapshot"),
+  vulnerabilities: () => req("/api/security/vulnerabilities"),
 
   /* TOOLS */
   toolCatalog: () => req("/api/tools/catalog"),
@@ -146,12 +142,6 @@ const api = {
   myEntitlements: () => req("/api/entitlements/me"),
 
   /* ADMIN */
-  adminMetrics: () => req("/api/admin/metrics"),
-  adminExecutiveRisk: () => req("/api/admin/executive-risk"),
-  adminCompliance: () => req("/api/admin/compliance"),
-  adminAuditPreview: () => req("/api/admin/audit-preview"),
-  adminAuditExplorer: (query = "") =>
-    req(`/api/admin/audit${query ? `?${query}` : ""}`),
   adminPlatformHealth: () => req("/api/admin/platform-health"),
 
   /* USERS */
