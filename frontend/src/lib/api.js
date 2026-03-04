@@ -1,5 +1,5 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v8
+   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v9
    404 SAFE • SOC READY • TRADING SAFE
 ========================================================= */
 
@@ -55,6 +55,7 @@ function joinUrl(base, path) {
 async function fetchWithTimeout(url, options = {}, ms = REQUEST_TIMEOUT) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
+
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
@@ -109,7 +110,8 @@ async function req(path, { method = "GET", body, auth = true } = {}) {
 
 const api = {
 
-  /* AUTH */
+  /* ================= AUTH ================= */
+
   login: (email, password) =>
     req("/api/auth/login", {
       method: "POST",
@@ -124,29 +126,78 @@ const api = {
       auth: false,
     }),
 
-  refresh: () => req("/api/auth/refresh", { method: "POST" }),
+  refresh: () =>
+    req("/api/auth/refresh", { method: "POST" }),
 
-  /* INCIDENTS */
-  incidents: () => req("/api/incidents"),
+  /* ================= INCIDENTS ================= */
 
-  /* SECURITY */
-  securityEvents: () => req("/api/security/events"),
-  vulnerabilities: () => req("/api/security/vulnerabilities"),
+  incidents: () =>
+    req("/api/incidents"),
 
-  /* TOOLS */
-  toolCatalog: () => req("/api/tools/catalog"),
+  /* ================= SECURITY CORE ================= */
+
+  securityEvents: () =>
+    req("/api/security/events"),
+
+  vulnerabilities: () =>
+    req("/api/security/vulnerabilities"),
+
+  /* ================= SECURITY DASHBOARDS ================= */
+
+  postureSummary: () =>
+    req("/api/security/posture-summary"),
+
+  securityRadar: () =>
+    req("/api/security/radar"),
+
+  securityPipeline: () =>
+    req("/api/security/pipeline"),
+
+  securityFeed: () =>
+    req("/api/security/feed"),
+
+  threatIntel: () =>
+    req("/api/security/threat-intel"),
+
+  riskScore: () =>
+    req("/api/security/risk-score"),
+
+  /* ================= TOOLS ================= */
+
+  toolCatalog: () =>
+    req("/api/tools/catalog"),
+
   requestTool: (toolId) =>
-    req(`/api/tools/request/${toolId}`, { method: "POST" }),
+    req(`/api/tools/request/${toolId}`, {
+      method: "POST",
+    }),
 
-  /* ENTITLEMENTS */
-  myEntitlements: () => req("/api/entitlements/me"),
+  /* ================= ENTITLEMENTS ================= */
 
-  /* ADMIN */
-  adminPlatformHealth: () => req("/api/admin/platform-health"),
+  myEntitlements: () =>
+    req("/api/entitlements/me"),
 
-  /* USERS */
-  listUsers: () => req("/api/users"),
-  getUser: (id) => req(`/api/users/${id}`),
+  /* ================= ADMIN ================= */
+
+  adminPlatformHealth: () =>
+    req("/api/admin/platform-health"),
+
+  adminAuditLogs: () =>
+    req("/api/admin/audit"),
+
+  adminThreatMetrics: () =>
+    req("/api/admin/threat-metrics"),
+
+  /* ================= USERS ================= */
+
+  listUsers: () =>
+    req("/api/users"),
+
+  getUser: (id) =>
+    req(`/api/users/${id}`),
+
 };
+
+/* ================= EXPORT ================= */
 
 export { api, req };
