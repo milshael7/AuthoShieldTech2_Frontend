@@ -35,19 +35,27 @@ export default function PlatformGate({
   children,
 }) {
 
+  /* WAIT UNTIL AUTH FINISHES */
   if (!ready) {
     return <div style={{ padding: 40 }}>Initializing platform…</div>;
   }
 
-  if (!user) {
+  /* STABILIZATION FIX */
+  if (ready && !user) {
     return <Navigate to="/login" replace />;
   }
 
-  if (allow && !hasAccess(user.role, allow)) {
+  /* ROLE ACCESS */
+  if (allow && user && !hasAccess(user.role, allow)) {
     return <Navigate to="/404" replace />;
   }
 
-  if (requireSubscription && isInactiveSubscription(user.subscriptionStatus)) {
+  /* SUBSCRIPTION CHECK */
+  if (
+    requireSubscription &&
+    user &&
+    isInactiveSubscription(user.subscriptionStatus)
+  ) {
     return <Navigate to="/pricing" replace />;
   }
 
