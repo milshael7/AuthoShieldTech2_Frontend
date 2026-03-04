@@ -1,17 +1,18 @@
 /**
  * AuthoShield Tech — Official Logo Component
- * Smart Role-Based Navigation • Production Hardened
+ * Smart Role-Based Navigation • Editable Logo • Production Safe
  */
 
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getSavedUser } from "../lib/api";
 
 export default function Logo({
   size = "md",
   variant = "full",
-  forceRoute = null, // optional override
+  forceRoute = null,
 }) {
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -24,32 +25,70 @@ export default function Logo({
   const cfg = sizes[size] || sizes.md;
 
   /* =====================================================
+     LOGO STATE
+  ===================================================== */
+
+  const [logo, setLogo] = useState(
+    localStorage.getItem("platform_logo") || "/logo.png"
+  );
+
+  function handleUpload(e) {
+
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = function(event) {
+
+      const base64 = event.target.result;
+
+      localStorage.setItem("platform_logo", base64);
+      setLogo(base64);
+
+    };
+
+    reader.readAsDataURL(file);
+
+  }
+
+  /* =====================================================
      RESOLVE HOME ROUTE
   ===================================================== */
 
   const resolvedHome = useMemo(() => {
+
     if (forceRoute) return forceRoute;
 
     const user = getSavedUser();
+
     if (!user?.role) return "/";
 
     const role = String(user.role).toLowerCase();
 
     switch (role) {
+
       case "admin":
         return "/admin";
+
       case "manager":
         return "/manager";
+
       case "company":
         return "/company";
+
       case "small_company":
         return "/small-company";
+
       case "individual":
       case "user":
         return "/user";
+
       default:
         return "/";
+
     }
+
   }, [forceRoute]);
 
   /* =====================================================
@@ -57,9 +96,11 @@ export default function Logo({
   ===================================================== */
 
   const handleClick = useCallback(() => {
+
     if (location.pathname !== resolvedHome) {
       navigate(resolvedHome);
     }
+
   }, [location.pathname, resolvedHome, navigate]);
 
   /* =====================================================
@@ -81,17 +122,33 @@ export default function Logo({
         cursor: "pointer",
       }}
     >
-      <img
-        src="/logo.png"
-        alt="AuthoShield Tech"
-        style={{
-          width: cfg.icon,
-          height: cfg.icon,
-          objectFit: "contain",
-        }}
-      />
+
+      <label style={{ cursor: "pointer" }}>
+
+        <img
+          src={logo}
+          alt="AuthoShield Tech"
+          style={{
+            width: cfg.icon,
+            height: cfg.icon,
+            objectFit: "contain",
+            transition: "transform .15s ease",
+          }}
+          onMouseEnter={(e)=>e.currentTarget.style.transform="scale(1.05)"}
+          onMouseLeave={(e)=>e.currentTarget.style.transform="scale(1)"}
+        />
+
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleUpload}
+          style={{ display: "none" }}
+        />
+
+      </label>
 
       {variant === "full" && (
+
         <span
           style={{
             fontSize: cfg.font,
@@ -104,7 +161,9 @@ export default function Logo({
         >
           AuthoShield Tech
         </span>
+
       )}
+
     </div>
   );
 }
