@@ -1,7 +1,7 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v12
+   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v13
    SOC READY • ZERO TRUST SAFE • TENANT AWARE
-   RENDER WAKE FIX • LOGIN SAFE • SESSION SAFE
+   RENDER WAKE SAFE • LOGIN STABLE • SESSION SAFE
 ========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
@@ -13,7 +13,6 @@ if (!API_BASE) {
 const TOKEN_KEY = "as_token";
 const USER_KEY = "as_user";
 
-/* 🔥 increased for Render wake-up */
 const REQUEST_TIMEOUT = 60000;
 
 /* ================= STORAGE ================= */
@@ -106,12 +105,10 @@ export async function req(path, { method = "GET", body, auth = true } = {}) {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
 
-  } catch (err) {
-
-    console.warn("API network error:", path);
+  } catch {
 
     return {
-      error: "Server unreachable or waking up",
+      error: "Server unreachable or waking up"
     };
 
   }
@@ -126,8 +123,6 @@ export async function req(path, { method = "GET", body, auth = true } = {}) {
 
   if (res.status === 401 && auth) {
 
-    console.warn("Session expired");
-
     clearToken();
     clearUser();
 
@@ -136,8 +131,6 @@ export async function req(path, { method = "GET", body, auth = true } = {}) {
     return { error: "Session expired" };
 
   }
-
-  /* ================= SAFE ERRORS ================= */
 
   if (!res.ok) {
 
@@ -167,35 +160,32 @@ const api = {
 
   login: async (email, password) => {
 
-    const result = await req("/api/auth/login", {
+    const response = await fetch(`${API_BASE}/api/auth/login`, {
       method: "POST",
-      body: { email, password },
-      auth: false,
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email, password })
     });
 
-    /* handle multiple response formats */
+    let data = null;
 
-    const token =
-      result?.token ||
-      result?.data?.token ||
-      result?.accessToken;
-
-    const user =
-      result?.user ||
-      result?.data?.user;
-
-    if (token && user) {
-
-      return {
-        token,
-        user
-      };
-
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error("Server returned invalid response");
     }
 
-    return {
-      error: result?.error || "Invalid login response"
-    };
+    if (!response.ok) {
+      throw new Error(data?.error || "Login failed");
+    }
+
+    if (!data?.token || !data?.user) {
+      console.error("Login response:", data);
+      throw new Error("Invalid login response from server");
+    }
+
+    return data;
 
   },
 
