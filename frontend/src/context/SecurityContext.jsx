@@ -1,6 +1,6 @@
 // frontend/src/context/SecurityContext.jsx
-// Security Context — Enterprise Hardened v4
-// LIVE TELEMETRY ENABLED • TENANT AWARE • HEARTBEAT SAFE
+// Security Context — Enterprise Hardened v5
+// LIVE TELEMETRY ENABLED • TENANT AWARE • HEARTBEAT SAFE • EVENT BUS ENABLED
 
 import React, {
   createContext,
@@ -13,6 +13,7 @@ import React, {
 } from "react";
 
 import { getToken, api } from "../lib/api.js";
+import { useEventBus } from "../core/EventBus.jsx";
 
 const SecurityContext = createContext(null);
 
@@ -31,6 +32,7 @@ function safeJsonParse(s) {
 export function SecurityProvider({ children }) {
 
   const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
+  const bus = useEventBus();
 
   const [systemStatus, setSystemStatus] = useState("secure");
   const [integrityAlert, setIntegrityAlert] = useState(null);
@@ -152,6 +154,12 @@ export function SecurityProvider({ children }) {
           },
         }));
 
+        bus.emit("risk_update", {
+          companyId,
+          riskScore: data.riskScore,
+          signals: data.signals || []
+        });
+
         break;
 
       case "asset_exposure_update":
@@ -166,6 +174,11 @@ export function SecurityProvider({ children }) {
             updatedAt: now(),
           },
         }));
+
+        bus.emit("asset_exposure_update", {
+          companyId,
+          exposure: data.exposure || {}
+        });
 
         break;
 
@@ -186,13 +199,15 @@ export function SecurityProvider({ children }) {
           ].slice(0, 150)
         );
 
+        bus.emit("integrity_alert", data);
+
         break;
 
       default:
         break;
     }
 
-  }, []);
+  }, [bus]);
 
   /* ================= HEARTBEAT ================= */
 
@@ -261,6 +276,8 @@ export function SecurityProvider({ children }) {
 
       startHeartbeat();
 
+      bus.emit("security_ws_connected");
+
     };
 
     socket.onmessage = (event) => {
@@ -287,13 +304,15 @@ export function SecurityProvider({ children }) {
 
       setWsStatus("disconnected");
 
+      bus.emit("security_ws_disconnected");
+
       scheduleReconnect();
 
     };
 
     socketRef.current = socket;
 
-  }, [closeSocket, handleMessage, scheduleReconnect, wsStatus]);
+  }, [closeSocket, handleMessage, scheduleReconnect, wsStatus, bus]);
 
   /* ================= BOOT ================= */
 
