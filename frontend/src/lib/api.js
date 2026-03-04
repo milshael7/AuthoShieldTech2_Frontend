@@ -1,7 +1,7 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v11
+   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v12
    SOC READY • ZERO TRUST SAFE • TENANT AWARE
-   LOGIN RESPONSE FIX • ERROR SAFE
+   RENDER WAKE FIX • LOGIN SAFE • SESSION SAFE
 ========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
@@ -12,7 +12,9 @@ if (!API_BASE) {
 
 const TOKEN_KEY = "as_token";
 const USER_KEY = "as_user";
-const REQUEST_TIMEOUT = 20000;
+
+/* 🔥 increased for Render wake-up */
+const REQUEST_TIMEOUT = 60000;
 
 /* ================= STORAGE ================= */
 
@@ -107,7 +109,10 @@ export async function req(path, { method = "GET", body, auth = true } = {}) {
   } catch (err) {
 
     console.warn("API network error:", path);
-    return { error: "Server unreachable" };
+
+    return {
+      error: "Server unreachable or waking up",
+    };
 
   }
 
@@ -117,9 +122,11 @@ export async function req(path, { method = "GET", body, auth = true } = {}) {
     data = await res.json();
   } catch {}
 
-  /* ================= SESSION RECOVERY ================= */
+  /* ================= SESSION HANDLING ================= */
 
-  if (res.status === 401) {
+  if (res.status === 401 && auth) {
+
+    console.warn("Session expired");
 
     clearToken();
     clearUser();
@@ -166,12 +173,28 @@ const api = {
       auth: false,
     });
 
-    if (result?.token && result?.user) {
-      return result;
+    /* handle multiple response formats */
+
+    const token =
+      result?.token ||
+      result?.data?.token ||
+      result?.accessToken;
+
+    const user =
+      result?.user ||
+      result?.data?.user;
+
+    if (token && user) {
+
+      return {
+        token,
+        user
+      };
+
     }
 
     return {
-      error: result?.error || "Invalid login response",
+      error: result?.error || "Invalid login response"
     };
 
   },
