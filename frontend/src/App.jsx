@@ -15,6 +15,7 @@ import { CompanyProvider } from "./context/CompanyContext";
 import { ToolProvider } from "./pages/tools/ToolContext.jsx";
 import { SecurityProvider } from "./context/SecurityContext.jsx";
 import { EventBusProvider } from "./core/EventBus.jsx";
+import { AIDecisionProvider } from "./core/AIDecisionBus.jsx";
 
 import PlatformGate from "./components/PlatformGate.jsx";
 
@@ -238,15 +239,17 @@ export default function App() {
 
   return (
     <EventBusProvider>
-      <CompanyProvider>
-        <ToolProvider user={ready ? user : null}>
-          <SecurityProvider>
-            <BrowserRouter>
-              <AppRoutes user={user} ready={ready} />
-            </BrowserRouter>
-          </SecurityProvider>
-        </ToolProvider>
-      </CompanyProvider>
+      <AIDecisionProvider>
+        <CompanyProvider>
+          <ToolProvider user={ready ? user : null}>
+            <SecurityProvider>
+              <BrowserRouter>
+                <AppRoutes user={user} ready={ready} />
+              </BrowserRouter>
+            </SecurityProvider>
+          </ToolProvider>
+        </CompanyProvider>
+      </AIDecisionProvider>
     </EventBusProvider>
   );
 
