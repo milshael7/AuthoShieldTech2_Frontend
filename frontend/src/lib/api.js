@@ -1,6 +1,6 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v9
-   404 SAFE • SOC READY • TRADING SAFE
+   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v10
+   SELF-HEALING API • 404 SAFE • SOC READY
 ========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
@@ -106,11 +106,13 @@ async function req(path, { method = "GET", body, auth = true } = {}) {
   return data;
 }
 
-/* ================= API OBJECT ================= */
+/* =========================================================
+   ENTERPRISE API OBJECT
+========================================================= */
 
-const api = {
+const staticApi = {
 
-  /* ================= AUTH ================= */
+  /* AUTH */
 
   login: (email, password) =>
     req("/api/auth/login", {
@@ -129,66 +131,7 @@ const api = {
   refresh: () =>
     req("/api/auth/refresh", { method: "POST" }),
 
-  /* ================= INCIDENTS ================= */
-
-  incidents: () =>
-    req("/api/incidents"),
-
-  /* ================= SECURITY CORE ================= */
-
-  securityEvents: () =>
-    req("/api/security/events"),
-
-  vulnerabilities: () =>
-    req("/api/security/vulnerabilities"),
-
-  /* ================= SECURITY DASHBOARDS ================= */
-
-  postureSummary: () =>
-    req("/api/security/posture-summary"),
-
-  securityRadar: () =>
-    req("/api/security/radar"),
-
-  securityPipeline: () =>
-    req("/api/security/pipeline"),
-
-  securityFeed: () =>
-    req("/api/security/feed"),
-
-  threatIntel: () =>
-    req("/api/security/threat-intel"),
-
-  riskScore: () =>
-    req("/api/security/risk-score"),
-
-  /* ================= TOOLS ================= */
-
-  toolCatalog: () =>
-    req("/api/tools/catalog"),
-
-  requestTool: (toolId) =>
-    req(`/api/tools/request/${toolId}`, {
-      method: "POST",
-    }),
-
-  /* ================= ENTITLEMENTS ================= */
-
-  myEntitlements: () =>
-    req("/api/entitlements/me"),
-
-  /* ================= ADMIN ================= */
-
-  adminPlatformHealth: () =>
-    req("/api/admin/platform-health"),
-
-  adminAuditLogs: () =>
-    req("/api/admin/audit"),
-
-  adminThreatMetrics: () =>
-    req("/api/admin/threat-metrics"),
-
-  /* ================= USERS ================= */
+  /* USERS */
 
   listUsers: () =>
     req("/api/users"),
@@ -196,8 +139,43 @@ const api = {
   getUser: (id) =>
     req(`/api/users/${id}`),
 
+  /* INCIDENTS */
+
+  incidents: () =>
+    req("/api/incidents"),
+
 };
 
-/* ================= EXPORT ================= */
+/* =========================================================
+   AUTO API MAPPING (SELF-HEALING)
+========================================================= */
 
-export { api, req };
+export const api = new Proxy(staticApi, {
+
+  get(target, prop) {
+
+    if (prop in target) return target[prop];
+
+    /* automatically generate endpoint */
+
+    return (...args) => {
+
+      const path =
+        "/api/" +
+        String(prop)
+          .replace(/[A-Z]/g, m => "-" + m.toLowerCase());
+
+      console.warn("Auto API endpoint used:", path);
+
+      return req(path, {
+        method: args.length ? "POST" : "GET",
+        body: args[0]
+      });
+
+    };
+
+  }
+
+});
+
+export { req };
