@@ -617,69 +617,78 @@ export default function AdminOverview() {
     return sig;
   }, [companies, companyMetrics, companyComms]);
 
-  /* ================= OVERLOAD AUTO DRAFT (EDGE TRIGGER) ================= */
+ /* ================= OVERLOAD AUTO DRAFT ================= */
 
-  useEffect(() => {
-    (companies || []).forEach((c) => {
-      const cs = companySignals[c.id];
-      if (!cs) return;
+useEffect(() => {
+  (companies || []).forEach((c) => {
+    const cs = companySignals[c.id];
+    if (!cs) return;
 
-      const prevOver = Boolean(overloadRef.current[c.id]);
-      const nowOver = Boolean(cs.overload);
+    const prevOver = Boolean(overloadRef.current[c.id]);
+    const nowOver = Boolean(cs.overload);
 
-      if (!prevOver && nowOver) {
-        const companyId = c.id;
-        const companyName = getCompanyName(companyId);
+    // trigger only on edge change
+    if (!prevOver && nowOver) {
+      const companyId = c.id;
+      const companyName = getCompanyName(companyId);
 
-        const comms = companyComms[companyId] || { emails: [], notifications: [] };
-        const alreadyDraft = (comms.emails || []).some((e) => e.status === "DRAFT" && e.kind === "OVERLOAD");
+      const comms = companyComms[companyId] || {
+        emails: [],
+        notifications: [],
+      };
 
-        if (!alreadyDraft) {
-          const emailId = makeId("email");
-          addEmail(companyId, {
-            id: emailId,
-            kind: "OVERLOAD",
-            status: "DRAFT",
-            createdAt: nowTs(),
-            to: safeStr(c?.meta?.contactEmail),
-            subject: `[URGENT] Elevated Threat Volume Detected — ${companyName}`,
-            body: [
-              `Hello ${companyName} Security Team,`,
-              ``,
-              `AutoProtect detected elevated threat volume for your environment.`,
-              ``,
-              `Snapshot:`,
-              `- Open items: ${cs.metrics.open}`,
-              `- P1 items: ${cs.metrics.p1}`,
-              `- SLA breached: ${cs.metrics.breached}`,
-              ``,
-              `Recommended immediate actions:`,
-              `1) Review recent authentication + privilege changes`,
-              `2) Validate suspicious IPs / geos and block where appropriate`,
-              `3) Rotate credentials if any compromise suspected`,
-              `4) Confirm MFA enforcement and monitor admin endpoints`,
-              ``,
-              `This message is drafted by AutoProtect and awaiting approval.`,
-              ``,
-              `— Admin Operator Console`,
-            ].join("\n"),
-          });
+      const alreadyDraft = (comms.emails || []).some(
+        (e) => e.status === "DRAFT" && e.kind === "OVERLOAD"
+      );
 
-          addNotification(companyId, {
-            id: makeId("note"),
-            createdAt: nowTs(),
-            severity: "RED",
-            title: "Overload detected",
-            message: `High threat volume detected. AutoProtect drafted an urgent email (approval required).`,
-            linkedEmailId: emailId,
-            read: false,
-          });
-        }
+      if (!alreadyDraft) {
+        const emailId = makeId("email");
+
+        addEmail(companyId, {
+          id: emailId,
+          kind: "OVERLOAD",
+          status: "DRAFT",
+          createdAt: nowTs(),
+          to: safeStr(c?.meta?.contactEmail),
+          subject: `[URGENT] Elevated Threat Volume Detected — ${companyName}`,
+          body: [
+            `Hello ${companyName} Security Team,`,
+            ``,
+            `AutoProtect detected elevated threat volume for your environment.`,
+            ``,
+            `Snapshot:`,
+            `- Open items: ${cs.metrics.open}`,
+            `- P1 items: ${cs.metrics.p1}`,
+            `- SLA breached: ${cs.metrics.breached}`,
+            ``,
+            `Recommended immediate actions:`,
+            `1) Review recent authentication activity`,
+            `2) Validate suspicious IP addresses`,
+            `3) Rotate credentials if compromise suspected`,
+            `4) Verify MFA enforcement`,
+            ``,
+            `This message was drafted automatically and requires operator approval.`,
+            ``,
+            `— AutoProtect Operator Console`,
+          ].join("\n"),
+        });
+
+        addNotification(companyId, {
+          id: makeId("note"),
+          createdAt: nowTs(),
+          severity: "RED",
+          title: "Overload detected",
+          message:
+            "High threat volume detected. AutoProtect drafted an urgent response email.",
+          linkedEmailId: emailId,
+          read: false,
+        });
       }
+    }
 
-      overloadRef.current[c.id] = nowOver;
-    });
-  }, [companies, companySignals, companyComms]); // safe deps
+    overloadRef.current[c.id] = nowOver;
+  });
+}, [companies, companySignals, companyComms]);
 
   /* ================= ROLE RULES ================= */
 
@@ -1706,26 +1715,50 @@ function NotificationBoard({
   onOpenEmail,
   onMarkRead,
 }) {
+
   const companyIds = (companies || []).map((c) => c.id);
   const scopeIds = selectedCompany === "ALL" ? companyIds : [selectedCompany];
 
   const rows = useMemo(() => {
     const out = [];
+
     scopeIds.forEach((cid) => {
       const notes = comms[cid]?.notifications || [];
-      notes.forEach((n) => out.push({ companyId: cid, ...n }));
+
+      notes.forEach((n) => {
+        out.push({
+          companyId: cid,
+          ...n,
+        });
+      });
     });
+
     out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
     return out.slice(0, 400);
+
   }, [scopeIds, comms]);
 
   return (
     <div className="postureCard executivePanel">
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
         <h3 style={{ margin: 0 }}>🔔 Notifications</h3>
 
-        <select value={selectedCompany} onChange={(e) => setSelectedCompany(e.target.value)}>
+        <select
+          value={selectedCompany}
+          onChange={(e) => setSelectedCompany(e.target.value)}
+        >
           <option value="ALL">All Companies</option>
+
           {(companies || []).map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -1734,45 +1767,115 @@ function NotificationBoard({
         </select>
       </div>
 
-      <div style={{ marginTop: 12, height: 520, overflowY: "auto" }}>
+      <div
+        style={{
+          marginTop: 12,
+          height: 520,
+          overflowY: "auto",
+        }}
+      >
         {rows.length === 0 ? (
           <div className="muted">No notifications.</div>
         ) : (
           rows.map((n) => {
+
             const sig = signals?.[n.companyId]?.level || "GREEN";
+
             return (
-              <div key={n.id} style={{ padding: 12, borderBottom: "1px solid rgba(255,255,255,.06)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div
+                key={n.id}
+                style={{
+                  padding: 12,
+                  borderBottom: "1px solid rgba(255,255,255,.06)",
+                }}
+              >
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+
                   <div>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+
+                    <div
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.7,
+                      }}
+                    >
                       {new Date(n.createdAt || Date.now()).toLocaleString()}
                     </div>
-                    <div style={{ display: "flex", alignItems: "center" }}>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                    >
                       <span style={dotStyle(sig)} />
+
                       <b>{getCompanyName(n.companyId)}</b>
+
                       {!n.read && (
                         <span style={{ marginLeft: 8 }}>
                           <b>NEW</b>
                         </span>
                       )}
                     </div>
+
                     <div style={{ marginTop: 6 }}>
                       <b>{n.title}</b>
                     </div>
-                    <div style={{ opacity: 0.85, marginTop: 4 }}>{n.message}</div>
+
+                    <div
+                      style={{
+                        opacity: 0.85,
+                        marginTop: 4,
+                      }}
+                    >
+                      {n.message}
+                    </div>
+
                   </div>
 
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+
                     {n.linkedEmailId && (
-                      <button className="btn" onClick={() => onOpenEmail(n.companyId, n.linkedEmailId)}>
+                      <button
+                        className="btn"
+                        onClick={() =>
+                          onOpenEmail(n.companyId, n.linkedEmailId)
+                        }
+                      >
                         Open Draft
                       </button>
                     )}
-                    <button className="btn" onClick={() => onMarkRead(n.companyId, n.id)} disabled={Boolean(n.read)}>
+
+                    <button
+                      className="btn"
+                      onClick={() =>
+                        onMarkRead(n.companyId, n.id)
+                      }
+                      disabled={Boolean(n.read)}
+                    >
                       {n.read ? "Read" : "Mark Read"}
                     </button>
+
                   </div>
+
                 </div>
+
               </div>
             );
           })
@@ -1781,3 +1884,5 @@ function NotificationBoard({
     </div>
   );
 }
+
+/* ================= NOTIFICATION BOARD ================= */
