@@ -2,6 +2,7 @@
 // ============================================================
 // TRADING LAYOUT — ENTERPRISE TRADING MODULE
 // LIVE / AI CONTROL / ANALYTICS
+// STABLE ROUTING FIX
 // ============================================================
 
 import React from "react";
@@ -96,13 +97,23 @@ export default function TradingLayout() {
 
       {/* ================= ROUTED CONTENT ================= */}
       <div style={{ flex: 1 }}>
+
         <Routes>
+
+          {/* DEFAULT ENTRY */}
+          <Route index element={<Navigate to="live" replace />} />
+
+          {/* MODULES */}
           <Route path="live" element={<TradingRoom />} />
           <Route path="control" element={<AIControl />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="market" element={<Market />} />
+
+          {/* SAFETY REDIRECT */}
           <Route path="*" element={<Navigate to="live" replace />} />
+
         </Routes>
+
       </div>
 
     </div>
