@@ -1,6 +1,6 @@
 // frontend/src/context/SecurityContext.jsx
-// Security Context — Enterprise Hardened v8
-// FIXED RISK SCORE • NO FALSE ERRORS • UI SAFE
+// Security Context — Enterprise Hardened v9
+// FIXED EXPOSURE • SAFE WS • STATUS RECOVERY
 
 import React,{
   createContext,
@@ -48,17 +48,25 @@ export function SecurityProvider({children}){
 
   const socketRef = useRef(null);
   const reconnectTimer = useRef(null);
+  const reconnectAttempts = useRef(0);
   const tokenRef = useRef(getToken() || null);
 
-  /* ================= DERIVED GLOBAL RISK ================= */
+  /* ================= ACTIVE COMPANY ================= */
 
   const activeCompanyId =
     user?.companyId || user?.company || "global";
+
+  /* ================= DERIVED VALUES ================= */
 
   const riskScore =
     riskByCompany?.[activeCompanyId]?.riskScore ??
     riskByCompany?.global?.riskScore ??
     0;
+
+  const assetExposure =
+    exposureByCompany?.[activeCompanyId]?.exposure ??
+    exposureByCompany?.global?.exposure ??
+    {};
 
   /* ================= WS URL ================= */
 
@@ -90,6 +98,7 @@ export function SecurityProvider({children}){
 
     const token = getToken();
     tokenRef.current = token || null;
+
     if(!token) return;
 
     if(socketRef.current?.readyState===1) return;
@@ -98,6 +107,7 @@ export function SecurityProvider({children}){
     if(!wsUrl) return;
 
     let socket;
+
     try{
       socket = new WebSocket(wsUrl);
     }catch{
@@ -105,17 +115,20 @@ export function SecurityProvider({children}){
     }
 
     socket.onopen=()=>{
+      reconnectAttempts.current = 0;
       setWsStatus("connected");
       bus.emit("security_ws_connected");
     };
 
     socket.onmessage=(event)=>{
+
       const data = safeJsonParse(event.data);
       if(!data?.type) return;
 
       switch(data.type){
 
         case "risk_update":
+
           setRiskByCompany(prev=>({
             ...prev,
             [String(data.companyId||"global")]:{
@@ -123,20 +136,29 @@ export function SecurityProvider({children}){
               signals:data.signals||[]
             }
           }));
+
+          if(Number(data.riskScore||0)<30){
+            setSystemStatus("secure");
+          }
+
           break;
 
         case "asset_exposure_update":
+
           setExposureByCompany(prev=>({
             ...prev,
             [String(data.companyId||"global")]:{
               exposure:data.exposure||{}
             }
           }));
+
           break;
 
         case "integrity_alert":
+
           setIntegrityAlert(data);
           setSystemStatus("compromised");
+
           break;
 
         default:
@@ -144,11 +166,18 @@ export function SecurityProvider({children}){
       }
     };
 
-    socket.onerror=()=>{ try{socket.close();}catch{} };
+    socket.onerror=()=>{
+      try{socket.close();}catch{}
+    };
 
     socket.onclose=()=>{
+
       socketRef.current=null;
       setWsStatus("disconnected");
+
+      if(reconnectAttempts.current>6) return;
+
+      reconnectAttempts.current+=1;
 
       if(reconnectTimer.current)
         clearTimeout(reconnectTimer.current);
@@ -172,32 +201,53 @@ export function SecurityProvider({children}){
   /* ================= TOKEN WATCH ================= */
 
   useEffect(()=>{
+
     const t = setInterval(()=>{
+
       const latest = getToken() || null;
+
       if(latest!==tokenRef.current){
+
         tokenRef.current = latest;
+
         closeSocket();
+
         if(latest) connectSocket();
+
       }
+
     },5000);
+
     return ()=>clearInterval(t);
+
   },[closeSocket,connectSocket]);
 
   /* ================= REST TELEMETRY ================= */
 
   useEffect(()=>{
+
     async function load(){
+
       try{
+
         const summary = await api.postureSummary();
+
         if(summary?.riskByCompany)
           setRiskByCompany(summary.riskByCompany);
+
         if(summary?.exposureByCompany)
           setExposureByCompany(summary.exposureByCompany);
+
       }catch{}
+
     }
+
     load();
+
     const interval=setInterval(load,30000);
+
     return ()=>clearInterval(interval);
+
   },[]);
 
   /* ================= CONTEXT ================= */
@@ -213,6 +263,8 @@ export function SecurityProvider({children}){
 
     riskScore,
     riskByCompany,
+
+    assetExposure,
     exposureByCompany,
 
     auditFeed,
@@ -229,6 +281,7 @@ export function SecurityProvider({children}){
     integrityAlert,
     riskScore,
     riskByCompany,
+    assetExposure,
     exposureByCompany,
     auditFeed,
     deviceAlerts
