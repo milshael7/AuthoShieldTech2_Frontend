@@ -36,6 +36,8 @@ export default function SecurityOverview() {
   return (
     <div className="postureWrap">
 
+      {/* COMMAND HEADER */}
+
       <div style={styles.commandHeader}>
 
         <div style={styles.statusBlock}>
@@ -77,13 +79,70 @@ export default function SecurityOverview() {
 
       </div>
 
+      {/* INTEGRITY ALERT */}
+
       {integrityAlert && (
         <div style={styles.integrityAlert}>
           ⚠ AUDIT INTEGRITY FAILURE DETECTED
         </div>
       )}
 
+      {/* SECURITY METRIC CARDS */}
+
+      <div style={styles.metricsGrid}>
+
+        <div style={styles.metricCard}>
+          <h4>Active Incidents</h4>
+          <div style={styles.metricValue}>0</div>
+        </div>
+
+        <div style={styles.metricCard}>
+          <h4>Threat Events</h4>
+          <div style={styles.metricValue}>0</div>
+        </div>
+
+        <div style={styles.metricCard}>
+          <h4>Trusted Devices</h4>
+          <div style={styles.metricValue}>0</div>
+        </div>
+
+        <div style={styles.metricCard}>
+          <h4>Security Modules</h4>
+          <div style={styles.metricValue}>Active</div>
+        </div>
+
+      </div>
+
+      {/* SECURITY RADAR */}
+
       <SecurityRadar ref={radarRef} />
+
+      {/* QUICK ACTIONS */}
+
+      <div style={styles.actionPanel}>
+
+        <h3 style={styles.actionTitle}>Security Actions</h3>
+
+        <div style={styles.actionButtons}>
+
+          <button style={styles.actionBtn}>
+            Run Integrity Scan
+          </button>
+
+          <button style={styles.actionBtn}>
+            Refresh Threat Intelligence
+          </button>
+
+          <button style={styles.actionBtn}>
+            Generate Security Report
+          </button>
+
+        </div>
+
+      </div>
+
+      {/* SECURITY TOOL MARKETPLACE */}
+
       <SecurityToolMarketplace onChange={refreshRadar} />
 
     </div>
@@ -91,6 +150,7 @@ export default function SecurityOverview() {
 }
 
 const styles = {
+
   commandHeader: {
     background: "#0f172a",
     borderRadius: 12,
@@ -150,5 +210,53 @@ const styles = {
     borderRadius: 8,
     fontWeight: 600,
     textAlign: "center"
+  },
+
+  metricsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 20,
+    marginBottom: 28
+  },
+
+  metricCard: {
+    background: "#0f172a",
+    padding: 18,
+    borderRadius: 10,
+    boxShadow: "0 0 14px rgba(0,0,0,0.4)",
+    color: "#e5e7eb"
+  },
+
+  metricValue: {
+    fontSize: 26,
+    fontWeight: 700,
+    marginTop: 8
+  },
+
+  actionPanel: {
+    marginTop: 30,
+    marginBottom: 30
+  },
+
+  actionTitle: {
+    marginBottom: 14,
+    color: "#e5e7eb"
+  },
+
+  actionButtons: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 12
+  },
+
+  actionBtn: {
+    padding: "10px 16px",
+    background: "#2563eb",
+    border: "none",
+    borderRadius: 8,
+    color: "#fff",
+    cursor: "pointer",
+    fontWeight: 600
   }
+
 };
