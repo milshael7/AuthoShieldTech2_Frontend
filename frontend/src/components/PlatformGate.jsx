@@ -34,23 +34,26 @@ export default function PlatformGate({
   requireSubscription = false,
   children,
 }) {
-
-  /* WAIT UNTIL AUTH FINISHES */
+  /* ================= WAIT FOR AUTH BOOT ================= */
   if (!ready) {
     return <div style={{ padding: 40 }}>Initializing platform…</div>;
   }
 
-  /* STABILIZATION FIX */
-  if (ready && !user) {
-    return <Navigate to="/login" replace />;
+  /* ================= AUTH STABILIZATION =================
+     IMPORTANT:
+     - Do NOT redirect immediately when user is null
+     - App.jsx may still be reconciling refresh/session
+  */
+  if (ready && user === null) {
+    return <div style={{ padding: 40 }}>Restoring session…</div>;
   }
 
-  /* ROLE ACCESS */
+  /* ================= ROLE ACCESS ================= */
   if (allow && user && !hasAccess(user.role, allow)) {
     return <Navigate to="/404" replace />;
   }
 
-  /* SUBSCRIPTION CHECK */
+  /* ================= SUBSCRIPTION ================= */
   if (
     requireSubscription &&
     user &&
