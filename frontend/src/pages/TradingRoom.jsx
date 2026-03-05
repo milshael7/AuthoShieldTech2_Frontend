@@ -1,5 +1,5 @@
 // ============================================================
-// TRADING ROOM — CONNECTED TO PAPER ENGINE
+// TRADING ROOM — CONNECTED TO MARKET ENGINE + PAPER ENGINE
 // ============================================================
 
 import React, { useEffect, useRef, useState } from "react";
@@ -26,7 +26,9 @@ export default function TradingRoom() {
   const [position,setPosition] = useState(null);
   const [trades,setTrades] = useState([]);
 
-  /* ================= CHART ================= */
+  const symbol = "BTCUSDT";
+
+  /* ================= CHART INIT ================= */
 
   useEffect(()=>{
 
@@ -48,11 +50,43 @@ export default function TradingRoom() {
     chartRef.current=chart;
     seriesRef.current=series;
 
+    loadCandles();
+
     return ()=>chart.remove()
 
   },[])
 
-  /* ================= LOAD PAPER STATE ================= */
+  /* ================= LOAD MARKET CANDLES ================= */
+
+  async function loadCandles(){
+
+    try{
+
+      const res = await fetch(`/api/market/candles?symbol=${symbol}`,{
+        credentials:"include"
+      })
+
+      const data = await res.json()
+
+      if(!data?.ok) return
+
+      const candles = data.candles.map(c=>({
+        time:Math.floor(c.time/1000),
+        open:c.open,
+        high:c.high,
+        low:c.low,
+        close:c.close
+      }))
+
+      seriesRef.current.setData(candles)
+
+    }catch(e){
+      console.error(e)
+    }
+
+  }
+
+  /* ================= LOAD PAPER ACCOUNT ================= */
 
   async function loadPaper(){
 
@@ -80,25 +114,13 @@ export default function TradingRoom() {
 
       setTrades((snap.trades||[]).slice(-10).reverse())
 
-      if(seriesRef.current && snap.candles?.length){
-        const candles = snap.candles.map(c=>({
-          time:Math.floor(c.t/1000),
-          open:c.o,
-          high:c.h,
-          low:c.l,
-          close:c.c
-        }))
-
-        seriesRef.current.setData(candles)
-      }
-
     }catch(e){
       console.error(e)
     }
 
   }
 
-  /* ================= POLL ENGINE ================= */
+  /* ================= POLL ENGINES ================= */
 
   useEffect(()=>{
 
@@ -121,7 +143,7 @@ export default function TradingRoom() {
     <div style={{flex:1,padding:20,display:"flex",flexDirection:"column"}}>
 
       <div style={{fontWeight:700,fontSize:16}}>
-        AI Trading Desk • BTC
+        AI Trading Desk • {symbol}
       </div>
 
       <div style={{opacity:.7,fontSize:13}}>
