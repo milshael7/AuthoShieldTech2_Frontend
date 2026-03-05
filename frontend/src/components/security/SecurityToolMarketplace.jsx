@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { getToken } from "../../lib/api.js";
 
 /*
   SecurityToolMarketplace
   Enterprise Tool Deployment Panel
-  Production Hardened
+  Auth Fixed • Production Stable
 */
 
 function apiBase() {
@@ -16,6 +17,7 @@ function apiBase() {
 
 export default function SecurityToolMarketplace() {
   const base = apiBase();
+  const token = getToken();
 
   const [tools, setTools] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,33 +28,37 @@ export default function SecurityToolMarketplace() {
   /* ================= LOAD TOOLS ================= */
 
   const loadTools = useCallback(async () => {
-    if (!base) {
-      setError("API base not configured");
+    if (!base || !token) {
+      setError("Not authenticated");
       setLoading(false);
       return;
     }
 
     try {
       setError(null);
+      setLoading(true);
 
       const res = await fetch(`${base}/api/security/tools`, {
-        credentials: "include",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (!res.ok || !data.ok) {
-        throw new Error("Failed to load tools");
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to load tools");
       }
 
-      setTools(data.tools || []);
-    } catch (err) {
+      setTools(Array.isArray(data.tools) ? data.tools : []);
+    } catch {
       setTools([]);
       setError("Unable to load security modules");
     } finally {
       setLoading(false);
     }
-  }, [base]);
+  }, [base, token]);
 
   useEffect(() => {
     loadTools();
@@ -61,9 +67,10 @@ export default function SecurityToolMarketplace() {
   /* ================= INSTALL / UNINSTALL ================= */
 
   async function toggleInstall(tool) {
-    if (!base || busyId) return;
+    if (!base || !token || busyId) return;
 
     setBusyId(tool.id);
+    setError(null);
 
     const endpoint = tool.installed
       ? `/api/security/tools/${tool.id}/uninstall`
@@ -72,10 +79,15 @@ export default function SecurityToolMarketplace() {
     try {
       const res = await fetch(`${base}${endpoint}`, {
         method: "POST",
-        credentials: "include",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       });
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        throw new Error("Action failed");
+      }
 
       await loadTools();
 
