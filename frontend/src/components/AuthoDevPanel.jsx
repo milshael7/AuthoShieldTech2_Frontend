@@ -12,10 +12,12 @@ function getRoomId(){
   if(typeof window==="undefined") return "root";
   return window.location.pathname.replace(/\/+$/,"")||"root";
 }
+
 function getUser(){
   try{return JSON.parse(localStorage.getItem("as_user")||"null");}
   catch{return null;}
 }
+
 function getStorageKey(){
   const user=getUser();
   const tenant=user?.companyId||user?.company||"unknown";
@@ -24,6 +26,20 @@ function getStorageKey(){
 
 function copyText(text){
   try{ navigator.clipboard?.writeText(String(text||"")); }catch{}
+}
+
+/* ================= CONTEXT DETECTION ================= */
+
+function detectModule(){
+  const path=window.location.pathname;
+
+  if(path.includes("/admin/trading")) return "trading";
+  if(path.includes("/admin/security")) return "security";
+  if(path.includes("/admin/risk")) return "risk";
+  if(path.includes("/admin/incidents")) return "incident";
+  if(path.includes("/admin/companies")) return "company";
+
+  return "platform";
 }
 
 /* ================= MAIN COMPONENT ================= */
@@ -104,6 +120,7 @@ export default function AuthoDevPanel({
   /* ================= SEND ================= */
 
   async function sendMessage(customText=null, replaceIndex=null){
+
     const messageText=String(customText ?? input ?? "").trim();
     if(!messageText||loading) return;
 
@@ -120,12 +137,25 @@ export default function AuthoDevPanel({
     setLoading(true);
 
     try{
-      const ctx=typeof getContext==="function"?getContext():{};
+
+      const ctxFromParent = typeof getContext==="function"?getContext():{};
+      const module = detectModule();
+
+      const context={
+        ...ctxFromParent,
+        module,
+        tradingActive: module==="trading",
+        location: window.location.pathname
+      };
+
       const res=await fetch(endpoint,{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         credentials:"include",
-        body:JSON.stringify({message:messageText,context:ctx}),
+        body:JSON.stringify({
+          message:messageText,
+          context
+        }),
       });
 
       const data=await res.json().catch(()=>({}));
@@ -223,8 +253,7 @@ export default function AuthoDevPanel({
               background:m.role==="user"
                 ?"linear-gradient(135deg,#5EC6FF,#7aa2ff)"
                 :"rgba(255,255,255,.06)",
-              color:"#fff",
-              position:"relative"
+              color:"#fff"
             }}>
               {m.text}
             </div>
@@ -239,24 +268,12 @@ export default function AuthoDevPanel({
                 opacity:.85,
                 alignItems:"center"
               }}>
-                <IconButton onClick={()=>handleSpeak(m.text,i)}>
-                  <IconSpeaker/>
-                </IconButton>
-                <IconButton onClick={()=>copyText(m.text)}>
-                  <IconCopy/>
-                </IconButton>
-                <IconButton onClick={()=>react(i,"up")}>
-                  <IconThumbUp/>
-                </IconButton>
-                <IconButton onClick={()=>react(i,"down")}>
-                  <IconThumbDown/>
-                </IconButton>
-                <IconButton onClick={()=>regenerate(i)}>
-                  <IconRefresh/>
-                </IconButton>
-                <IconButton onClick={()=>share(m.text)}>
-                  <IconShare/>
-                </IconButton>
+                <IconButton onClick={()=>handleSpeak(m.text,i)}><IconSpeaker/></IconButton>
+                <IconButton onClick={()=>copyText(m.text)}><IconCopy/></IconButton>
+                <IconButton onClick={()=>react(i,"up")}><IconThumbUp/></IconButton>
+                <IconButton onClick={()=>react(i,"down")}><IconThumbDown/></IconButton>
+                <IconButton onClick={()=>regenerate(i)}><IconRefresh/></IconButton>
+                <IconButton onClick={()=>share(m.text)}><IconShare/></IconButton>
               </div>
             )}
 
@@ -336,8 +353,6 @@ const CircleButton = ({ children, onClick, white }) => (
   <button onClick={onClick} style={{
     width:40,
     height:40,
-    minWidth:40,
-    minHeight:40,
     borderRadius:"50%",
     display:"flex",
     alignItems:"center",
