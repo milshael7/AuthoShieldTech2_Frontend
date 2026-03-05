@@ -14,6 +14,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSecurity } from "../../context/SecurityContext.jsx";
+import { api } from "../../lib/api.js";
 
 import ExecutiveRiskBanner from "../../components/ExecutiveRiskBanner";
 import SecurityPostureDashboard from "../../components/SecurityPostureDashboard";
@@ -27,16 +28,23 @@ import "../../styles/platform.css";
 /* ================= UTILITIES ================= */
 
 function containmentFromRisk(risk) {
-  if (risk >= 75) return "LOCKDOWN";
-  if (risk >= 50) return "MONITORING";
-  if (risk >= 25) return "CONTAINED";
+  const r = Number(risk || 0);
+
+  if (r >= 90) return "EMERGENCY";
+  if (r >= 75) return "LOCKDOWN";
+  if (r >= 50) return "MONITORING";
+  if (r >= 25) return "CONTAINED";
+
   return "STABLE";
 }
 
 function priorityFromRisk(risk) {
-  if (risk >= 75) return "P1";
-  if (risk >= 60) return "P2";
-  if (risk >= 40) return "P3";
+  const r = Number(risk || 0);
+
+  if (r >= 85) return "P1";
+  if (r >= 65) return "P2";
+  if (r >= 40) return "P3";
+
   return "P4";
 }
 
@@ -61,10 +69,14 @@ function slaDuration(priority) {
 }
 
 function formatCountdown(ms) {
-  if (ms <= 0) return "BREACHED";
-  const totalSec = Math.floor(ms / 1000);
+  const value = Number(ms || 0);
+
+  if (value <= 0) return "BREACHED";
+
+  const totalSec = Math.floor(value / 1000);
   const min = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
+
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
@@ -73,11 +85,34 @@ function nowTs() {
 }
 
 function safeStr(v) {
-  return String(v ?? "").trim();
+  if (v === null || v === undefined) return "";
+  return String(v).trim();
 }
 
+/* safer unique id generator */
+
 function makeId(prefix = "id") {
-  return `${prefix}-${Math.random().toString(16).slice(2)}-${nowTs()}`;
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return `${prefix}-${crypto.randomUUID()}`;
+    }
+  } catch {}
+
+  return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
+}
+
+/* safe integer parser */
+
+function safeInt(v, fallback = 0) {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/* safe number clamp */
+
+function clamp(num, min = 0, max = 100) {
+  const n = Number(num || 0);
+  return Math.max(min, Math.min(max, n));
 }
 
 function dayLabel(d) {
@@ -93,7 +128,6 @@ Each company selects which branches they hired you for.
 */
 
 const BRANCHES = [
-
   "Threat Response",
   "Security Analysis",
   "SOC Operator",
@@ -117,9 +151,7 @@ const BRANCHES = [
   "Security Automation",
   "Endpoint Detection",
   "Risk Management"
-
 ];
-
 
 /*
 Normalize branches so every company always
@@ -127,7 +159,6 @@ has at least one active branch.
 */
 
 function normalizeBranches(arr) {
-
   const a = Array.isArray(arr)
     ? arr.map(safeStr).filter(Boolean)
     : [];
@@ -241,57 +272,73 @@ export default function AdminOverview() {
   // per-company selected branch (job seat)
   const [activeBranchByCompany, setActiveBranchByCompany] = useState({});
 
-  // companies
-  const [companies, setCompanies] = useState([
-    {
-      id: "c1",
-      name: "Alpha Systems",
-      policy: { ...DEFAULT_POLICY, startHour: 9, endHour: 17 },
-      meta: {
-        contactEmail: "security@alpha.com",
-        companyNumber: 100001,
-        engagement: "Standard",
-        seats: 1,
-        branches: ["Threat Response", "Security Analysis"],
+  // backend sync state
+  const [companiesLoading, setCompaniesLoading] = useState(false);
+  const [companiesError, setCompaniesError] = useState(null);
+
+  // seed fallback (only used if backend returns nothing)
+  const seededCompanies = useMemo(
+    () => [
+      {
+        id: "c1",
+        name: "Alpha Systems",
+        policy: { ...DEFAULT_POLICY, startHour: 9, endHour: 17 },
+        meta: {
+          contactEmail: "security@alpha.com",
+          companyNumber: 100001,
+          engagement: "Standard",
+          seats: 1,
+          branches: ["Threat Response", "Security Analysis"],
+        },
       },
-    },
-    {
-      id: "c2",
-      name: "Beta Holdings",
-      policy: { ...DEFAULT_POLICY, startHour: 8, endHour: 16 },
-      meta: {
-        contactEmail: "security@beta.com",
-        companyNumber: 100002,
-        engagement: "Standard",
-        seats: 1,
-        branches: ["Threat Response"],
+      {
+        id: "c2",
+        name: "Beta Holdings",
+        policy: { ...DEFAULT_POLICY, startHour: 8, endHour: 16 },
+        meta: {
+          contactEmail: "security@beta.com",
+          companyNumber: 100002,
+          engagement: "Standard",
+          seats: 1,
+          branches: ["Threat Response"],
+        },
       },
-    },
-    {
-      id: "c3",
-      name: "Gamma Logistics",
-      policy: { ...DEFAULT_POLICY, startHour: 9, endHour: 18 },
-      meta: {
-        contactEmail: "security@gamma.com",
-        companyNumber: 100003,
-        engagement: "Premium",
-        seats: 2,
-        branches: ["SOC Operator", "Incident Management"],
+      {
+        id: "c3",
+        name: "Gamma Logistics",
+        policy: { ...DEFAULT_POLICY, startHour: 9, endHour: 18 },
+        meta: {
+          contactEmail: "security@gamma.com",
+          companyNumber: 100003,
+          engagement: "Premium",
+          seats: 2,
+          branches: ["SOC Operator", "Incident Management"],
+        },
       },
-    },
-    {
-      id: "c4",
-      name: "Delta Finance",
-      policy: { ...DEFAULT_POLICY, startHour: 9, endHour: 17 },
-      meta: {
-        contactEmail: "security@delta.com",
-        companyNumber: 100004,
-        engagement: "Enterprise",
-        seats: 3,
-        branches: ["Threat Response", "Client Communications"],
+      {
+        id: "c4",
+        name: "Delta Finance",
+        policy: { ...DEFAULT_POLICY, startHour: 9, endHour: 17 },
+        meta: {
+          contactEmail: "security@delta.com",
+          companyNumber: 100004,
+          engagement: "Enterprise",
+          seats: 3,
+          branches: ["Threat Response", "Client Communications"],
+        },
       },
-    },
-  ]);
+    ],
+    []
+  );
+
+  // companies (LIVE: loads from backend, falls back to cached/seed)
+  const [companies, setCompanies] = useState(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem("as_admin_companies") || "null");
+      if (Array.isArray(cached) && cached.length) return cached;
+    } catch {}
+    return seededCompanies;
+  });
 
   // onboarding form
   const [plug, setPlug] = useState({
@@ -322,6 +369,99 @@ export default function AdminOverview() {
     []
   );
 
+  // normalize incoming backend company shape safely
+  const normalizeCompanyRow = (row) => {
+    const id = safeStr(row?.id || row?._id || row?.companyId);
+    const name = safeStr(row?.name || row?.companyName || "Unnamed Company");
+
+    const policy = normalizePolicy({
+      ...(row?.policy || {}),
+      timezone: row?.policy?.timezone ?? row?.timezone ?? "Local",
+      startHour: row?.policy?.startHour ?? row?.startHour ?? 9,
+      endHour: row?.policy?.endHour ?? row?.endHour ?? 17,
+      workDays: row?.policy?.workDays ?? row?.workDays ?? [1, 2, 3, 4, 5],
+      vacationMode: row?.policy?.vacationMode ?? row?.vacationMode ?? false,
+    });
+
+    const meta = row?.meta || {};
+    const branches = normalizeBranches(meta?.branches || row?.branches);
+
+    return {
+      id: id || `c-${Math.random().toString(16).slice(2)}`,
+      name,
+      policy,
+      meta: {
+        contactEmail: safeStr(meta?.contactEmail || row?.contactEmail || ""),
+        companyNumber: meta?.companyNumber ?? row?.companyNumber ?? row?.number ?? "",
+        engagement: safeStr(meta?.engagement || row?.engagement || "Standard") || "Standard",
+        seats: Number(meta?.seats ?? row?.seats ?? 1),
+        branches,
+        domain: safeStr(meta?.domain || row?.domain || ""),
+        notes: safeStr(meta?.notes || row?.notes || ""),
+      },
+    };
+  };
+
+  // LIVE backend pull (admin: try /api/admin/companies then fallback /api/company)
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadCompanies() {
+      setCompaniesLoading(true);
+      setCompaniesError(null);
+
+      try {
+        const try1 = await api.get("/api/admin/companies");
+        const list1 = Array.isArray(try1)
+          ? try1
+          : Array.isArray(try1?.companies)
+          ? try1.companies
+          : Array.isArray(try1?.data)
+          ? try1.data
+          : null;
+
+        let finalList = list1;
+
+        if (!finalList || finalList.length === 0) {
+          const try2 = await api.get("/api/company");
+          finalList = Array.isArray(try2)
+            ? try2
+            : Array.isArray(try2?.companies)
+            ? try2.companies
+            : Array.isArray(try2?.data)
+            ? try2.data
+            : null;
+        }
+
+        const normalized = Array.isArray(finalList)
+          ? finalList.map(normalizeCompanyRow).filter((c) => c?.id && c?.name)
+          : [];
+
+        if (!mounted) return;
+
+        if (normalized.length) {
+          setCompanies(normalized);
+          try {
+            localStorage.setItem("as_admin_companies", JSON.stringify(normalized));
+          } catch {}
+        } else {
+          setCompaniesError("No companies returned from backend (using local companies).");
+        }
+      } catch (e) {
+        if (!mounted) return;
+        setCompaniesError(e?.message || "Company load failed (using local companies).");
+      } finally {
+        if (mounted) setCompaniesLoading(false);
+      }
+    }
+
+    loadCompanies();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   // posture per company
   const [companyState, setCompanyState] = useState(() => {
     const initial = {};
@@ -330,6 +470,17 @@ export default function AdminOverview() {
     });
     return initial;
   });
+
+  // keep state keys in sync when company list changes
+  useEffect(() => {
+    setCompanyState((prev) => {
+      const next = { ...prev };
+      (companies || []).forEach((c) => {
+        if (!next[c.id]) next[c.id] = { risk: Math.floor(Math.random() * 25), containment: "STABLE" };
+      });
+      return next;
+    });
+  }, [companies]);
 
   // queues + records
   const [globalQueue, setGlobalQueue] = useState([]);
@@ -382,98 +533,312 @@ export default function AdminOverview() {
   }, []);
 
   /* ================= THREAT ENGINE =================
-     - Operator view + automatic mode only
-     - Option B: per-company gating (hours/days/vacation)
-  */
+   - Operator view + automatic mode only
+   - Risk-weighted threat generation
+   - Company risk decay
+   - Attack burst simulation
+   - Multi-vector threat modeling
+   - Coordinated attack waves
+   - Risk carryover stabilization
+*/
 
-  useEffect(() => {
-    const active = mode === "operator" && !enginePaused && operatorMode === "automatic";
-    if (!active) return;
+useEffect(() => {
+  const active =
+    mode === "operator" &&
+    !enginePaused &&
+    operatorMode === "automatic";
 
-    const interval = setInterval(() => {
-      setCompanyState((prev) => {
-        const updated = { ...prev };
-        const newAlerts = [];
+  if (!active) return;
 
-        (companies || []).forEach((company) => {
-          const id = company.id;
+  const interval = setInterval(() => {
+    setCompanyState((prev) => {
+      const updated = { ...prev };
+      const newAlerts = [];
 
-          // Option B: do NOT generate outside window
-          if (!isWithinWorkWindow(company)) return;
+      (companies || []).forEach((company) => {
+        const id = company.id;
 
-          if (Math.random() < 0.4) {
-            const spike = Math.floor(Math.random() * 15);
-            const newRisk = Math.min(100, (updated[id]?.risk || 0) + spike);
-            const containment = containmentFromRisk(newRisk);
-            const priority = priorityFromRisk(newRisk);
+        // respect work policy window
+        if (!isWithinWorkWindow(company)) return;
 
-            updated[id] = { risk: newRisk, containment };
+        const currentRisk = Number(updated[id]?.risk || 0);
 
-            const createdAt = nowTs();
-            const deadline = createdAt + slaDuration(priority);
+        /* ================= RISK DECAY ================= */
 
-            newAlerts.push({
-              id: `${id}-${createdAt}`,
-              companyId: id,
-              risk: newRisk,
-              containment,
-              priority,
-              createdAt,
-              deadline,
-              status: "NEW",
-              assignedTo: null,
-              locked: false,
-              autoEscalated: false,
-              activity: [{ time: new Date(), action: "CREATED" }],
-              resolution: null,
-            });
-          }
-        });
+        let nextRisk = currentRisk;
 
-        if (newAlerts.length) {
-          setGlobalQueue((prevQ) => [...newAlerts, ...prevQ].slice(0, 200));
+        if (currentRisk > 0 && Math.random() < 0.35) {
+          nextRisk = Math.max(
+            0,
+            currentRisk - Math.floor(Math.random() * 4)
+          );
         }
 
-        return updated;
-      });
-    }, speedMap[engineSpeed]);
+        /* ================= ATTACK VECTOR SELECTION ================= */
 
-    return () => clearInterval(interval);
-  }, [mode, enginePaused, operatorMode, engineSpeed, speedMap, companies]);
+        const attackVectors = [
+          "Credential Stuffing",
+          "Malware Execution",
+          "Suspicious Login",
+          "Privilege Escalation",
+          "Data Exfiltration Attempt",
+          "Command & Control Beacon",
+          "Phishing Delivery",
+          "Lateral Movement"
+        ];
 
-  /* ================= SLA AUTO ESCALATION ================= */
+        const attackType =
+          attackVectors[
+            Math.floor(Math.random() * attackVectors.length)
+          ];
 
-  useEffect(() => {
-    if (mode !== "operator") return;
-    if (operatorMode === "manual") return;
+        /* ================= ATTACK PROBABILITY ================= */
 
-    setGlobalQueue((prev) =>
-      prev.map((alert) => {
-        if (!alert || alert.status === "RESOLVED") return alert;
+        const baseProbability = 0.12;
 
-        const remaining = (alert.deadline || 0) - tick;
+        const riskFactor = currentRisk / 100;
 
-        if (remaining <= 0 && !alert.autoEscalated && !alert.locked) {
-          const newPriority = bumpPriority(alert.priority);
-          const newDeadline = nowTs() + slaDuration(newPriority);
+        const probability = Math.min(
+          0.85,
+          baseProbability + riskFactor
+        );
 
-          const escalated = {
-            ...alert,
-            priority: newPriority,
-            deadline: newDeadline,
-            autoEscalated: true,
-            locked: true,
-            activity: [{ time: new Date(), action: "AUTO_ESCALATED_LOCKED" }, ...(alert.activity || [])],
+        if (Math.random() < probability) {
+
+          /* ================= ATTACK WAVE ================= */
+
+          const burst =
+            Math.random() < 0.20
+              ? Math.floor(Math.random() * 28) + 12
+              : Math.floor(Math.random() * 14) + 4;
+
+          const newRisk = Math.min(100, nextRisk + burst);
+
+          const containment = containmentFromRisk(newRisk);
+          const priority = priorityFromRisk(newRisk);
+
+          updated[id] = {
+            risk: newRisk,
+            containment,
           };
 
-          setIncidentRegistry((prevInc) => [{ ...escalated, escalatedAt: new Date() }, ...prevInc]);
-          return escalated;
-        }
+          const createdAt = nowTs();
+          const deadline = createdAt + slaDuration(priority);
 
-        return alert;
-      })
-    );
-  }, [tick, mode, operatorMode]);
+          newAlerts.push({
+            id: makeId("alert"),
+            companyId: id,
+            risk: newRisk,
+            containment,
+            priority,
+            attackType,
+            createdAt,
+            deadline,
+            status: "NEW",
+            assignedTo: null,
+            locked: false,
+            autoEscalated: false,
+            activity: [
+              {
+                time: new Date(),
+                action: `ATTACK_DETECTED_${attackType.replace(/\s/g, "_")}`
+              },
+              {
+                time: new Date(),
+                action: "CREATED"
+              }
+            ],
+            resolution: null,
+          });
+        } else {
+          updated[id] = {
+            risk: nextRisk,
+            containment: containmentFromRisk(nextRisk),
+          };
+        }
+      });
+
+      /* ================= COORDINATED ATTACK EVENT ================= */
+
+      if (
+        companies.length >= 3 &&
+        Math.random() < 0.04
+      ) {
+        const targets = companies
+          .slice(0)
+          .sort(() => 0.5 - Math.random())
+          .slice(0, Math.floor(Math.random() * 3) + 2);
+
+        targets.forEach((company) => {
+          const id = company.id;
+
+          const newRisk = Math.min(
+            100,
+            (updated[id]?.risk || 0) + 20
+          );
+
+          updated[id] = {
+            risk: newRisk,
+            containment: containmentFromRisk(newRisk),
+          };
+
+          const priority = priorityFromRisk(newRisk);
+
+          const createdAt = nowTs();
+          const deadline = createdAt + slaDuration(priority);
+
+          newAlerts.push({
+            id: makeId("alert"),
+            companyId: id,
+            risk: newRisk,
+            containment: containmentFromRisk(newRisk),
+            priority,
+            attackType: "Coordinated Attack",
+            createdAt,
+            deadline,
+            status: "NEW",
+            assignedTo: null,
+            locked: false,
+            autoEscalated: false,
+            activity: [
+              {
+                time: new Date(),
+                action: "COORDINATED_ATTACK_DETECTED"
+              },
+              {
+                time: new Date(),
+                action: "CREATED"
+              }
+            ],
+            resolution: null,
+          });
+        });
+      }
+
+      if (newAlerts.length) {
+        setGlobalQueue((prevQ) =>
+          [...newAlerts, ...prevQ].slice(0, 200)
+        );
+      }
+
+      return updated;
+    });
+  }, speedMap[engineSpeed]);
+
+  return () => clearInterval(interval);
+}, [
+  mode,
+  enginePaused,
+  operatorMode,
+  engineSpeed,
+  speedMap,
+  companies,
+]);
+
+  /* ================= SLA AUTO ESCALATION =================
+   - Automatic SLA monitoring
+   - Breach detection
+   - Multi-level escalation
+   - Supervisor escalation
+   - Incident registry logging
+   - Breach severity classification
+*/
+
+useEffect(() => {
+  if (mode !== "operator") return;
+  if (operatorMode === "manual") return;
+
+  setGlobalQueue((prev) =>
+    prev.map((alert) => {
+      if (!alert) return alert;
+      if (alert.status === "RESOLVED") return alert;
+
+      const deadline = Number(alert.deadline || 0);
+      const remaining = deadline - tick;
+
+      /* ================= SLA BREACH ================= */
+
+      if (remaining <= 0 && !alert.locked) {
+
+        const newPriority = bumpPriority(alert.priority);
+        const newDeadline = nowTs() + slaDuration(newPriority);
+
+        /* ================= BREACH SEVERITY ================= */
+
+        let breachSeverity = "MINOR";
+
+        if (alert.priority === "P1") breachSeverity = "CRITICAL";
+        else if (alert.priority === "P2") breachSeverity = "HIGH";
+        else if (alert.priority === "P3") breachSeverity = "MEDIUM";
+
+        /* ================= ESCALATION TARGET ================= */
+
+        let escalatedTo = "Tier2";
+
+        if (alert.priority === "P1") escalatedTo = "Supervisor";
+
+        const escalated = {
+          ...alert,
+          priority: newPriority,
+          deadline: newDeadline,
+          autoEscalated: true,
+          locked: true,
+          breachedAt: new Date(),
+          escalationLevel: escalatedTo,
+          breachSeverity,
+          activity: [
+            {
+              time: new Date(),
+              action: `SLA_BREACH_${breachSeverity}`
+            },
+            {
+              time: new Date(),
+              action: `ESCALATED_TO_${escalatedTo}`
+            },
+            ...(alert.activity || []),
+          ],
+        };
+
+        /* ================= INCIDENT REGISTRY ================= */
+
+        setIncidentRegistry((prevInc) => [
+          {
+            ...escalated,
+            escalatedAt: new Date(),
+            escalationReason: "SLA_BREACH",
+            breachSeverity,
+            escalatedTo,
+          },
+          ...prevInc,
+        ]);
+
+        return escalated;
+      }
+
+      /* ================= APPROACHING BREACH WARNING ================= */
+
+      if (
+        remaining > 0 &&
+        remaining < 60000 && // 1 minute warning
+        !alert.slaWarning
+      ) {
+        return {
+          ...alert,
+          slaWarning: true,
+          activity: [
+            {
+              time: new Date(),
+              action: "SLA_WARNING_60_SECONDS"
+            },
+            ...(alert.activity || []),
+          ],
+        };
+      }
+
+      return alert;
+    })
+  );
+}, [tick, mode, operatorMode]);
 
   /* ================= HELPERS ================= */
 
@@ -632,19 +997,61 @@ const companyMetrics = useMemo(() => {
   const map = {};
 
   (companies || []).forEach((c) => {
-    map[c.id] = { open: 0, p1: 0, breached: 0 };
+    map[c.id] = {
+      open: 0,
+      p1: 0,
+      breached: 0,
+      pressure: 0,
+      riskScore: 0,
+    };
   });
 
   (globalQueue || []).forEach((a) => {
     if (!a?.companyId) return;
 
     if (!map[a.companyId]) {
-      map[a.companyId] = { open: 0, p1: 0, breached: 0 };
+      map[a.companyId] = {
+        open: 0,
+        p1: 0,
+        breached: 0,
+        pressure: 0,
+        riskScore: 0,
+      };
     }
 
     if (a.status !== "RESOLVED") map[a.companyId].open += 1;
+
     if (a.priority === "P1") map[a.companyId].p1 += 1;
+
     if ((a.deadline || 0) - tick <= 0) map[a.companyId].breached += 1;
+
+    /* ================= PRESSURE SCORING ================= */
+
+    if (a.status !== "RESOLVED") {
+      let weight = 1;
+
+      if (a.priority === "P1") weight = 6;
+      else if (a.priority === "P2") weight = 4;
+      else if (a.priority === "P3") weight = 2;
+
+      map[a.companyId].pressure += weight;
+    }
+  });
+
+  /* ================= RISK SCORE ================= */
+
+  Object.keys(map).forEach((cid) => {
+    const m = map[cid];
+
+    const breachWeight = m.breached * 10;
+    const p1Weight = m.p1 * 6;
+    const openWeight = m.open * 1;
+
+    m.riskScore =
+      m.pressure +
+      breachWeight +
+      p1Weight +
+      openWeight;
   });
 
   return map;
@@ -658,6 +1065,8 @@ const companySignals = useMemo(() => {
       open: 0,
       p1: 0,
       breached: 0,
+      pressure: 0,
+      riskScore: 0,
     };
 
     const comms = companyComms[c.id] || {
@@ -665,7 +1074,14 @@ const companySignals = useMemo(() => {
       emails: [],
     };
 
-    const overload = metrics.p1 >= 2 || metrics.open >= 10;
+    /* ================= OVERLOAD DETECTION ================= */
+
+    const overload =
+      metrics.p1 >= 3 ||
+      metrics.breached >= 2 ||
+      metrics.pressure >= 20;
+
+    /* ================= COMMS STATE ================= */
 
     const unreadNotes =
       (comms.notifications || []).filter((n) => !n.read).length;
@@ -673,10 +1089,15 @@ const companySignals = useMemo(() => {
     const hasDraft =
       (comms.emails || []).some((e) => e.status === "DRAFT");
 
+    /* ================= SIGNAL LEVEL ================= */
+
     let level = "GREEN";
 
     if (overload) level = "RED";
+    else if (metrics.pressure >= 8) level = "YELLOW";
     else if (hasDraft || unreadNotes > 0) level = "YELLOW";
+
+    /* ================= SIGNAL OBJECT ================= */
 
     sig[c.id] = {
       level,
@@ -684,13 +1105,15 @@ const companySignals = useMemo(() => {
       metrics,
       hasDraft,
       unreadNotes,
+      pressure: metrics.pressure,
+      riskScore: metrics.riskScore,
     };
   });
 
   return sig;
 }, [companies, companyMetrics, companyComms]);
 
- /* ================= OVERLOAD AUTO DRAFT ================= */
+  /* ================= OVERLOAD AUTO DRAFT ================= */
 
 useEffect(() => {
   (companies || []).forEach((c) => {
@@ -700,7 +1123,8 @@ useEffect(() => {
     const prevOver = Boolean(overloadRef.current[c.id]);
     const nowOver = Boolean(cs.overload);
 
-    // trigger only on edge change
+    /* ================= EDGE DETECTION ================= */
+
     if (!prevOver && nowOver) {
       const companyId = c.id;
       const companyName = getCompanyName(companyId);
@@ -710,6 +1134,8 @@ useEffect(() => {
         notifications: [],
       };
 
+      /* ================= EXISTING DRAFT CHECK ================= */
+
       const alreadyDraft = (comms.emails || []).some(
         (e) => e.status === "DRAFT" && e.kind === "OVERLOAD"
       );
@@ -717,45 +1143,83 @@ useEffect(() => {
       if (!alreadyDraft) {
         const emailId = makeId("email");
 
+        /* ================= INCIDENT SNAPSHOT ================= */
+
+        const snapshot = {
+          open: cs.metrics.open,
+          p1: cs.metrics.p1,
+          breached: cs.metrics.breached,
+          pressure: cs.pressure,
+          riskScore: cs.riskScore,
+        };
+
+        /* ================= EMAIL DRAFT ================= */
+
         addEmail(companyId, {
           id: emailId,
           kind: "OVERLOAD",
           status: "DRAFT",
           createdAt: nowTs(),
+          snapshot,
           to: safeStr(c?.meta?.contactEmail),
-          subject: `[URGENT] Elevated Threat Volume Detected — ${companyName}`,
+          subject: `[URGENT] Elevated Threat Pressure Detected — ${companyName}`,
           body: [
             `Hello ${companyName} Security Team,`,
             ``,
-            `AutoProtect detected elevated threat volume for your environment.`,
+            `AutoProtect has detected elevated security pressure across your environment.`,
             ``,
-            `Snapshot:`,
-            `- Open items: ${cs.metrics.open}`,
-            `- P1 items: ${cs.metrics.p1}`,
-            `- SLA breached: ${cs.metrics.breached}`,
+            `Current Incident Snapshot`,
+            `--------------------------------`,
+            `Open Incidents: ${snapshot.open}`,
+            `Critical (P1): ${snapshot.p1}`,
+            `SLA Breaches: ${snapshot.breached}`,
+            `Threat Pressure: ${snapshot.pressure}`,
+            `Risk Score: ${snapshot.riskScore}`,
             ``,
-            `Recommended immediate actions:`,
-            `1) Review recent authentication activity`,
-            `2) Validate suspicious IP addresses`,
-            `3) Rotate credentials if compromise suspected`,
-            `4) Verify MFA enforcement`,
+            `Immediate Recommended Actions`,
+            `--------------------------------`,
+            `1. Review authentication logs for unusual login behavior`,
+            `2. Investigate any endpoints generating repeated alerts`,
+            `3. Verify multi-factor authentication enforcement`,
+            `4. Temporarily increase monitoring sensitivity`,
             ``,
-            `This message was drafted automatically and requires operator approval.`,
+            `Our operators are actively reviewing the situation.`,
+            `This message was automatically drafted and requires operator approval before sending.`,
             ``,
-            `— AutoProtect Operator Console`,
+            `— AutoProtect Security Operations`,
           ].join("\n"),
         });
+
+        /* ================= SOC NOTIFICATION ================= */
 
         addNotification(companyId, {
           id: makeId("note"),
           createdAt: nowTs(),
           severity: "RED",
-          title: "Overload detected",
+          title: "Company overload detected",
           message:
-            "High threat volume detected. AutoProtect drafted an urgent response email.",
+            `Threat pressure spike detected for ${companyName}. ` +
+            `An escalation email draft has been created for review.`,
           linkedEmailId: emailId,
           read: false,
         });
+
+        /* ================= INTERNAL INCIDENT LOG ================= */
+
+        setIncidentRegistry((prev) => [
+          {
+            id: makeId("incident"),
+            companyId,
+            type: "OVERLOAD_EVENT",
+            detectedAt: new Date(),
+            pressure: cs.pressure,
+            riskScore: cs.riskScore,
+            open: cs.metrics.open,
+            p1: cs.metrics.p1,
+            breached: cs.metrics.breached,
+          },
+          ...prev,
+        ]);
       }
     }
 
@@ -765,530 +1229,423 @@ useEffect(() => {
 
   /* ================= ROLE RULES ================= */
 
-const canResolve = role !== "Tier1";
-const canAssignAuto = role === "Supervisor";
-const canManualEscalate = role !== "Tier1";
+  const canResolve = role !== "Tier1";
+  const canAssignAuto = role === "Supervisor";
+  const canManualEscalate = role !== "Tier1";
 
-/* ================= GLOBAL SIGNAL + UNREAD COUNTER + THREAT TICKER ================= */
+  /* ================= GLOBAL SIGNAL + UNREAD COUNTER + THREAT TICKER ================= */
 
 const globalUnreadCount = useMemo(() => {
-
   let count = 0;
 
   Object.values(companyComms || {}).forEach((c) => {
-
     (c.notifications || []).forEach((n) => {
       if (!n.read) count += 1;
     });
-
   });
 
   return count;
-
 }, [companyComms]);
 
 const globalSignalLevel = useMemo(() => {
-
   let level = "GREEN";
 
+  let redCount = 0;
+  let yellowCount = 0;
+
   (companies || []).forEach((c) => {
-
     const sig = companySignals?.[c.id];
-
     if (!sig) return;
 
-    if (sig.level === "RED") level = "RED";
-    else if (sig.level === "YELLOW" && level !== "RED") level = "YELLOW";
-
+    if (sig.level === "RED") redCount += 1;
+    if (sig.level === "YELLOW") yellowCount += 1;
   });
+
+  /* ================= GLOBAL STATE ================= */
+
+  if (redCount >= 2) level = "CRITICAL";
+  else if (redCount === 1) level = "RED";
+  else if (yellowCount >= 1) level = "YELLOW";
+  else level = "GREEN";
 
   return level;
-
 }, [companies, companySignals]);
 
-/* ================= CRISIS MODE DETECTION ================= */
+/* ================= GLOBAL PRESSURE ================= */
 
-const crisisMode = useMemo(() => {
+const globalPressure = useMemo(() => {
+  let pressure = 0;
 
-  let redCount = 0;
-
-  (companies || []).forEach((c) => {
-
-    const sig = companySignals?.[c.id];
-
-    if (sig?.level === "RED") redCount += 1;
-
+  Object.values(companySignals || {}).forEach((sig) => {
+    pressure += Number(sig?.pressure || 0);
   });
 
-  return redCount >= 3;
+  return pressure;
+}, [companySignals]);
 
-}, [companies, companySignals]);
-
-/* ================= LIVE THREAT TICKER ================= */
+/* ================= THREAT TICKER DATA ================= */
 
 const threatTicker = useMemo(() => {
-
   const rows = [];
 
   (globalQueue || []).slice(0, 12).forEach((a) => {
-
     rows.push({
       id: a.id,
-      text:
-        `⚠️ ${a.priority} incident — ${getCompanyName(a.companyId)} (risk ${a.risk})`
+      text: `⚠️ ${a.priority} incident — ${getCompanyName(a.companyId)} (risk ${a.risk})`,
+      priority: a.priority,
+      companyId: a.companyId,
+      risk: a.risk,
     });
-
   });
 
   return rows;
-
 }, [globalQueue]);
 
 const tickerText = useMemo(() => {
-
-  if (!threatTicker.length) return "System stable — no active threat spikes";
+  if (!threatTicker.length)
+    return "System stable — no active threat spikes";
 
   return threatTicker.map((t) => t.text).join("   •   ");
-
 }, [threatTicker]);
+
+  /* ================= CRISIS MODE DETECTION ================= */
+
+const crisisMode = useMemo(() => {
+  let redCount = 0;
+  let yellowCount = 0;
+  let breachedTotal = 0;
+  let p1Total = 0;
+
+  (companies || []).forEach((c) => {
+    const sig = companySignals?.[c.id];
+    if (!sig) return;
+
+    if (sig.level === "RED") redCount += 1;
+    if (sig.level === "YELLOW") yellowCount += 1;
+
+    const metrics = sig.metrics || {};
+
+    breachedTotal += Number(metrics.breached || 0);
+    p1Total += Number(metrics.p1 || 0);
+  });
+
+  /* ================= CRISIS CONDITIONS ================= */
+
+  const multiTenantOverload = redCount >= 3;
+
+  const massSlaFailure = breachedTotal >= 5;
+
+  const criticalIncidentWave = p1Total >= 6;
+
+  const widespreadInstability =
+    redCount >= 2 && yellowCount >= 2;
+
+  return (
+    multiTenantOverload ||
+    massSlaFailure ||
+    criticalIncidentWave ||
+    widespreadInstability
+  );
+}, [companies, companySignals]);
 
   /* ================= ONBOARDING ================= */
 
-const toggleWorkDay = (day) => {
+  const toggleWorkDay = (day) => {
+    setPlug((p) => {
+      const set = new Set(p.workDays || []);
 
-  setPlug((p) => {
+      if (set.has(day)) set.delete(day);
+      else set.add(day);
 
-    const set = new Set(p.workDays || []);
-
-    if (set.has(day)) set.delete(day);
-    else set.add(day);
-
-    return {
-      ...p,
-      workDays: Array.from(set).sort((a, b) => a - b)
-    };
-
-  });
-
-};
-
-const toggleBranch = (branchName) => {
-
-  setPlug((p) => {
-
-    const set = new Set(normalizeBranches(p.branches));
-
-    if (set.has(branchName)) set.delete(branchName);
-    else set.add(branchName);
-
-    const next = normalizeBranches(Array.from(set));
-
-    return {
-      ...p,
-      branches: next
-    };
-
-  });
-
-};
-
-/* ================= COMPANY PLUG ENGINE ================= */
-
-const plugCompany = () => {
-
-  const name = safeStr(plug.name);
-
-  if (!name) return;
-
-  const id = `c${Math.floor(Math.random() * 99999)}`;
-
-  const companyNumber = Math.floor(
-    Math.random() * 900000 + 100000
-  );
-
-  const branches = normalizeBranches(
-    plug.branches
-  );
-
-  const newCompany = {
-
-    id,
-
-    name,
-
-    policy: normalizePolicy({
-      timezone: plug.timezone,
-      startHour: Number(plug.startHour),
-      endHour: Number(plug.endHour),
-      workDays: plug.workDays,
-      vacationMode: plug.vacationMode,
-    }),
-
-    meta: {
-
-      contactEmail: safeStr(plug.contactEmail),
-      domain: safeStr(plug.domain),
-
-      engagement:
-        safeStr(plug.engagement) || "Standard",
-
-      seats: Number(plug.seats || 1),
-
-      notes: safeStr(plug.notes),
-
-      companyNumber,
-
-      branches
-
-    }
-
+      return {
+        ...p,
+        workDays: Array.from(set).sort((a, b) => a - b),
+      };
+    });
   };
 
-  setCompanies((prev) => [
-    newCompany,
-    ...prev
-  ]);
+  const toggleBranch = (branchName) => {
+    setPlug((p) => {
+      const set = new Set(normalizeBranches(p.branches));
 
-  setCompanyState((prev) => ({
+      if (set.has(branchName)) set.delete(branchName);
+      else set.add(branchName);
 
-    ...prev,
+      const next = normalizeBranches(Array.from(set));
 
-    [id]: {
-      risk: Math.floor(Math.random() * 20),
-      containment: "STABLE"
-    }
+      return {
+        ...p,
+        branches: next,
+      };
+    });
+  };
 
-  }));
+  /* ================= COMPANY PLUG ENGINE ================= */
 
-  setCompanyComms((prev) => ({
+  const plugCompany = () => {
+    const name = safeStr(plug.name);
+    if (!name) return;
 
-    ...prev,
+    const id = `c${Math.floor(Math.random() * 99999)}`;
 
-    [id]: {
-      notifications: [],
-      emails: []
-    }
+    const companyNumber = Math.floor(Math.random() * 900000 + 100000);
 
-  }));
+    const branches = normalizeBranches(plug.branches);
 
-  setActiveBranchByCompany((prev) => ({
-
-    ...prev,
-
-    [id]: branches[0]
-
-  }));
-
-  setArchive((prev) => [
-
-    {
-
-      id: `onboard-${id}-${nowTs()}`,
-
-      companyId: id,
-
-      risk: 0,
-
-      containment: "STABLE",
-
-      priority: "P4",
-
-      createdAt: nowTs(),
-
-      deadline: nowTs() + slaDuration("P4"),
-
-      status: "RESOLVED",
-
-      assignedTo: "System",
-
-      locked: false,
-
-      autoEscalated: false,
-
-      activity: [
-
-        { time: new Date(), action: "COMPANY_PLUGGED" },
-
-        {
-          time: new Date(),
-          action: `DOMAIN_${safeStr(plug.domain) || "N/A"}`
-        },
-
-        {
-          time: new Date(),
-          action: `CONTACT_${safeStr(plug.contactEmail) || "N/A"}`
-        },
-
-        {
-          time: new Date(),
-          action: `ENGAGEMENT_${safeStr(plug.engagement) || "Standard"}`
-        },
-
-        {
-          time: new Date(),
-          action: `SEATS_${Number(plug.seats || 1)}`
-        },
-
-        {
-          time: new Date(),
-          action: `BRANCHES_${branches.join("_")}`
-        },
-
-        {
-          time: new Date(),
-          action: `WORKDAYS_${(plug.workDays || [])
-            .map(dayLabel)
-            .join("_")}`
-        },
-
-        {
-          time: new Date(),
-          action: `WORKHOURS_${Number(
-            plug.startHour
-          )}-${Number(plug.endHour)}`
-        },
-
-        {
-          time: new Date(),
-          action: plug.vacationMode
-            ? "VACATION_ON"
-            : "VACATION_OFF"
-        }
-
-      ],
-
-      resolution: {
-
-        summary:
-          "Client onboarded into Operator Console.",
-
-        rootCause: "N/A",
-
-        actions: [
-          "Provisioned tenant shell",
-          "Initialized baseline telemetry"
-        ],
-
-        lessons: [
-          "Validate DNS + contact email before activation."
-        ]
-
+    const newCompany = {
+      id,
+      name,
+      policy: normalizePolicy({
+        timezone: plug.timezone,
+        startHour: Number(plug.startHour),
+        endHour: Number(plug.endHour),
+        workDays: plug.workDays,
+        vacationMode: plug.vacationMode,
+      }),
+      meta: {
+        contactEmail: safeStr(plug.contactEmail),
+        domain: safeStr(plug.domain),
+        engagement: safeStr(plug.engagement) || "Standard",
+        seats: Number(plug.seats || 1),
+        notes: safeStr(plug.notes),
+        companyNumber,
+        branches,
       },
+    };
 
-      resolvedAt: new Date()
+    setCompanies((prev) => [newCompany, ...prev]);
 
-    },
+    setCompanyState((prev) => ({
+      ...prev,
+      [id]: {
+        risk: Math.floor(Math.random() * 20),
+        containment: "STABLE",
+      },
+    }));
 
-    ...prev
-
-  ]);
-
-  setPlug({
-
-    name: "",
-    domain: "",
-    contactEmail: "",
-    engagement: "Standard",
-    seats: 1,
-    notes: "",
-
-    branches: ["Threat Response"],
-
-    timezone: "Local",
-    startHour: 9,
-    endHour: 17,
-    workDays: [1,2,3,4,5],
-    vacationMode: false
-
-  });
-
-  setShowOnboarding(false);
-
-  setMode("operator");
-
-  setOperatorPanel("fleet");
-
-};
-
-/* ================= BRANCH SELECTOR (Operator) ================= */
-
-const activeCompany =
-  workspace !== "ALL"
-    ? getCompany(workspace)
-    : null;
-
-const activeCompanyBranches =
-  normalizeBranches(activeCompany?.meta?.branches);
-
-const activeBranch =
-  activeCompany
-    ? (
-        activeBranchByCompany[activeCompany.id]
-        || activeCompanyBranches[0]
-      )
-    : "";
-
-const setActiveBranch = (companyId, branchName) => {
-
-  const b = safeStr(branchName);
-
-  if (!b) return;
-
-  setActiveBranchByCompany((prev) => ({
-    ...prev,
-    [companyId]: b
-  }));
-
-};
-
-useEffect(() => {
-
-  if (!activeCompany) return;
-
-  const branches =
-    normalizeBranches(activeCompany?.meta?.branches);
-
-  const current =
-    activeBranchByCompany?.[activeCompany.id];
-
-  if (!current || !branches.includes(current)) {
+    setCompanyComms((prev) => ({
+      ...prev,
+      [id]: {
+        notifications: [],
+        emails: [],
+      },
+    }));
 
     setActiveBranchByCompany((prev) => ({
       ...prev,
-      [activeCompany.id]: branches[0]
+      [id]: branches[0],
     }));
 
-  }
+    setArchive((prev) => [
+      {
+        id: `onboard-${id}-${nowTs()}`,
+        companyId: id,
+        risk: 0,
+        containment: "STABLE",
+        priority: "P4",
+        createdAt: nowTs(),
+        deadline: nowTs() + slaDuration("P4"),
+        status: "RESOLVED",
+        assignedTo: "System",
+        locked: false,
+        autoEscalated: false,
+        activity: [
+          { time: new Date(), action: "COMPANY_PLUGGED" },
+          { time: new Date(), action: `DOMAIN_${safeStr(plug.domain) || "N/A"}` },
+          { time: new Date(), action: `CONTACT_${safeStr(plug.contactEmail) || "N/A"}` },
+          { time: new Date(), action: `ENGAGEMENT_${safeStr(plug.engagement) || "Standard"}` },
+          { time: new Date(), action: `SEATS_${Number(plug.seats || 1)}` },
+          { time: new Date(), action: `BRANCHES_${branches.join("_")}` },
+          {
+            time: new Date(),
+            action: `WORKDAYS_${(plug.workDays || []).map(dayLabel).join("_")}`,
+          },
+          {
+            time: new Date(),
+            action: `WORKHOURS_${Number(plug.startHour)}-${Number(plug.endHour)}`,
+          },
+          { time: new Date(), action: plug.vacationMode ? "VACATION_ON" : "VACATION_OFF" },
+        ],
+        resolution: {
+          summary: "Client onboarded into Operator Console.",
+          rootCause: "N/A",
+          actions: ["Provisioned tenant shell", "Initialized baseline telemetry"],
+          lessons: ["Validate DNS + contact email before activation."],
+        },
+        resolvedAt: new Date(),
+      },
+      ...prev,
+    ]);
 
-}, [activeCompany, activeBranchByCompany]);
+    setPlug({
+      name: "",
+      domain: "",
+      contactEmail: "",
+      engagement: "Standard",
+      seats: 1,
+      notes: "",
+      branches: ["Threat Response"],
+      timezone: "Local",
+      startHour: 9,
+      endHour: 17,
+      workDays: [1, 2, 3, 4, 5],
+      vacationMode: false,
+    });
+
+    setShowOnboarding(false);
+    setMode("operator");
+    setOperatorPanel("fleet");
+  };
+
+  /* ================= BRANCH SELECTOR (Operator) ================= */
+
+  const activeCompany = workspace !== "ALL" ? getCompany(workspace) : null;
+
+  const activeCompanyBranches = normalizeBranches(activeCompany?.meta?.branches);
+
+  const activeBranch = activeCompany
+    ? activeBranchByCompany[activeCompany.id] || activeCompanyBranches[0]
+    : "";
+
+  const setActiveBranch = (companyId, branchName) => {
+    const b = safeStr(branchName);
+    if (!b) return;
+
+    setActiveBranchByCompany((prev) => ({
+      ...prev,
+      [companyId]: b,
+    }));
+  };
+
+  useEffect(() => {
+    if (!activeCompany) return;
+
+    const branches = normalizeBranches(activeCompany?.meta?.branches);
+    const current = activeBranchByCompany?.[activeCompany.id];
+
+    if (!current || !branches.includes(current)) {
+      setActiveBranchByCompany((prev) => ({
+        ...prev,
+        [activeCompany.id]: branches[0],
+      }));
+    }
+  }, [activeCompany, activeBranchByCompany]);
 
   /* ================= RENDER ================= */
 
-return (
-  <div
-    style={{
-      maxWidth: 1500,
-      margin: "0 auto",
-      display: "flex",
-      flexDirection: "column",
-      gap: 24,
-    }}
-  >
-
-    {/* HEADER */}
+  return (
     <div
       style={{
+        maxWidth: 1500,
+        margin: "0 auto",
         display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        flexWrap: "wrap",
-        gap: 10,
+        flexDirection: "column",
+        gap: 24,
       }}
     >
-
-      <div className="sectionTitle">
-        {mode === "platform"
-          ? "Platform Command Center"
-          : "Operator Console (Side Hustle)"}
-      </div>
-
+      {/* HEADER */}
       <div
         style={{
           display: "flex",
-          gap: 10,
+          justifyContent: "space-between",
           alignItems: "center",
           flexWrap: "wrap",
+          gap: 10,
         }}
       >
-
-        <select value={mode} onChange={(e) => setMode(e.target.value)}>
-          <option value="platform">Platform View</option>
-          <option value="operator">Operator View</option>
-        </select>
-
-        {/* GLOBAL NOTIFICATION SIGNAL */}
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 13,
-            padding: "4px 10px",
-            borderRadius: 20,
-            background:
-              globalSignalLevel === "RED"
-                ? "rgba(255,70,70,.15)"
-                : globalSignalLevel === "YELLOW"
-                ? "rgba(255,210,60,.15)"
-                : "rgba(60,255,150,.15)",
-          }}
-        >
-          🌍 Notifications: <b>{globalUnreadCount}</b>
+        <div className="sectionTitle">
+          {mode === "platform" ? "Platform Command Center" : "Operator Console (Side Hustle)"}
         </div>
 
-        {mode === "operator" && (
-          <>
-            <button
-              className="btn"
-              onClick={() => setShowOnboarding(true)}
-            >
-              + Plug Company
-            </button>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <select value={mode} onChange={(e) => setMode(e.target.value)}>
+            <option value="platform">Platform View</option>
+            <option value="operator">Operator View</option>
+          </select>
 
-            <select
-              value={operatorPanel}
-              onChange={(e) => setOperatorPanel(e.target.value)}
-            >
-              <option value="queue">Panel: Queue</option>
-              <option value="fleet">Panel: Fleet</option>
-              <option value="notifications">Panel: Notifications</option>
-              <option value="email">Panel: Email Cabinet</option>
-              <option value="archive">Panel: Archive</option>
-            </select>
+          {/* GLOBAL NOTIFICATION SIGNAL */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 13,
+              padding: "4px 10px",
+              borderRadius: 20,
+              background:
+                globalSignalLevel === "RED"
+                  ? "rgba(255,70,70,.15)"
+                  : globalSignalLevel === "YELLOW"
+                  ? "rgba(255,210,60,.15)"
+                  : "rgba(60,255,150,.15)",
+            }}
+          >
+            🌍 Notifications: <b>{globalUnreadCount}</b>
+          </div>
 
-            {activeCompany && (
-              <select
-                value={activeBranch}
-                onChange={(e) =>
-                  setActiveBranch(activeCompany.id, e.target.value)
-                }
-                title="Which job/branch you are working for this company"
-              >
-                {activeCompanyBranches.map((b) => (
-                  <option key={b} value={b}>
-                    Branch: {b}
-                  </option>
-                ))}
+          {mode === "operator" && (
+            <>
+              <button className="btn" onClick={() => setShowOnboarding(true)}>
+                + Plug Company
+              </button>
+
+              <select value={operatorPanel} onChange={(e) => setOperatorPanel(e.target.value)}>
+                <option value="queue">Panel: Queue</option>
+                <option value="fleet">Panel: Fleet</option>
+                <option value="notifications">Panel: Notifications</option>
+                <option value="email">Panel: Email Cabinet</option>
+                <option value="archive">Panel: Archive</option>
               </select>
-            )}
-          </>
-        )}
 
+              {activeCompany && (
+                <select
+                  value={activeBranch}
+                  onChange={(e) => setActiveBranch(activeCompany.id, e.target.value)}
+                  title="Which job/branch you are working for this company"
+                >
+                  {activeCompanyBranches.map((b) => (
+                    <option key={b} value={b}>
+                      Branch: {b}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* LIVE LOAD STATUS (subtle, won’t break UI) */}
+      {(companiesLoading || companiesError) && (
+        <div className="postureCard" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          {companiesLoading && <b>Loading companies from backend…</b>}
+          {companiesError && <span style={{ opacity: 0.85 }}>⚠️ {companiesError}</span>}
+          {crisisMode && <span style={{ marginLeft: "auto" }}>🚨 Crisis Mode</span>}
+        </div>
+      )}
 
       <div
-  className="postureCard"
-  style={{
-    overflow: "hidden",
-    whiteSpace: "nowrap",
-    position: "relative"
-  }}
->
-  <div
-    style={{
-      display: "inline-block",
-      paddingLeft: "100%",
-      animation: "tickerMove 40s linear infinite",
-      opacity: 0.85
-    }}
-  >
-    {tickerText}
-  </div>
-</div>
+        className="postureCard"
+        style={{
+          overflow: "hidden",
+          whiteSpace: "nowrap",
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            display: "inline-block",
+            paddingLeft: "100%",
+            animation: "tickerMove 40s linear infinite",
+            opacity: 0.85,
+          }}
+        >
+          {tickerText}
+        </div>
+      </div>
 
-{/* ================= OPERATOR VIEW ================= */}
+
+      {/* ================= OPERATOR VIEW ================= */}
       {mode === "operator" && (
         <>
           {/* Summary Strip */}
@@ -1325,7 +1682,6 @@ return (
               onChange={(e) => {
                 const next = e.target.value;
                 setWorkspace(next);
-                // If they change workspace away from a company, keep branch selector clean
                 if (next === "ALL") setSelectedAlertId(null);
               }}
             >
@@ -1382,8 +1738,8 @@ return (
                           background: selected
                             ? "rgba(120,160,255,.10)"
                             : breached
-                              ? "rgba(255,0,0,.08)"
-                              : "transparent",
+                            ? "rgba(255,0,0,.08)"
+                            : "transparent",
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -1403,7 +1759,8 @@ return (
                             </div>
 
                             <div style={{ fontSize: 12, opacity: 0.7 }}>
-                              Assigned: <b>{alert.assignedTo || "Unassigned"}</b> • Risk {alert.risk} • {alert.containment}
+                              Assigned: <b>{alert.assignedTo || "Unassigned"}</b> • Risk {alert.risk} •{" "}
+                              {alert.containment}
                             </div>
                           </div>
 
@@ -1523,8 +1880,13 @@ return (
                       <small>Recent Activity</small>
                       <div style={{ maxHeight: 180, overflowY: "auto", marginTop: 8 }}>
                         {(selectedAlert.activity || []).slice(0, 10).map((a, idx) => (
-                          <div key={idx} style={{ padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
-                            <small style={{ opacity: 0.7 }}>{new Date(a.time).toLocaleTimeString()}</small>
+                          <div
+                            key={idx}
+                            style={{ padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,.06)" }}
+                          >
+                            <small style={{ opacity: 0.7 }}>
+                              {new Date(a.time).toLocaleTimeString()}
+                            </small>
                             <div>
                               <b>{a.action}</b>
                             </div>
@@ -1561,7 +1923,8 @@ return (
               ) : (
                 incidentRegistry.slice(0, 60).map((inc) => (
                   <div key={inc.id} style={{ padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
-                    <b>{getCompanyName(inc.companyId)}</b> <span style={{ opacity: 0.7 }}>• {inc.priority}</span>
+                    <b>{getCompanyName(inc.companyId)}</b>{" "}
+                    <span style={{ opacity: 0.7 }}>• {inc.priority}</span>
                     <div style={{ fontSize: 12, opacity: 0.75 }}>
                       Escalated at {new Date(inc.escalatedAt || Date.now()).toLocaleTimeString()}
                     </div>
@@ -1728,91 +2091,55 @@ return (
           )}
 
           {/* ================= EMAIL PANEL ================= */}
+          {operatorPanel === "email" && (
+            <EmailCabinet
+              companies={companies}
+              comms={companyComms}
+              selectedCompany={selectedCompanyForComms}
+              setSelectedCompany={setSelectedCompanyForComms}
+              selectedEmailId={selectedEmailId}
+              setSelectedEmailId={setSelectedEmailId}
+              getCompanyName={getCompanyName}
+              signals={companySignals}
+              onUpdateEmail={updateEmail}
+              onSend={sendEmail}
+              onCancel={cancelEmail}
+              onNewDraft={(companyId) => {
+                const c = getCompany(companyId);
+                if (!c) return;
 
-{operatorPanel === "email" && (
+                const emailId = makeId("email");
 
-  <EmailCabinet
+                addEmail(companyId, {
+                  id: emailId,
+                  kind: "MANUAL",
+                  status: "DRAFT",
+                  createdAt: nowTs(),
+                  to: safeStr(c?.meta?.contactEmail),
+                  subject: `Update from AutoProtect — ${c.name}`,
+                  body:
+                    `Hello ${c.name} Security Team,\n\n` +
+                    `AutoProtect drafted an update for your review.\n\n` +
+                    `Summary:\n- \n\n` +
+                    `Actions recommended:\n- \n\n` +
+                    `— Admin Operator Console`,
+                });
 
-    companies={companies}
+                addNotification(companyId, {
+                  id: makeId("note"),
+                  createdAt: nowTs(),
+                  severity: "YELLOW",
+                  title: "Manual draft created",
+                  message: `A manual email draft was created.`,
+                  linkedEmailId: emailId,
+                  read: false,
+                });
 
-    comms={companyComms}
-
-    selectedCompany={selectedCompanyForComms}
-
-    setSelectedCompany={setSelectedCompanyForComms}
-
-    selectedEmailId={selectedEmailId}
-
-    setSelectedEmailId={setSelectedEmailId}
-
-    getCompanyName={getCompanyName}
-
-    signals={companySignals}
-
-    onUpdateEmail={updateEmail}
-
-    onSend={sendEmail}
-
-    onCancel={cancelEmail}
-
-    onNewDraft={(companyId) => {
-
-      const c = getCompany(companyId);
-
-      if (!c) return;
-
-      const emailId = makeId("email");
-
-      addEmail(companyId, {
-
-        id: emailId,
-
-        kind: "MANUAL",
-
-        status: "DRAFT",
-
-        createdAt: nowTs(),
-
-        to: safeStr(c?.meta?.contactEmail),
-
-        subject: `Update from AutoProtect — ${c.name}`,
-
-        body:
-          `Hello ${c.name} Security Team,\n\n` +
-          `AutoProtect drafted an update for your review.\n\n` +
-          `Summary:\n- \n\n` +
-          `Actions recommended:\n- \n\n` +
-          `— Admin Operator Console`
-
-      });
-
-      addNotification(companyId, {
-
-        id: makeId("note"),
-
-        createdAt: nowTs(),
-
-        severity: "YELLOW",
-
-        title: "Manual draft created",
-
-        message: `A manual email draft was created.`,
-
-        linkedEmailId: emailId,
-
-        read: false
-
-      });
-
-      setSelectedCompanyForComms(companyId);
-
-      setSelectedEmailId(emailId);
-
-    }}
-
-  />
-
-)}
+                setSelectedCompanyForComms(companyId);
+                setSelectedEmailId(emailId);
+              }}
+            />
+          )}
 
           {/* ===== ARCHIVE PANEL ===== */}
           {operatorPanel === "archive" && (
@@ -2038,89 +2365,53 @@ return (
 /* ================= STYLES ================= */
 
 const inputStyle = {
-
   width: "100%",
-
   padding: "10px 12px",
-
   borderRadius: 10,
-
   border: "1px solid rgba(255,255,255,.12)",
-
   background: "rgba(255,255,255,.04)",
-
   color: "#eaf1ff",
-
   outline: "none",
-
   marginTop: 6,
-
 };
 
 const badgeStyle = {
-
   display: "inline-flex",
-
   alignItems: "center",
-
   padding: "2px 8px",
-
   borderRadius: 12,
-
   fontSize: 11,
-
   fontWeight: 600,
-
   letterSpacing: ".3px",
-
 };
 
 const badgeOK = {
-
   ...badgeStyle,
-
   background: "rgba(60,255,150,.18)",
-
   color: "#7CFFB2",
-
 };
 
 const badgeWarn = {
-
   ...badgeStyle,
-
   background: "rgba(255,210,60,.18)",
-
   color: "#FFD84A",
-
 };
 
 const badgeDanger = {
-
   ...badgeStyle,
-
   background: "rgba(255,70,70,.18)",
-
   color: "#FF6B6B",
-
 };
 
 const mutedText = {
-
-  opacity: .65,
-
+  opacity: 0.65,
   fontSize: 12,
-
 };
 
 const panelGrid = {
-
   display: "grid",
-
   gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-
   gap: 16,
-
 };
 
 /* ================= RESOLUTION BUILDER ================= */
@@ -2219,192 +2510,113 @@ function EmailCabinet({
   onUpdateEmail,
   onSend,
   onCancel,
-  onNewDraft
+  onNewDraft,
 }) {
+  const companyIds = (companies || []).map((c) => c.id);
 
-  const companyIds = (companies || []).map(c => c.id);
-
-  const scopeIds =
-    selectedCompany === "ALL"
-      ? companyIds
-      : [selectedCompany];
+  const scopeIds = selectedCompany === "ALL" ? companyIds : [selectedCompany];
 
   const emails = [];
 
   scopeIds.forEach((cid) => {
-
     const list = comms?.[cid]?.emails || [];
-
     list.forEach((e) => {
       emails.push({
         companyId: cid,
-        ...e
+        ...e,
       });
     });
-
   });
 
-  emails.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  emails.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
-  const selected =
-    emails.find(e => e.id === selectedEmailId) || null;
+  const selected = emails.find((e) => e.id === selectedEmailId) || null;
 
   return (
-
     <div className="postureCard executivePanel">
-
       <div
         style={{
-          display:"flex",
-          justifyContent:"space-between",
-          gap:10,
-          flexWrap:"wrap",
-          alignItems:"center"
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          flexWrap: "wrap",
+          alignItems: "center",
         }}
       >
+        <h3 style={{ margin: 0 }}>📧 Email Cabinet</h3>
 
-        <h3 style={{margin:0}}>
-          📧 Email Cabinet
-        </h3>
-
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-
-          <select
-            value={selectedCompany}
-            onChange={(e)=>setSelectedCompany(e.target.value)}
-          >
-
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <select value={selectedCompany} onChange={(e) => setSelectedCompany(e.target.value)}>
             <option value="ALL">All Companies</option>
 
-            {(companies||[]).map(c=>{
-
+            {(companies || []).map((c) => {
               const sig = signals?.[c.id]?.level || "GREEN";
-
               return (
                 <option key={c.id} value={c.id}>
-                  {sig==="RED"?"🔴":sig==="YELLOW"?"🟡":"🟢"} {c.name}
+                  {sig === "RED" ? "🔴" : sig === "YELLOW" ? "🟡" : "🟢"} {c.name}
                 </option>
               );
-
             })}
-
           </select>
 
           {selectedCompany !== "ALL" && (
-
-            <button
-              className="btn primary"
-              onClick={()=>onNewDraft(selectedCompany)}
-            >
+            <button className="btn primary" onClick={() => onNewDraft(selectedCompany)}>
               New Draft
             </button>
-
           )}
-
         </div>
-
       </div>
 
-      <div
-        style={{
-          display:"grid",
-          gridTemplateColumns:"1fr 1.2fr",
-          gap:18,
-          marginTop:14
-        }}
-      >
-
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 18, marginTop: 14 }}>
         {/* EMAIL LIST */}
+        <div style={{ height: 500, overflowY: "auto", borderRight: "1px solid rgba(255,255,255,.08)" }}>
+          {emails.length === 0 && <div className="muted">No email drafts.</div>}
 
-        <div
-          style={{
-            height:500,
-            overflowY:"auto",
-            borderRight:"1px solid rgba(255,255,255,.08)"
-          }}
-        >
-
-          {emails.length === 0 && (
-            <div className="muted">No email drafts.</div>
-          )}
-
-          {emails.map(e=>{
-
-            const sig =
-              signals?.[e.companyId]?.level || "GREEN";
-
-            const selectedRow =
-              e.id === selectedEmailId;
+          {emails.map((e) => {
+            const sig = signals?.[e.companyId]?.level || "GREEN";
+            const selectedRow = e.id === selectedEmailId;
 
             return (
-
               <div
                 key={e.id}
-                onClick={()=>setSelectedEmailId(e.id)}
+                onClick={() => setSelectedEmailId(e.id)}
                 style={{
-                  padding:12,
-                  cursor:"pointer",
-                  borderBottom:"1px solid rgba(255,255,255,.06)",
-                  background:
-                    selectedRow
-                      ?"rgba(120,160,255,.12)"
-                      :"transparent"
+                  padding: 12,
+                  cursor: "pointer",
+                  borderBottom: "1px solid rgba(255,255,255,.06)",
+                  background: selectedRow ? "rgba(120,160,255,.12)" : "transparent",
                 }}
               >
-
-                <div style={{display:"flex",alignItems:"center"}}>
-
+                <div style={{ display: "flex", alignItems: "center" }}>
                   <span style={dotStyle(sig)} />
-
                   <b>{getCompanyName(e.companyId)}</b>
-
                 </div>
 
-                <div style={{fontSize:12,opacity:.75}}>
-                  {new Date(e.createdAt||Date.now()).toLocaleString()}
+                <div style={{ fontSize: 12, opacity: 0.75 }}>
+                  {new Date(e.createdAt || Date.now()).toLocaleString()}
                 </div>
 
-                <div style={{marginTop:4}}>
+                <div style={{ marginTop: 4 }}>
                   <b>{e.subject}</b>
                 </div>
 
-                <div style={{fontSize:12,opacity:.75}}>
-                  Status: {e.status}
-                </div>
-
+                <div style={{ fontSize: 12, opacity: 0.75 }}>Status: {e.status}</div>
               </div>
-
             );
-
           })}
-
         </div>
 
         {/* EMAIL VIEWER */}
-
         <div>
-
-          {!selected && (
-            <div className="muted">
-              Select an email draft to open it.
-            </div>
-          )}
+          {!selected && <div className="muted">Select an email draft to open it.</div>}
 
           {selected && (
-
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <div>
                 <small>To</small>
                 <input
                   value={selected.to || ""}
-                  onChange={(e)=>
-                    onUpdateEmail(
-                      selected.companyId,
-                      selected.id,
-                      {to:e.target.value}
-                    )
-                  }
+                  onChange={(e) => onUpdateEmail(selected.companyId, selected.id, { to: e.target.value })}
                   style={inputStyle}
                 />
               </div>
@@ -2413,13 +2625,7 @@ function EmailCabinet({
                 <small>Subject</small>
                 <input
                   value={selected.subject || ""}
-                  onChange={(e)=>
-                    onUpdateEmail(
-                      selected.companyId,
-                      selected.id,
-                      {subject:e.target.value}
-                    )
-                  }
+                  onChange={(e) => onUpdateEmail(selected.companyId, selected.id, { subject: e.target.value })}
                   style={inputStyle}
                 />
               </div>
@@ -2428,61 +2634,30 @@ function EmailCabinet({
                 <small>Body</small>
                 <textarea
                   value={selected.body || ""}
-                  onChange={(e)=>
-                    onUpdateEmail(
-                      selected.companyId,
-                      selected.id,
-                      {body:e.target.value}
-                    )
-                  }
-                  style={{...inputStyle,minHeight:200}}
+                  onChange={(e) => onUpdateEmail(selected.companyId, selected.id, { body: e.target.value })}
+                  style={{ ...inputStyle, minHeight: 200 }}
                 />
               </div>
 
-              <div style={{display:"flex",gap:10}}>
-
+              <div style={{ display: "flex", gap: 10 }}>
                 {selected.status === "DRAFT" && (
-
-                  <button
-                    className="btn primary"
-                    onClick={()=>onSend(
-                      selected.companyId,
-                      selected.id
-                    )}
-                  >
+                  <button className="btn primary" onClick={() => onSend(selected.companyId, selected.id)}>
                     Send Email
                   </button>
-
                 )}
 
                 {selected.status === "DRAFT" && (
-
-                  <button
-                    className="btn warn"
-                    onClick={()=>onCancel(
-                      selected.companyId,
-                      selected.id
-                    )}
-                  >
+                  <button className="btn warn" onClick={() => onCancel(selected.companyId, selected.id)}>
                     Cancel Draft
                   </button>
-
                 )}
-
               </div>
-
             </div>
-
           )}
-
         </div>
-
       </div>
-
     </div>
-
   );
-
 }
 
 /* ================= NOTIFICATION BOARD ================= */
@@ -2497,45 +2672,31 @@ function NotificationBoard({
   onOpenEmail,
   onMarkRead,
 }) {
-
   const companyIds = (companies || []).map((c) => c.id);
 
-  const scopeIds =
-    selectedCompany === "ALL"
-      ? companyIds
-      : [selectedCompany];
+  const scopeIds = selectedCompany === "ALL" ? companyIds : [selectedCompany];
 
   const rows = useMemo(() => {
-
     const out = [];
 
     scopeIds.forEach((cid) => {
-
       const notes = comms?.[cid]?.notifications || [];
 
       notes.forEach((n) => {
-
         out.push({
           companyId: cid,
-          ...n
+          ...n,
         });
-
       });
-
     });
 
-    out.sort((a, b) =>
-      (b.createdAt || 0) - (a.createdAt || 0)
-    );
+    out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
     return out.slice(0, 400);
-
   }, [scopeIds, comms]);
 
   return (
-
     <div className="postureCard executivePanel">
-
       <div
         style={{
           display: "flex",
@@ -2545,71 +2706,35 @@ function NotificationBoard({
           alignItems: "center",
         }}
       >
+        <h3 style={{ margin: 0 }}>🔔 Notifications</h3>
 
-        <h3 style={{ margin: 0 }}>
-          🔔 Notifications
-        </h3>
-
-        <select
-          value={selectedCompany}
-          onChange={(e) =>
-            setSelectedCompany(e.target.value)
-          }
-        >
-
-          <option value="ALL">
-            All Companies
-          </option>
+        <select value={selectedCompany} onChange={(e) => setSelectedCompany(e.target.value)}>
+          <option value="ALL">All Companies</option>
 
           {(companies || []).map((c) => {
-
             const sig = signals?.[c.id]?.level || "GREEN";
-
             return (
-
               <option key={c.id} value={c.id}>
                 {sig === "RED" ? "🔴" : sig === "YELLOW" ? "🟡" : "🟢"} {c.name}
-
               </option>
-
             );
-
           })}
-
         </select>
-
       </div>
 
-      <div
-        style={{
-          marginTop: 12,
-          height: 520,
-          overflowY: "auto",
-        }}
-      >
-
+      <div style={{ marginTop: 12, height: 520, overflowY: "auto" }}>
         {rows.length === 0 ? (
-
-          <div className="muted">
-            No notifications.
-          </div>
-
+          <div className="muted">No notifications.</div>
         ) : (
-
           rows.map((n) => {
-
-            const sig =
-              signals?.[n.companyId]?.level
-              || "GREEN";
+            const sig = signals?.[n.companyId]?.level || "GREEN";
 
             return (
-
               <div
                 key={n.id}
                 style={{
                   padding: 12,
-                  borderBottom:
-                    "1px solid rgba(255,255,255,.06)",
+                  borderBottom: "1px solid rgba(255,255,255,.06)",
                   background:
                     sig === "RED"
                       ? "rgba(255,70,70,.08)"
@@ -2618,126 +2743,52 @@ function NotificationBoard({
                       : "transparent",
                 }}
               >
-
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-                >
-
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                   <div>
-
-                    <div
-                      style={{
-                        fontSize: 12,
-                        opacity: 0.7,
-                      }}
-                    >
-                      {new Date(
-                        n.createdAt || Date.now()
-                      ).toLocaleString()}
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      {new Date(n.createdAt || Date.now()).toLocaleString()}
                     </div>
 
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                      }}
-                    >
-
+                    <div style={{ display: "flex", alignItems: "center" }}>
                       <span style={dotStyle(sig)} />
 
-                      <b>
-                        {getCompanyName(n.companyId)}
-                      </b>
+                      <b>{getCompanyName(n.companyId)}</b>
 
                       {!n.read && (
-
-                        <span
-                          style={{ marginLeft: 8 }}
-                        >
+                        <span style={{ marginLeft: 8 }}>
                           <b>NEW</b>
                         </span>
-
                       )}
-
                     </div>
 
                     <div style={{ marginTop: 6 }}>
                       <b>{n.title}</b>
                     </div>
 
-                    <div
-                      style={{
-                        opacity: 0.85,
-                        marginTop: 4,
-                      }}
-                    >
-                      {n.message}
-                    </div>
-
+                    <div style={{ opacity: 0.85, marginTop: 4 }}>{n.message}</div>
                   </div>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                    }}
-                  >
-
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     {n.linkedEmailId && (
-
-                      <button
-                        className="btn"
-                        onClick={() =>
-                          onOpenEmail(
-                            n.companyId,
-                            n.linkedEmailId
-                          )
-                        }
-                      >
+                      <button className="btn" onClick={() => onOpenEmail(n.companyId, n.linkedEmailId)}>
                         Open Draft
                       </button>
-
                     )}
 
                     <button
                       className="btn"
-                      onClick={() =>
-                        onMarkRead(
-                          n.companyId,
-                          n.id
-                        )
-                      }
+                      onClick={() => onMarkRead(n.companyId, n.id)}
                       disabled={Boolean(n.read)}
                     >
-                      {n.read
-                        ? "Read"
-                        : "Mark Read"}
+                      {n.read ? "Read" : "Mark Read"}
                     </button>
-
                   </div>
-
                 </div>
-
               </div>
-
             );
-
           })
-
         )}
-
       </div>
-
     </div>
-
   );
-
 }
-
