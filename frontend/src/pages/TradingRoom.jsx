@@ -1,6 +1,5 @@
-// frontend/src/pages/TradingRoom.jsx
 // ============================================================
-// TRADING ROOM — STABLE AI TRADING DESK (IMPROVED)
+// TRADING ROOM — CONNECTED TO PAPER ENGINE
 // ============================================================
 
 import React, { useEffect, useRef, useState } from "react";
@@ -21,24 +20,17 @@ export default function TradingRoom() {
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
 
-  const [price, setPrice] = useState(1.1000);
+  const [price,setPrice] = useState(0);
+  const [equity,setEquity] = useState(0);
+  const [wallet,setWallet] = useState({usd:0,btc:0});
+  const [position,setPosition] = useState(null);
+  const [trades,setTrades] = useState([]);
 
-  const [wallet, setWallet] = useState({
-    usd: 1000,
-    btc: 0
-  });
+  /* ================= CHART ================= */
 
-  const [positions, setPositions] = useState([]);
-  const [trades, setTrades] = useState([]);
+  useEffect(()=>{
 
-  const [equity, setEquity] = useState(1000);
-  const [pnl, setPnl] = useState(0);
-
-  // ================= CHART INIT =================
-
-  useEffect(() => {
-
-    const chart = createChart(containerRef.current,{
+    const chart=createChart(containerRef.current,{
       layout:{
         background:{color:"#0f1626"},
         textColor:"#d1d5db"
@@ -47,153 +39,80 @@ export default function TradingRoom() {
       height:containerRef.current.clientHeight
     });
 
-    const series = chart.addCandlestickSeries({
+    const series=chart.addCandlestickSeries({
       upColor:"#16a34a",
       downColor:"#dc2626",
       borderVisible:false
     });
 
-    chartRef.current = chart;
-    seriesRef.current = series;
-
-    seedChart();
+    chartRef.current=chart;
+    seriesRef.current=series;
 
     return ()=>chart.remove()
 
   },[])
 
-  // ================= SEED CHART =================
+  /* ================= LOAD PAPER STATE ================= */
 
-  function seedChart(){
+  async function loadPaper(){
 
-    const candles=[]
-    let base=1.1000
+    try{
 
-    for(let i=0;i<120;i++){
-
-      const open=base
-      const close=open+(Math.random()-.5)*0.002
-      const high=Math.max(open,close)
-      const low=Math.min(open,close)
-
-      candles.push({
-        time:Math.floor(Date.now()/1000)-120+i,
-        open,
-        high,
-        low,
-        close
+      const res = await fetch("/api/paper/status",{
+        credentials:"include"
       })
 
-      base=close
+      const data = await res.json()
+
+      if(!data?.ok) return
+
+      const snap = data.snapshot
+
+      setPrice(snap.lastPrice)
+      setEquity(snap.equity)
+
+      setWallet({
+        usd:snap.cashBalance,
+        btc:snap.position?.qty || 0
+      })
+
+      setPosition(snap.position || null)
+
+      setTrades((snap.trades||[]).slice(-10).reverse())
+
+      if(seriesRef.current && snap.candles?.length){
+        const candles = snap.candles.map(c=>({
+          time:Math.floor(c.t/1000),
+          open:c.o,
+          high:c.h,
+          low:c.l,
+          close:c.c
+        }))
+
+        seriesRef.current.setData(candles)
+      }
+
+    }catch(e){
+      console.error(e)
     }
 
-    seriesRef.current.setData(candles)
   }
 
-  // ================= AI PRICE LOOP =================
+  /* ================= POLL ENGINE ================= */
 
   useEffect(()=>{
 
+    loadPaper()
+
     const loop=setInterval(()=>{
-
-      const move=(Math.random()-.5)*0.001
-      const newPrice=price+move
-
-      setPrice(newPrice)
-
-      updateChart(newPrice)
-
-      if(Math.random()>.7){
-        aiBuy(newPrice)
-      }
-
-      if(Math.random()>.85){
-        aiSell(newPrice)
-      }
-
-    },2500)
+      loadPaper()
+    },3000)
 
     return()=>clearInterval(loop)
 
-  },[price])
+  },[])
 
-  // ================= UPDATE CHART =================
-
-  function updateChart(newPrice){
-
-    const candle={
-      time:Math.floor(Date.now()/1000),
-      open:newPrice,
-      high:newPrice,
-      low:newPrice,
-      close:newPrice
-    }
-
-    seriesRef.current.update(candle)
-  }
-
-  // ================= BUY =================
-
-  function aiBuy(p){
-
-    setWallet(w=>{
-      if(w.usd<100) return w
-
-      const size=100/p
-
-      setPositions(pos=>[
-        ...pos,
-        {side:"BUY",price:p,size}
-      ])
-
-      setTrades(t=>[
-        {side:"BUY",price:p,size,time:Date.now()},
-        ...t
-      ])
-
-      return {
-        usd:w.usd-100,
-        btc:w.btc+size
-      }
-    })
-
-  }
-
-  // ================= SELL =================
-
-  function aiSell(p){
-
-    setWallet(w=>{
-      if(w.btc<=0) return w
-
-      const size=w.btc
-
-      setTrades(t=>[
-        {side:"SELL",price:p,size,time:Date.now()},
-        ...t
-      ])
-
-      setPositions([])
-
-      return {
-        usd:w.usd+(size*p),
-        btc:0
-      }
-    })
-
-  }
-
-  // ================= PNL =================
-
-  useEffect(()=>{
-
-    const currentValue = wallet.usd + wallet.btc * price
-    setEquity(currentValue)
-    setPnl(currentValue - 1000)
-
-  },[wallet,price])
-
-  // ================= UI =================
+  /* ================= UI ================= */
 
   return (
 
@@ -202,11 +121,11 @@ export default function TradingRoom() {
     <div style={{flex:1,padding:20,display:"flex",flexDirection:"column"}}>
 
       <div style={{fontWeight:700,fontSize:16}}>
-        AI Trading Desk • EURUSD
+        AI Trading Desk • BTC
       </div>
 
       <div style={{opacity:.7,fontSize:13}}>
-        Live Price: {price.toFixed(5)}
+        Live Price: {price}
       </div>
 
       <div
@@ -218,7 +137,7 @@ export default function TradingRoom() {
         borderRadius:10
       }}/>
 
-      {/* ACCOUNT PANEL */}
+      {/* ACCOUNT */}
 
       <div style={{display:"flex",gap:20,marginTop:20}}>
 
@@ -229,37 +148,34 @@ export default function TradingRoom() {
         </div>
 
         <div style={{flex:1,background:"#111827",padding:15}}>
-          <h4>Account</h4>
-          Equity: ${equity.toFixed(2)} <br/>
-          PnL: <span style={{color:pnl>=0?"#16a34a":"#dc2626"}}>
-            {pnl.toFixed(2)}
-          </span>
+          <h4>Equity</h4>
+          ${equity.toFixed(2)}
         </div>
 
         <div style={{flex:2,background:"#111827",padding:15}}>
-          <h4>Open Positions</h4>
+          <h4>Open Position</h4>
 
-          {positions.length===0 && "No positions"}
+          {!position && "No position"}
 
-          {positions.map((p,i)=>(
-            <div key={i}>
-              {p.side} {p.size.toFixed(5)} @ {p.price.toFixed(5)}
+          {position && (
+            <div>
+              {position.side} {position.qty} @ {position.entry}
             </div>
-          ))}
+          )}
 
         </div>
 
       </div>
 
-      {/* TRADE HISTORY */}
+      {/* TRADES */}
 
       <div style={{marginTop:20,background:"#111827",padding:15}}>
 
-        <h4>Trade History</h4>
+        <h4>Recent Trades</h4>
 
-        {trades.slice(0,10).map((t,i)=>(
+        {trades.map((t,i)=>(
           <div key={i}>
-            {t.side} {t.size.toFixed(5)} @ {t.price.toFixed(5)}
+            {t.side} {t.qty} @ {t.price}
           </div>
         ))}
 
@@ -273,11 +189,11 @@ export default function TradingRoom() {
 
       <h3>AI Engine</h3>
 
-      <div>Status: ACTIVE</div>
-      <div>Strategy: Momentum</div>
+      <div>Status: CONNECTED</div>
+      <div>Mode: Paper Trading</div>
 
       <div style={{marginTop:20}}>
-        AI automatically executes simulated trades.
+        Backend AI engine executing trades.
       </div>
 
     </div>
