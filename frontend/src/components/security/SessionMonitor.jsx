@@ -1,6 +1,6 @@
 // frontend/src/components/security/SessionMonitor.jsx
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { getToken } from "../../lib/api";
 
 export default function SessionMonitor() {
@@ -39,6 +39,28 @@ export default function SessionMonitor() {
     return () => clearInterval(interval);
   }, []);
 
+  /* ================= METRICS ================= */
+
+  const metrics = useMemo(() => {
+
+    const total = sessions.length;
+
+    const adminSessions = sessions.filter(
+      s => s.role === "Admin"
+    ).length;
+
+    const suspicious = sessions.filter(
+      s => !s.deviceSummary || s.deviceSummary === "Unknown Device"
+    ).length;
+
+    return {
+      total,
+      adminSessions,
+      suspicious
+    };
+
+  }, [sessions]);
+
   /* ================= ACTIONS ================= */
 
   async function forceLogoutUser(userId) {
@@ -68,10 +90,35 @@ export default function SessionMonitor() {
   return (
     <div style={styles.wrapper}>
 
+      {/* HEADER */}
+
       <div style={styles.header}>
         <h3 style={{ margin: 0 }}>Active Sessions</h3>
         {loading && <span style={styles.loading}>Refreshing...</span>}
       </div>
+
+      {/* SESSION METRICS */}
+
+      <div style={styles.metricsGrid}>
+
+        <div style={styles.metricCard}>
+          <span>Total Sessions</span>
+          <strong>{metrics.total}</strong>
+        </div>
+
+        <div style={styles.metricCard}>
+          <span>Admin Sessions</span>
+          <strong>{metrics.adminSessions}</strong>
+        </div>
+
+        <div style={styles.metricCard}>
+          <span>Suspicious Devices</span>
+          <strong>{metrics.suspicious}</strong>
+        </div>
+
+      </div>
+
+      {/* SESSION LIST */}
 
       {sessions.length === 0 && (
         <div style={styles.empty}>No active sessions</div>
@@ -134,6 +181,23 @@ const styles = {
   loading: {
     fontSize: 12,
     color: "#9ca3af"
+  },
+
+  metricsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+    gap: 14,
+    marginBottom: 22
+  },
+
+  metricCard: {
+    background: "#1f2937",
+    padding: 12,
+    borderRadius: 8,
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    color: "#e5e7eb"
   },
 
   empty: {
