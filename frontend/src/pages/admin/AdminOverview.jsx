@@ -850,65 +850,80 @@ export default function AdminOverview() {
 
   /* ================= GLOBAL SIGNAL + UNREAD COUNTER + THREAT TICKER ================= */
 
-  const globalUnreadCount = useMemo(() => {
-    let count = 0;
+const globalUnreadCount = useMemo(() => {
+  let count = 0;
 
-    Object.values(companyComms || {}).forEach((c) => {
-      (c.notifications || []).forEach((n) => {
-        if (!n?.read) count += 1;
-      });
+  const comms = companyComms && typeof companyComms === "object"
+    ? Object.values(companyComms)
+    : [];
+
+  comms.forEach((c) => {
+    const notes = Array.isArray(c?.notifications) ? c.notifications : [];
+    notes.forEach((n) => {
+      if (n && n.read !== true) count += 1;
     });
+  });
 
-    return count;
-  }, [companyComms]);
+  return count;
+}, [companyComms]);
 
-  const globalSignalLevel = useMemo(() => {
-    let level = "GREEN";
+const globalSignalLevel = useMemo(() => {
+  let level = "GREEN";
 
-    (companies || []).forEach((c) => {
-      const sig = companySignals?.[c.id];
-      if (!sig) return;
+  const list = Array.isArray(companies) ? companies : [];
 
-      if (sig.level === "RED") level = "RED";
-      else if (sig.level === "YELLOW" && level !== "RED") level = "YELLOW";
-    });
+  list.forEach((c) => {
+    const sig = companySignals?.[c?.id];
+    if (!sig) return;
 
-    return level;
-  }, [companies, companySignals]);
+    if (sig.level === "RED") level = "RED";
+    else if (sig.level === "YELLOW" && level !== "RED") level = "YELLOW";
+  });
 
-  /* ================= CRISIS MODE DETECTION ================= */
+  return level;
+}, [companies, companySignals]);
 
-  const crisisMode = useMemo(() => {
-    let redCount = 0;
+/* ================= CRISIS MODE DETECTION ================= */
 
-    (companies || []).forEach((c) => {
-      const sig = companySignals?.[c.id];
-      if (sig?.level === "RED") redCount += 1;
-    });
+const crisisMode = useMemo(() => {
+  let redCount = 0;
 
-    return redCount >= 3;
-  }, [companies, companySignals]);
+  const list = Array.isArray(companies) ? companies : [];
 
-  /* ================= LIVE THREAT TICKER ================= */
+  list.forEach((c) => {
+    const sig = companySignals?.[c?.id];
+    if (sig?.level === "RED") redCount += 1;
+  });
 
-  const threatTicker = useMemo(() => {
-    const rows = [];
+  return redCount >= 3;
+}, [companies, companySignals]);
 
-    (globalQueue || []).slice(0, 12).forEach((a) => {
-      if (!a) return;
-      rows.push({
-        id: a.id,
-        text: `⚠️ ${a.priority} incident — ${getCompanyName(a.companyId)} (risk ${a.risk})`,
-      });
-    });
+/* ================= LIVE THREAT TICKER ================= */
 
-    return rows;
-  }, [globalQueue]); // eslint-disable-line react-hooks/exhaustive-deps
+const threatTicker = useMemo(() => {
+  if (!Array.isArray(globalQueue)) return [];
 
-  const tickerText = useMemo(() => {
-    if (!threatTicker.length) return "System stable — no active threat spikes";
-    return threatTicker.map((t) => t.text).join("   •   ");
-  }, [threatTicker]);
+  return globalQueue
+    .filter(Boolean)
+    .slice(0, 12)
+    .map((a) => ({
+      id: String(a?.id ?? ""),
+      text: String(
+        `⚠️ ${a?.priority ?? "P?"} incident — ${getCompanyName(a?.companyId)} (risk ${a?.risk ?? 0})`
+      ),
+    }));
+}, [globalQueue]);
+
+const tickerText = useMemo(() => {
+  if (!Array.isArray(threatTicker) || threatTicker.length === 0) {
+    return "System stable — no active threat spikes";
+  }
+
+  return threatTicker
+    .map((t) => t?.text)
+    .filter((v) => typeof v === "string" && v.length > 0)
+    .join("   •   ");
+}, [threatTicker]);
 
   /* ================= ONBOARDING ================= */
 
