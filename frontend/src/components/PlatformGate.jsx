@@ -1,5 +1,5 @@
 import React from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 
 function normalize(v) {
   return String(v || "").trim().toLowerCase();
@@ -34,18 +34,27 @@ export default function PlatformGate({
   requireSubscription = false,
   children,
 }) {
+  const location = useLocation();
+
   /* ================= WAIT FOR AUTH BOOT ================= */
   if (!ready) {
     return <div style={{ padding: 40 }}>Initializing platform…</div>;
   }
 
-  /* ================= AUTH STABILIZATION =================
-     IMPORTANT:
-     - Do NOT redirect immediately when user is null
-     - App.jsx may still be reconciling refresh/session
+  /* ================= AUTH RESOLUTION =================
+     At this point:
+     - Auth restoration is DONE
+     - If user is null, session is invalid
+     - We must redirect ONCE (not loop)
   */
-  if (ready && user === null) {
-    return <div style={{ padding: 40 }}>Restoring session…</div>;
+  if (ready && !user) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: location.pathname }}
+      />
+    );
   }
 
   /* ================= ROLE ACCESS ================= */
