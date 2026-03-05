@@ -1,6 +1,6 @@
 // frontend/src/context/SecurityContext.jsx
-// Security Context — Enterprise Hardened v10
-// SESSION SAFE • NO RECONNECT LOOPS • AUTH AWARE
+// Security Context — Enterprise Hardened v11
+// BACKEND-ALIGNED • NO LOOPS • ROUTE-SAFE • WS-STABLE
 
 import React, {
   createContext,
@@ -34,8 +34,8 @@ export function SecurityProvider({ children }) {
   const [systemStatus, setSystemStatus] = useState("secure");
   const [integrityAlert, setIntegrityAlert] = useState(null);
 
-  const [riskByCompany, setRiskByCompany] = useState({});
-  const [exposureByCompany, setExposureByCompany] = useState({});
+  const [riskScore, setRiskScore] = useState(0);
+  const [domains, setDomains] = useState([]);
 
   const [auditFeed, setAuditFeed] = useState([]);
   const [deviceAlerts, setDeviceAlerts] = useState([]);
@@ -97,7 +97,6 @@ export function SecurityProvider({ children }) {
     if (!wsUrl) return;
 
     let socket;
-
     try {
       socket = new WebSocket(wsUrl);
     } catch {
@@ -114,37 +113,9 @@ export function SecurityProvider({ children }) {
       const data = safeJsonParse(event.data);
       if (!data?.type) return;
 
-      switch (data.type) {
-        case "risk_update":
-          setRiskByCompany((prev) => ({
-            ...prev,
-            [String(data.companyId || "global")]: {
-              riskScore: Number(data.riskScore || 0),
-              signals: data.signals || [],
-            },
-          }));
-
-          if (Number(data.riskScore || 0) < 30) {
-            setSystemStatus("secure");
-          }
-          break;
-
-        case "asset_exposure_update":
-          setExposureByCompany((prev) => ({
-            ...prev,
-            [String(data.companyId || "global")]: {
-              exposure: data.exposure || {},
-            },
-          }));
-          break;
-
-        case "integrity_alert":
-          setIntegrityAlert(data);
-          setSystemStatus("compromised");
-          break;
-
-        default:
-          break;
+      if (data.type === "integrity_alert") {
+        setIntegrityAlert(data);
+        setSystemStatus("compromised");
       }
     };
 
@@ -202,7 +173,7 @@ export function SecurityProvider({ children }) {
     return () => clearInterval(interval);
   }, [connectSocket, closeSocket]);
 
-  /* ================= REST TELEMETRY ================= */
+  /* ================= REST TELEMETRY (BACKEND-ALIGNED) ================= */
 
   useEffect(() => {
     let active = true;
@@ -212,13 +183,14 @@ export function SecurityProvider({ children }) {
 
       try {
         const summary = await api.postureSummary();
-        if (!active || !summary) return;
+        if (!active || !summary?.ok) return;
 
-        if (summary.riskByCompany)
-          setRiskByCompany(summary.riskByCompany);
+        setRiskScore(Number(summary.score || 0));
+        setDomains(Array.isArray(summary.domains) ? summary.domains : []);
 
-        if (summary.exposureByCompany)
-          setExposureByCompany(summary.exposureByCompany);
+        if (Number(summary.score || 0) < 30) {
+          setSystemStatus("secure");
+        }
       } catch {
         /* silent by design */
       }
@@ -244,14 +216,8 @@ export function SecurityProvider({ children }) {
       systemStatus,
       integrityAlert,
 
-      riskScore:
-        riskByCompany?.global?.riskScore ??
-        Object.values(riskByCompany)[0]?.riskScore ??
-        0,
-
-      riskByCompany,
-      assetExposure: exposureByCompany,
-      exposureByCompany,
+      riskScore,
+      domains,
 
       auditFeed,
       deviceAlerts,
@@ -268,8 +234,8 @@ export function SecurityProvider({ children }) {
       closeSocket,
       systemStatus,
       integrityAlert,
-      riskByCompany,
-      exposureByCompany,
+      riskScore,
+      domains,
       auditFeed,
       deviceAlerts,
     ]
