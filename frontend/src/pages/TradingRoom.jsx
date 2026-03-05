@@ -1,5 +1,6 @@
 // ============================================================
-// TRADING ROOM — CONNECTED TO MARKET ENGINE + PAPER ENGINE
+// TRADING ROOM — REALTIME MARKET + PAPER ENGINE
+// WebSocket Price Feed + Market Candles
 // ============================================================
 
 import React, { useEffect, useRef, useState } from "react";
@@ -19,6 +20,7 @@ export default function TradingRoom() {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
+  const wsRef = useRef(null);
 
   const [price,setPrice] = useState(0);
   const [equity,setEquity] = useState(0);
@@ -37,6 +39,10 @@ export default function TradingRoom() {
         background:{color:"#0f1626"},
         textColor:"#d1d5db"
       },
+      grid:{
+        vertLines:{color:"#1f2937"},
+        horzLines:{color:"#1f2937"}
+      },
       width:containerRef.current.clientWidth,
       height:containerRef.current.clientHeight
     });
@@ -44,7 +50,9 @@ export default function TradingRoom() {
     const series=chart.addCandlestickSeries({
       upColor:"#16a34a",
       downColor:"#dc2626",
-      borderVisible:false
+      borderVisible:false,
+      wickUpColor:"#16a34a",
+      wickDownColor:"#dc2626"
     });
 
     chartRef.current=chart;
@@ -52,9 +60,21 @@ export default function TradingRoom() {
 
     loadCandles();
 
-    return ()=>chart.remove()
+    const handleResize = () => {
+      chart.applyOptions({
+        width: containerRef.current.clientWidth,
+        height: containerRef.current.clientHeight
+      });
+    };
 
-  },[])
+    window.addEventListener("resize", handleResize);
+
+    return ()=>{
+      window.removeEventListener("resize", handleResize);
+      chart.remove();
+    }
+
+  },[]);
 
   /* ================= LOAD MARKET CANDLES ================= */
 
@@ -64,11 +84,11 @@ export default function TradingRoom() {
 
       const res = await fetch(`/api/market/candles?symbol=${symbol}`,{
         credentials:"include"
-      })
+      });
 
-      const data = await res.json()
+      const data = await res.json();
 
-      if(!data?.ok) return
+      if(!data?.ok) return;
 
       const candles = data.candles.map(c=>({
         time:Math.floor(c.time/1000),
@@ -76,15 +96,56 @@ export default function TradingRoom() {
         high:c.high,
         low:c.low,
         close:c.close
-      }))
+      }));
 
-      seriesRef.current.setData(candles)
+      seriesRef.current.setData(candles);
 
     }catch(e){
-      console.error(e)
+      console.error(e);
     }
 
   }
+
+  /* ================= WEBSOCKET PRICE FEED ================= */
+
+  useEffect(()=>{
+
+    const token = localStorage.getItem("as_token");
+    if(!token) return;
+
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+
+    const ws = new WebSocket(
+      `${protocol}://${window.location.host}/ws/market?token=${token}`
+    );
+
+    wsRef.current = ws;
+
+    ws.onmessage = (msg)=>{
+
+      try{
+
+        const data = JSON.parse(msg.data);
+
+        if(data.type === "tick" && data.symbol === symbol){
+          setPrice(data.price);
+        }
+
+      }catch(e){
+        console.error(e);
+      }
+
+    };
+
+    ws.onclose = ()=>{
+      console.log("Market socket closed");
+    };
+
+    return ()=>{
+      try{ ws.close(); }catch{}
+    }
+
+  },[]);
 
   /* ================= LOAD PAPER ACCOUNT ================= */
 
@@ -94,45 +155,44 @@ export default function TradingRoom() {
 
       const res = await fetch("/api/paper/status",{
         credentials:"include"
-      })
+      });
 
-      const data = await res.json()
+      const data = await res.json();
 
-      if(!data?.ok) return
+      if(!data?.ok) return;
 
-      const snap = data.snapshot
+      const snap = data.snapshot;
 
-      setPrice(snap.lastPrice)
-      setEquity(snap.equity)
+      setEquity(snap.equity);
 
       setWallet({
         usd:snap.cashBalance,
         btc:snap.position?.qty || 0
-      })
+      });
 
-      setPosition(snap.position || null)
+      setPosition(snap.position || null);
 
-      setTrades((snap.trades||[]).slice(-10).reverse())
+      setTrades((snap.trades||[]).slice(-10).reverse());
 
     }catch(e){
-      console.error(e)
+      console.error(e);
     }
 
   }
 
-  /* ================= POLL ENGINES ================= */
+  /* ================= POLL PAPER ACCOUNT ================= */
 
   useEffect(()=>{
 
-    loadPaper()
+    loadPaper();
 
     const loop=setInterval(()=>{
-      loadPaper()
-    },3000)
+      loadPaper();
+    },4000);
 
-    return()=>clearInterval(loop)
+    return()=>clearInterval(loop);
 
-  },[])
+  },[]);
 
   /* ================= UI ================= */
 
@@ -215,12 +275,13 @@ export default function TradingRoom() {
       <div>Mode: Paper Trading</div>
 
       <div style={{marginTop:20}}>
-        Backend AI engine executing trades.
+        Backend AI engine executing trades automatically.
       </div>
 
     </div>
 
   </div>
 
-  )
+  );
+
 }
