@@ -3,11 +3,7 @@
 
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import {
-  clearToken,
-  clearUser,
-  getSavedUser
-} from "../lib/api.js";
+import { clearToken, clearUser, getSavedUser } from "../lib/api.js";
 import { useSecurity } from "../context/SecurityContext.jsx";
 import AuthoDevPanel from "../components/AuthoDevPanel.jsx";
 import Logo from "../components/Logo.jsx";
@@ -39,7 +35,7 @@ export default function CompanyLayout() {
     setMenuOpen(false);
   }
 
-  const isSeatUser = Boolean(user?.companyId);
+  const isSeatUser = user?.role === "individual";
   const subscriptionStatus = user?.subscriptionStatus || "Unknown";
   const companyId = user?.companyId || "N/A";
 
@@ -52,10 +48,7 @@ export default function CompanyLayout() {
   return (
     <div
       className={`layout-root enterprise ${menuOpen ? "sidebar-open" : ""}`}
-      style={{
-        background: "#0a0f1c",
-        color: "#fff",
-      }}
+      style={{ background: "#0a0f1c", color: "#fff" }}
     >
       {menuOpen && <div className="sidebar-overlay" onClick={closeMenu} />}
 
@@ -73,14 +66,6 @@ export default function CompanyLayout() {
             Security Overview
           </NavLink>
 
-          <NavLink to="intelligence" className={navClass} onClick={closeMenu}>
-            Intelligence
-          </NavLink>
-
-          <NavLink to="soc" className={navClass} onClick={closeMenu}>
-            SOC
-          </NavLink>
-
           <NavLink to="assets" className={navClass} onClick={closeMenu}>
             Asset Inventory
           </NavLink>
@@ -93,28 +78,12 @@ export default function CompanyLayout() {
             Vulnerabilities
           </NavLink>
 
-          <NavLink to="risk" className={navClass} onClick={closeMenu}>
-            Risk Monitor
-          </NavLink>
-
-          <NavLink to="sessions" className={navClass} onClick={closeMenu}>
-            Sessions
-          </NavLink>
-
-          <NavLink to="device-integrity" className={navClass} onClick={closeMenu}>
-            Device Integrity
-          </NavLink>
-
           <NavLink to="reports" className={navClass} onClick={closeMenu}>
             Reports
           </NavLink>
 
           <NavLink to="notifications" className={navClass} onClick={closeMenu}>
             Notifications
-          </NavLink>
-
-          <NavLink to="trading" className={navClass} onClick={closeMenu}>
-            Trading Room
           </NavLink>
 
           {isSeatUser && (
@@ -164,6 +133,7 @@ export default function CompanyLayout() {
               scope: "organization-only",
               tenant: companyId,
               subscription: subscriptionStatus,
+              enforcement: true,
               location: window.location.pathname,
               systemStatus,
             })}
