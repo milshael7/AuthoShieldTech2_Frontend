@@ -1,4 +1,7 @@
 // frontend/src/App.jsx
+// App — Auth Boot Quieted
+// FIX: ready ALWAYS resolves • no silent early exits • no auth noise
+
 import React, { useEffect, useState, useRef } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
@@ -199,8 +202,10 @@ export default function App() {
         const token = getToken();
         const storedUser = getSavedUser();
 
+        // 🔧 FIX: ALWAYS resolve ready
         if (!token || !storedUser) {
           setUser(null);
+          setReady(true);
           return;
         }
 
@@ -214,10 +219,12 @@ export default function App() {
 
         if (!res.ok) {
           setUser(storedUser);
+          setReady(true);
           return;
         }
 
         const data = await res.json();
+
         if (data?.token && data?.user) {
           setToken(data.token);
           saveUser(data.user);
@@ -235,7 +242,7 @@ export default function App() {
     bootAuth();
   }, [base]);
 
-  // 🔇 QUIET MODE: do not start engines until auth is ready
+  /* 🔇 QUIET MODE: nothing boots until auth decision is final */
   if (!ready) {
     return <div style={{ padding: 40 }}>Initializing platform…</div>;
   }
