@@ -1,7 +1,6 @@
 // frontend/src/pages/TradingRoom.jsx
 // ============================================================
-// TRADING ROOM — REALTIME MARKET + PAPER ENGINE (HARD STABLE)
-// QUIET • SINGLE WS • PROPER CANDLES • NO SHELL CRASH
+// TRADING ROOM — REALTIME MARKET + PAPER ENGINE (STABLE)
 // ============================================================
 
 import React, { useEffect, useRef, useState } from "react";
@@ -19,7 +18,7 @@ export default function TradingRoom() {
   const wsRef = useRef(null);
   const lastCandleRef = useRef(null);
 
-  const [price, setPrice] = useState(0);
+  const [price, setPrice] = useState(null);
   const [equity, setEquity] = useState(0);
   const [wallet, setWallet] = useState({ usd: 0, btc: 0 });
   const [position, setPosition] = useState(null);
@@ -78,14 +77,15 @@ export default function TradingRoom() {
   async function loadCandles() {
     try {
       const res = await fetch(
-        `${API_BASE}/api/market/candles?symbol=${SYMBOL}`,
+        `${API_BASE}/api/market/candles?symbol=${SYMBOL}&limit=200`,
         { headers: authHeader() }
       );
+
       const data = await res.json();
       if (!data?.ok) return;
 
       const candles = data.candles.map((c) => ({
-        time: Math.floor(c.time / 1000),
+        time: c.time,
         open: c.open,
         high: c.high,
         low: c.low,
@@ -103,7 +103,7 @@ export default function TradingRoom() {
   /* ================= LIVE WS ================= */
 
   useEffect(() => {
-    if (wsRef.current) return; // HARD GUARD
+    if (wsRef.current) return;
 
     const token = getToken();
     if (!token || !API_BASE) return;
@@ -166,15 +166,18 @@ export default function TradingRoom() {
       const res = await fetch(`${API_BASE}/api/paper/status`, {
         headers: authHeader(),
       });
+
       const data = await res.json();
       if (!data?.ok) return;
 
       const snap = data.snapshot;
+
       setEquity(snap.equity);
       setWallet({
         usd: snap.cashBalance,
         btc: snap.position?.qty || 0,
       });
+
       setPosition(snap.position || null);
       setTrades((snap.trades || []).slice(-10).reverse());
     } catch {}
@@ -192,7 +195,9 @@ export default function TradingRoom() {
     <div style={{ display: "flex", flex: 1, background: "#0a0f1c", color: "#fff" }}>
       <div style={{ flex: 1, padding: 20, display: "flex", flexDirection: "column" }}>
         <div style={{ fontWeight: 700 }}>AI Trading Desk • {SYMBOL}</div>
-        <div style={{ opacity: 0.7 }}>Live Price: {price}</div>
+        <div style={{ opacity: 0.7 }}>
+          Live Price: {price ? price : "Loading..."}
+        </div>
 
         <div
           ref={containerRef}
@@ -204,7 +209,9 @@ export default function TradingRoom() {
             USD: ${wallet.usd.toFixed(2)} <br />
             BTC: {wallet.btc.toFixed(6)}
           </Panel>
+
           <Panel title="Equity">${equity.toFixed(2)}</Panel>
+
           <Panel title="Open Position" flex={2}>
             {position ? `${position.qty} @ ${position.entry}` : "No position"}
           </Panel>
