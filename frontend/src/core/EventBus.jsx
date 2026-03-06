@@ -1,8 +1,8 @@
 // frontend/src/core/EventBus.jsx
 // ======================================================
-// GLOBAL PLATFORM EVENT BUS — QUIET MODE v16
-// SIGNAL-SAFE • NO EVENT STORMS • NO SELF-ECHO
-// THREAT-DRIVEN • ENTERPRISE STABLE
+// GLOBAL PLATFORM EVENT BUS — QUIET MODE v17
+// DETERMINISTIC • BACKPRESSURE-AWARE • NO SELF-ECHO
+// THREAT-FIRST • ENTERPRISE-STABLE • FAIL-SILENT
 // ======================================================
 
 import { createContext, useContext, useRef, useCallback } from "react";
@@ -11,10 +11,11 @@ const EventBusContext = createContext(null);
 
 /* ================= CONFIG ================= */
 
-// hard cap to prevent listener explosions
-const MAX_LISTENERS_PER_EVENT = 25;
+// absolute safety caps
+const MAX_LISTENERS_PER_EVENT = 20;
+const MAX_EMITS_PER_EVENT_PER_SEC = 10;
 
-// events that are allowed to repeat rapidly (whitelist)
+// events allowed higher frequency (must be intentional)
 const HIGH_FREQ_EVENTS = new Set([
   "security_ws_connected",
   "security_ws_disconnected",
@@ -24,32 +25,52 @@ const HIGH_FREQ_EVENTS = new Set([
 
 export function EventBusProvider({ children }) {
   const listenersRef = useRef({});
-  const lastEmitRef = useRef({}); // event → timestamp
+  const emitWindowRef = useRef({}); // event → { count, ts }
+
+  /* ================= INTERNAL GUARD ================= */
+
+  function canEmit(event) {
+    const now = Date.now();
+    const window = emitWindowRef.current[event];
+
+    // initialize window
+    if (!window || now - window.ts > 1000) {
+      emitWindowRef.current[event] = { count: 1, ts: now };
+      return true;
+    }
+
+    // allow whitelisted high-frequency events
+    if (HIGH_FREQ_EVENTS.has(event)) {
+      window.count += 1;
+      return true;
+    }
+
+    // enforce per-second cap
+    if (window.count >= MAX_EMITS_PER_EVENT_PER_SEC) {
+      return false;
+    }
+
+    window.count += 1;
+    return true;
+  }
 
   /* ================= EMIT ================= */
 
   const emit = useCallback((event, payload) => {
     const listeners = listenersRef.current[event];
     if (!listeners || listeners.length === 0) return;
+    if (!canEmit(event)) return;
 
-    const now = Date.now();
-    const last = lastEmitRef.current[event] || 0;
+    // snapshot listeners (no mutation side-effects)
+    const snapshot = listeners.slice();
 
-    // 🔇 Quiet guard: block rapid self-noise unless whitelisted
-    if (!HIGH_FREQ_EVENTS.has(event) && now - last < 50) {
-      return;
-    }
-
-    lastEmitRef.current[event] = now;
-
-    // snapshot to prevent mutation during emit
-    [...listeners].forEach((callback) => {
+    for (const cb of snapshot) {
       try {
-        callback(payload);
+        cb(payload);
       } catch {
-        // silent by design
+        // 🔇 silent by design
       }
-    });
+    }
   }, []);
 
   /* ================= ON ================= */
@@ -61,7 +82,7 @@ export function EventBusProvider({ children }) {
 
     const list = listenersRef.current[event];
 
-    // 🔇 prevent runaway listener growth
+    // 🔒 hard cap listener growth
     if (list.length >= MAX_LISTENERS_PER_EVENT) {
       return () => {};
     }
@@ -69,23 +90,29 @@ export function EventBusProvider({ children }) {
     list.push(callback);
 
     return () => {
-      listenersRef.current[event] =
-        listenersRef.current[event].filter((cb) => cb !== callback);
+      const arr = listenersRef.current[event];
+      if (!arr) return;
+      listenersRef.current[event] = arr.filter(
+        (cb) => cb !== callback
+      );
     };
   }, []);
 
   /* ================= ONCE ================= */
 
-  const once = useCallback((event, callback) => {
-    const unsubscribe = on(event, (payload) => {
-      unsubscribe();
-      try {
-        callback(payload);
-      } catch {
-        /* silent */
-      }
-    });
-  }, [on]);
+  const once = useCallback(
+    (event, callback) => {
+      const unsubscribe = on(event, (payload) => {
+        unsubscribe();
+        try {
+          callback(payload);
+        } catch {
+          // silent
+        }
+      });
+    },
+    [on]
+  );
 
   const bus = {
     emit,
@@ -105,7 +132,9 @@ export function EventBusProvider({ children }) {
 export function useEventBus() {
   const ctx = useContext(EventBusContext);
   if (!ctx) {
-    throw new Error("useEventBus must be used inside EventBusProvider");
+    throw new Error(
+      "useEventBus must be used inside EventBusProvider"
+    );
   }
   return ctx;
 }
