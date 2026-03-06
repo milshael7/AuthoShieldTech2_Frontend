@@ -1,7 +1,9 @@
 // frontend/src/pages/Manager.jsx
-// GLOBAL OPERATIONAL OVERSIGHT CENTER
-// Manager = enforcement visibility layer
-// Admin supersedes Manager
+// ======================================================
+// OPERATIONAL OVERSIGHT CENTER — MANAGER
+// Read-only enforcement visibility
+// Backend-aligned • Zero phantom APIs • Company-scoped
+// ======================================================
 
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
@@ -11,27 +13,22 @@ import { useCompany } from "../context/CompanyContext";
 
 /* ================= HELPERS ================= */
 
-function safeArray(v) {
-  return Array.isArray(v) ? v : [];
-}
-
-function safeStr(v, fallback = "—") {
-  return typeof v === "string" && v.trim() ? v : fallback;
-}
+const arr = (v) => (Array.isArray(v) ? v : []);
+const str = (v, f = "—") =>
+  typeof v === "string" && v.trim() ? v : f;
 
 /* ================= PAGE ================= */
 
 export default function Manager() {
   const { activeCompanyId, mode } = useCompany();
 
-  const [overview, setOverview] = useState(null);
-  const [audit, setAudit] = useState([]);
-  const [notifications, setNotifications] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [incidents, setIncidents] = useState([]);
+  const [alerts, setAlerts] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-
   const [postureKey, setPostureKey] = useState(0);
 
   async function loadRoom() {
@@ -39,238 +36,142 @@ export default function Manager() {
     setErr("");
 
     try {
-      const [ov, au, no, co] = await Promise.all([
-        api.managerOverview(),
-        api.managerAudit(200),
-        api.managerNotifications?.() || Promise.resolve([]),
-        api.adminCompanies?.() || Promise.resolve([]),
+      const [c, e, i, a] = await Promise.all([
+        api.listCompanies(),
+        api.securityEvents(),
+        api.incidents(),
+        api.socFeed?.() || { alerts: [] },
       ]);
 
-      setOverview(ov || null);
-      setAudit(safeArray(au));
-      setNotifications(safeArray(no));
-      setCompanies(safeArray(co));
+      setCompanies(arr(c?.companies || c));
+      setEvents(arr(e?.events));
+      setIncidents(arr(i?.incidents));
+      setAlerts(arr(a?.alerts));
     } catch (e) {
-      setErr(e?.message || "Failed to load manager oversight data");
+      setErr(e?.message || "Failed to load manager data");
     } finally {
       setLoading(false);
     }
   }
 
-  function refreshPosture() {
-    setPostureKey((k) => k + 1);
-  }
-
   useEffect(() => {
     loadRoom();
-    refreshPosture();
+    setPostureKey((k) => k + 1);
   }, []);
 
-  /* ================= COMPANY SCOPED FILTERING ================= */
+  /* ================= SCOPING ================= */
 
-  const filteredAudit = useMemo(() => {
-    if (!activeCompanyId) return audit;
-    return audit.filter(ev => ev.companyId === activeCompanyId);
-  }, [audit, activeCompanyId]);
+  const scoped = (items) =>
+    activeCompanyId
+      ? items.filter(
+          (x) => String(x.companyId) === String(activeCompanyId)
+        )
+      : items;
 
-  const filteredNotifications = useMemo(() => {
-    if (!activeCompanyId) return notifications;
-    return notifications.filter(n => n.companyId === activeCompanyId);
-  }, [notifications, activeCompanyId]);
+  const scopedEvents = useMemo(
+    () => scoped(events),
+    [events, activeCompanyId]
+  );
+
+  const scopedIncidents = useMemo(
+    () => scoped(incidents),
+    [incidents, activeCompanyId]
+  );
+
+  const scopedAlerts = useMemo(
+    () => scoped(alerts),
+    [alerts, activeCompanyId]
+  );
+
+  /* ================= STATS ================= */
 
   const severityStats = useMemo(() => {
     const base = { critical: 0, high: 0, medium: 0, low: 0 };
-    filteredNotifications.forEach((n) => {
-      if (base[n?.severity] !== undefined) {
-        base[n.severity]++;
-      }
+    scopedEvents.forEach((e) => {
+      if (base[e.severity] !== undefined) base[e.severity]++;
     });
     return base;
-  }, [filteredNotifications]);
+  }, [scopedEvents]);
 
   /* ================= UI ================= */
 
   return (
-    <div style={{ padding: 32, display: "flex", flexDirection: "column", gap: 32 }}>
+    <div className="grid">
 
-      {/* HEADER */}
       <div className="card">
-        <h2 style={{ margin: 0 }}>
-          Operational Oversight — {mode === "global" ? "All Companies" : "Scoped Company"}
-        </h2>
+        <h2>Manager — Operational Oversight</h2>
+        <small>
+          {mode === "global"
+            ? "Global visibility"
+            : "Company scoped visibility"}
+        </small>
 
-        <div style={{ opacity: 0.65, fontSize: 13 }}>
-          Enforcement visibility • Read-only control layer
-        </div>
-
-        <div style={{ marginTop: 18, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ marginTop: 16 }}>
           <button className="btn" onClick={loadRoom} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh Data"}
-          </button>
-
-          <button className="btn" onClick={refreshPosture}>
-            Refresh Posture
+            {loading ? "Refreshing…" : "Refresh"}
           </button>
         </div>
 
-        {err && (
-          <div style={{ marginTop: 14, color: "#ff5a5f" }}>
-            {err}
-          </div>
-        )}
+        {err && <div className="err">{err}</div>}
       </div>
 
-      {/* 🔥 COMPANY SELECTOR */}
       <div className="card">
         <CompanySelector companies={companies} />
       </div>
 
-      {/* POSTURE SNAPSHOT */}
       <PosturePanel
         key={postureKey}
-        title="Security Posture Snapshot"
-        subtitle={mode === "global"
-          ? "All companies combined"
-          : "Scoped company only"}
+        title="Security Posture"
+        subtitle={
+          mode === "global"
+            ? "All companies combined"
+            : "Scoped company"
+        }
       />
 
-      {/* KPI STRIP */}
-      {overview && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
-            gap: 20
-          }}
-        >
-          <div className="card">
-            <div style={{ fontSize: 12, opacity: 0.6 }}>Total Users</div>
-            <div style={{ fontSize: 26, fontWeight: 800 }}>
-              {overview.users ?? 0}
-            </div>
-          </div>
-
-          <div className="card">
-            <div style={{ fontSize: 12, opacity: 0.6 }}>Companies</div>
-            <div style={{ fontSize: 26, fontWeight: 800 }}>
-              {overview.companies ?? 0}
-            </div>
-          </div>
-
-          <div className="card">
-            <div style={{ fontSize: 12, opacity: 0.6 }}>Audit Events</div>
-            <div style={{ fontSize: 26, fontWeight: 800 }}>
-              {filteredAudit.length}
-            </div>
-          </div>
-
-          <div className="card">
-            <div style={{ fontSize: 12, opacity: 0.6 }}>Active Alerts</div>
-            <div style={{ fontSize: 26, fontWeight: 800 }}>
-              {filteredNotifications.length}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ALERT DISTRIBUTION */}
-      <div className="card">
-        <h3>Alert Severity Distribution</h3>
-
-        {Object.entries(severityStats).map(([level, count]) => (
-          <div key={level} style={{ marginTop: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-              <span>{level.toUpperCase()}</span>
-              <span>{count}</span>
-            </div>
-
-            <div
-              style={{
-                marginTop: 6,
-                height: 6,
-                background: "rgba(255,255,255,0.08)",
-                borderRadius: 999,
-              }}
-            >
-              <div
-                style={{
-                  width: `${filteredNotifications.length
-                    ? Math.round((count / filteredNotifications.length) * 100)
-                    : 0}%`,
-                  height: "100%",
-                  borderRadius: 999,
-                  background: "#5EC6FF",
-                }}
-              />
-            </div>
-          </div>
-        ))}
+      <div className="kpi">
+        <div><b>{scopedIncidents.length}</b><span>Incidents</span></div>
+        <div><b>{scopedEvents.length}</b><span>Security Events</span></div>
+        <div><b>{scopedAlerts.length}</b><span>SOC Alerts</span></div>
       </div>
 
-      {/* NOTIFICATIONS */}
       <div className="card">
-        <h3>Recent Alerts</h3>
+        <h3>Security Events</h3>
 
-        {filteredNotifications.length === 0 && (
-          <div style={{ opacity: 0.6 }}>
-            {loading ? "Loading…" : "No alerts detected."}
-          </div>
-        )}
-
-        {filteredNotifications.slice(0, 12).map((n) => (
-          <div
-            key={n.id}
-            style={{
-              marginTop: 14,
-              paddingBottom: 14,
-              borderBottom: "1px solid rgba(255,255,255,.08)"
-            }}
-          >
-            <strong>{safeStr(n.title)}</strong>
-            <div style={{ fontSize: 13, opacity: 0.7 }}>
-              {safeStr(n.message)}
-            </div>
-            <div style={{ fontSize: 11, opacity: 0.45 }}>
-              {n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}
-            </div>
+        {scopedEvents.slice(0, 10).map((e) => (
+          <div key={e.id} className="row">
+            <strong>{str(e.title)}</strong>
+            <small>{e.severity}</small>
           </div>
         ))}
+
+        {scopedEvents.length === 0 && <small>No events</small>}
       </div>
 
-      {/* AUDIT TABLE */}
       <div className="card">
-        <h3>Operational Audit Log</h3>
+        <h3>Incidents</h3>
 
-        <div style={{ marginTop: 16, overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "left", opacity: 0.6 }}>
-                <th>Time</th>
-                <th>Action</th>
-                <th>Actor</th>
-                <th>Target</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredAudit.slice(0, 25).map((ev, i) => (
-                <tr key={ev.id || i}>
-                  <td style={{ padding: "8px 0" }}>
-                    {ev.at ? new Date(ev.at).toLocaleString() : ""}
-                  </td>
-                  <td>{safeStr(ev.action)}</td>
-                  <td>{safeStr(ev.actorId)}</td>
-                  <td>
-                    {safeStr(ev.targetType)}:{safeStr(ev.targetId)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {scopedIncidents.slice(0, 10).map((i) => (
+          <div key={i.id} className="row">
+            <strong>{str(i.title)}</strong>
+            <small>{i.status}</small>
+          </div>
+        ))}
 
-        <div style={{ marginTop: 12, opacity: 0.55, fontSize: 12 }}>
-          Managers operate in read-only enforcement mode.
-        </div>
+        {scopedIncidents.length === 0 && <small>No incidents</small>}
+      </div>
+
+      <div className="card">
+        <h3>SOC Alerts</h3>
+
+        {scopedAlerts.slice(0, 10).map((a) => (
+          <div key={a.id} className="row">
+            <strong>{a.priority}</strong>
+            <small>{a.status}</small>
+          </div>
+        ))}
+
+        {scopedAlerts.length === 0 && <small>No alerts</small>}
       </div>
 
     </div>
