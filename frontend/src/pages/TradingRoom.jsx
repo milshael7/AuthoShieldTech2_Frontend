@@ -370,22 +370,68 @@ export default function TradingRoom() {
         flexDirection:"column"
       }}>
 
-        <div style={{fontWeight:700}}>
-          AI Trading Desk • {SYMBOL}
+        {/* Chart Toolbar */}
+
+        <div style={{
+          display:"flex",
+          justifyContent:"space-between",
+          alignItems:"center",
+          marginBottom:10
+        }}>
+
+          <div style={{fontWeight:700}}>
+            {SYMBOL}
+          </div>
+
+          <div style={{
+            display:"flex",
+            gap:10,
+            fontSize:12,
+            opacity:0.8
+          }}>
+
+            <span>1m</span>
+            <span>5m</span>
+            <span>15m</span>
+            <span>1h</span>
+            <span>D</span>
+
+            <span style={{opacity:0.6}}>▮▮</span>
+            <span style={{opacity:0.6}}>ƒx</span>
+            <span style={{opacity:0.6}}>⚙</span>
+
+          </div>
+
         </div>
 
-        <div style={{opacity:0.7}}>
+        {/* Price */}
+
+        <div style={{
+          fontSize:13,
+          opacity:0.7,
+          marginBottom:10
+        }}>
           Live Price: {price?.toLocaleString()||"Loading..."}
         </div>
 
-        <TerminalChart
-          candles={candles}
-          volume={volume}
-          trades={trades}
-          aiSignals={aiSignals}
-          pnlSeries={pnlSeries}
-          height={460}
-        />
+        {/* Chart Panel */}
+
+        <div style={{
+          border:"1px solid rgba(255,255,255,.08)",
+          borderRadius:10,
+          overflow:"hidden"
+        }}>
+
+          <TerminalChart
+            candles={candles}
+            volume={volume}
+            trades={trades}
+            aiSignals={aiSignals}
+            pnlSeries={pnlSeries}
+            height={520}
+          />
+
+        </div>
 
       </div>
 
