@@ -4,12 +4,12 @@ import { api, setToken, saveUser } from "../lib/api.js";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] = useState("login"); // login | reset
   const [resetEmail, setResetEmail] = useState("");
   const [resetPass, setResetPass] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const submit = async (e) => {
+  async function submit(e) {
     e.preventDefault();
     setLoading(true);
 
@@ -28,13 +28,12 @@ export default function Login() {
 
       // 🔥 Full platform rehydrate
       window.location.replace(redirectByRole(user.role));
-
     } catch (err) {
       alert(err?.message || "Login failed");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   function redirectByRole(role) {
     const r = String(role || "").toLowerCase();
@@ -48,26 +47,30 @@ export default function Login() {
     return "/";
   }
 
-  const reset = async (e) => {
+  async function reset(e) {
     e.preventDefault();
+
     try {
       await api.resetPassword(resetEmail, resetPass);
-      alert("Password updated. Now sign in.");
+      alert("Password updated. You can now sign in.");
       setMode("login");
     } catch (err) {
       alert(err?.message || "Reset failed");
     }
-  };
+  }
 
   return (
     <div
-      className="row"
       style={{
-        minHeight: "100svh",
+        minHeight: "100vh",
+        display: "flex",
         alignItems: "center",
+        justifyContent: "center",
+        background: "#0a0f1c",
+        padding: 16,
       }}
     >
-      <div className="col" style={{ maxWidth: 420, margin: "0 auto" }}>
+      <div style={{ width: "100%", maxWidth: 420 }}>
         <div className="card">
           <h2 style={{ marginTop: 0 }}>
             {mode === "login" ? "Sign in" : "Reset password"}
@@ -81,6 +84,7 @@ export default function Login() {
                 autoComplete="email"
                 onChange={(e) => setEmail(e.target.value)}
               />
+
               <div style={{ height: 12 }} />
 
               <input
@@ -90,9 +94,10 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+
               <div style={{ height: 16 }} />
 
-              <button type="submit" disabled={loading}>
+              <button type="submit" disabled={loading} style={{ width: "100%" }}>
                 {loading ? "Signing in…" : "Sign in"}
               </button>
 
@@ -118,6 +123,7 @@ export default function Login() {
                 autoComplete="email"
                 onChange={(e) => setResetEmail(e.target.value)}
               />
+
               <div style={{ height: 12 }} />
 
               <input
@@ -127,9 +133,12 @@ export default function Login() {
                 value={resetPass}
                 onChange={(e) => setResetPass(e.target.value)}
               />
+
               <div style={{ height: 16 }} />
 
-              <button type="submit">Set new password</button>
+              <button type="submit" style={{ width: "100%" }}>
+                Set new password
+              </button>
 
               <div style={{ height: 14 }} />
 
@@ -141,7 +150,7 @@ export default function Login() {
                     setMode("login");
                   }}
                 >
-                  Back
+                  Back to sign in
                 </a>
               </small>
             </form>
