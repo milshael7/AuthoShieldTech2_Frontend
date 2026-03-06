@@ -1,6 +1,6 @@
 // frontend/src/components/PlatformGate.jsx
-// PlatformGate — Enterprise Auth Stabilizer v10
-// NO REDIRECT LOOPS • REFRESH SAFE • DEEP ROUTE SAFE
+// PlatformGate — Enterprise Auth Stabilizer v11
+// NO REDIRECT LOOPS • REFRESH SAFE • DEEP ROUTE SAFE • TRADING SAFE
 
 import React, { useRef } from "react";
 import { Navigate, useLocation } from "react-router-dom";
@@ -39,7 +39,13 @@ export default function PlatformGate({
   children,
 }) {
   const location = useLocation();
-  const redirectedRef = useRef(false);
+
+  // Track whether we EVER had a valid user in this session
+  const hadUserRef = useRef(false);
+
+  if (user) {
+    hadUserRef.current = true;
+  }
 
   /* ================= WAIT FOR BOOT ================= */
   if (!ready) {
@@ -47,17 +53,17 @@ export default function PlatformGate({
   }
 
   /* ================= SESSION STABILIZATION =================
-     IMPORTANT:
-     - Allow ONE render where user may be null
-     - Prevent redirect loops during refresh
+     RULE:
+     - NEVER redirect if user was previously valid
+     - Treat null user as transient during re-evaluation
   */
-  if (ready && !user) {
-    if (redirectedRef.current) {
+  if (!user) {
+    if (hadUserRef.current) {
+      // Session is being recalculated — HOLD ROUTE
       return <div style={{ padding: 40 }}>Restoring session…</div>;
     }
 
-    redirectedRef.current = true;
-
+    // True unauthenticated entry
     return (
       <Navigate
         to="/login"
@@ -68,16 +74,12 @@ export default function PlatformGate({
   }
 
   /* ================= ROLE ACCESS ================= */
-  if (allow && user && !hasAccess(user.role, allow)) {
+  if (allow && !hasAccess(user.role, allow)) {
     return <Navigate to="/404" replace />;
   }
 
   /* ================= SUBSCRIPTION ================= */
-  if (
-    requireSubscription &&
-    user &&
-    isInactiveSubscription(user.subscriptionStatus)
-  ) {
+  if (requireSubscription && isInactiveSubscription(user.subscriptionStatus)) {
     return <Navigate to="/pricing" replace />;
   }
 
