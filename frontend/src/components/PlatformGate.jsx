@@ -1,6 +1,6 @@
 // frontend/src/components/PlatformGate.jsx
-// PlatformGate — Enterprise Auth Stabilizer v11
-// NO REDIRECT LOOPS • REFRESH SAFE • DEEP ROUTE SAFE • TRADING SAFE
+// PlatformGate — Enterprise Auth Stabilizer v12
+// QUIET • DECISION-BASED • NO ZOMBIE STATES • TRADING-SAFE
 
 import React, { useRef } from "react";
 import { Navigate, useLocation } from "react-router-dom";
@@ -40,11 +40,13 @@ export default function PlatformGate({
 }) {
   const location = useLocation();
 
-  // Track whether we EVER had a valid user in this session
+  // Track first valid authentication only
   const hadUserRef = useRef(false);
+  const softHoldRef = useRef(false);
 
   if (user) {
     hadUserRef.current = true;
+    softHoldRef.current = false;
   }
 
   /* ================= WAIT FOR BOOT ================= */
@@ -52,18 +54,20 @@ export default function PlatformGate({
     return <div style={{ padding: 40 }}>Initializing platform…</div>;
   }
 
-  /* ================= SESSION STABILIZATION =================
-     RULE:
-     - NEVER redirect if user was previously valid
-     - Treat null user as transient during re-evaluation
+  /* ================= SESSION DECISION =================
+     RULES:
+     - Allow ONE soft hold only
+     - Never block indefinitely
+     - Trading routes must not snap
   */
   if (!user) {
-    if (hadUserRef.current) {
-      // Session is being recalculated — HOLD ROUTE
+    // Allow ONE transient render if we previously had a user
+    if (hadUserRef.current && !softHoldRef.current) {
+      softHoldRef.current = true;
       return <div style={{ padding: 40 }}>Restoring session…</div>;
     }
 
-    // True unauthenticated entry
+    // After one hold, decide firmly
     return (
       <Navigate
         to="/login"
