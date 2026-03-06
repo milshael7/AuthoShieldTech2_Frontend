@@ -1,21 +1,16 @@
 // ============================================================
-// TRADING ROOM — REALTIME MARKET + PAPER ENGINE
-// FIXED LAYOUT • ADVISOR SAFE • NO OVERFLOW
+// TRADING ROOM — REALTIME MARKET + PAPER ENGINE (STABLE)
+// ROUTE-SAFE • NO REDIRECTS • LIVE CANDLES • WS-OWNED
 // ============================================================
 
 import React, { useEffect, useRef, useState } from "react";
 import { createChart } from "lightweight-charts";
-import { getSavedUser } from "../lib/api.js";
-import { Navigate } from "react-router-dom";
+import { getToken } from "../../lib/api.js";
+
+const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
+const SYMBOL = "BTCUSDT";
 
 export default function TradingRoom() {
-  const user = getSavedUser();
-  const role = String(user?.role || "").toLowerCase();
-
-  if (!user || (role !== "admin" && role !== "manager")) {
-    return <Navigate to="/admin" replace />;
-  }
-
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
@@ -26,8 +21,6 @@ export default function TradingRoom() {
   const [wallet, setWallet] = useState({ usd: 0, btc: 0 });
   const [position, setPosition] = useState(null);
   const [trades, setTrades] = useState([]);
-
-  const symbol = "BTCUSDT";
 
   /* ================= CHART INIT ================= */
 
@@ -60,7 +53,7 @@ export default function TradingRoom() {
 
     loadCandles();
 
-    const handleResize = () => {
+    const resize = () => {
       if (!containerRef.current) return;
       chart.applyOptions({
         width: containerRef.current.clientWidth,
@@ -68,22 +61,22 @@ export default function TradingRoom() {
       });
     };
 
-    window.addEventListener("resize", handleResize);
+    window.addEventListener("resize", resize);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", resize);
       chart.remove();
     };
   }, []);
 
-  /* ================= LOAD MARKET CANDLES ================= */
+  /* ================= LOAD CANDLES ================= */
 
   async function loadCandles() {
     try {
-      const res = await fetch(`/api/market/candles?symbol=${symbol}`, {
-        credentials: "include",
-      });
-
+      const res = await fetch(
+        `${API_BASE}/api/market/candles?symbol=${SYMBOL}`,
+        { headers: authHeader() }
+      );
       const data = await res.json();
       if (!data?.ok) return;
 
@@ -99,25 +92,35 @@ export default function TradingRoom() {
     } catch {}
   }
 
-  /* ================= WEBSOCKET PRICE FEED ================= */
+  /* ================= LIVE WS ================= */
 
   useEffect(() => {
-    const token = localStorage.getItem("as_token");
-    if (!token) return;
+    const token = getToken();
+    if (!token || !API_BASE) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const url = new URL(API_BASE);
+    const protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${url.host}/ws/market?token=${encodeURIComponent(
+      token
+    )}`;
 
-    const ws = new WebSocket(
-      `${protocol}://${window.location.host}/ws/market?token=${token}`
-    );
-
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onmessage = (msg) => {
       try {
         const data = JSON.parse(msg.data);
-        if (data.type === "tick" && data.symbol === symbol) {
+        if (data.type === "tick" && data.symbol === SYMBOL) {
           setPrice(data.price);
+
+          // update last candle
+          seriesRef.current?.update({
+            time: Math.floor(data.ts / 1000),
+            open: data.price,
+            high: data.price,
+            low: data.price,
+            close: data.price,
+          });
         }
       } catch {}
     };
@@ -133,15 +136,13 @@ export default function TradingRoom() {
 
   async function loadPaper() {
     try {
-      const res = await fetch("/api/paper/status", {
-        credentials: "include",
+      const res = await fetch(`${API_BASE}/api/paper/status`, {
+        headers: authHeader(),
       });
-
       const data = await res.json();
       if (!data?.ok) return;
 
       const snap = data.snapshot;
-
       setEquity(snap.equity);
       setWallet({
         usd: snap.cashBalance,
@@ -171,20 +172,11 @@ export default function TradingRoom() {
         overflow: "hidden",
       }}
     >
-      {/* MAIN PANEL */}
-      <div
-        style={{
-          flex: 1,
-          padding: 20,
-          display: "flex",
-          flexDirection: "column",
-          minHeight: 0,
-        }}
-      >
+      {/* MAIN */}
+      <div style={{ flex: 1, padding: 20, display: "flex", flexDirection: "column" }}>
         <div style={{ fontWeight: 700, fontSize: 16 }}>
-          AI Trading Desk • {symbol}
+          AI Trading Desk • {SYMBOL}
         </div>
-
         <div style={{ opacity: 0.7, fontSize: 13 }}>
           Live Price: {price}
         </div>
@@ -193,64 +185,57 @@ export default function TradingRoom() {
           ref={containerRef}
           style={{
             flex: 1,
-            minHeight: 0,
             marginTop: 10,
             background: "#111827",
             borderRadius: 10,
           }}
         />
 
-        {/* ACCOUNT */}
         <div style={{ display: "flex", gap: 20, marginTop: 20 }}>
-          <div style={{ flex: 1, background: "#111827", padding: 15 }}>
-            <h4>Wallet</h4>
+          <Panel title="Wallet">
             USD: ${wallet.usd.toFixed(2)} <br />
             BTC: {wallet.btc.toFixed(6)}
-          </div>
+          </Panel>
 
-          <div style={{ flex: 1, background: "#111827", padding: 15 }}>
-            <h4>Equity</h4>
-            ${equity.toFixed(2)}
-          </div>
+          <Panel title="Equity">${equity.toFixed(2)}</Panel>
 
-          <div style={{ flex: 2, background: "#111827", padding: 15 }}>
-            <h4>Open Position</h4>
+          <Panel title="Open Position" flex={2}>
             {!position && "No position"}
-            {position && (
-              <div>
-                {position.side} {position.qty} @ {position.entry}
-              </div>
-            )}
-          </div>
+            {position && `${position.qty} @ ${position.entry}`}
+          </Panel>
         </div>
 
-        {/* TRADES */}
-        <div style={{ marginTop: 20, background: "#111827", padding: 15 }}>
-          <h4>Recent Trades</h4>
+        <Panel title="Recent Trades" style={{ marginTop: 20 }}>
           {trades.map((t, i) => (
             <div key={i}>
               {t.side} {t.qty} @ {t.price}
             </div>
           ))}
-        </div>
+        </Panel>
       </div>
 
-      {/* AI PANEL */}
-      <div
-        style={{
-          width: 320,
-          background: "#111827",
-          padding: 20,
-          flexShrink: 0,
-        }}
-      >
+      {/* AI */}
+      <div style={{ width: 320, background: "#111827", padding: 20 }}>
         <h3>AI Engine</h3>
         <div>Status: CONNECTED</div>
         <div>Mode: Paper Trading</div>
-        <div style={{ marginTop: 20 }}>
-          Backend AI engine executing trades automatically.
-        </div>
       </div>
+    </div>
+  );
+}
+
+/* ================= HELPERS ================= */
+
+function authHeader() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function Panel({ title, children, flex = 1, style = {} }) {
+  return (
+    <div style={{ flex, background: "#111827", padding: 15, ...style }}>
+      <h4>{title}</h4>
+      {children}
     </div>
   );
 }
