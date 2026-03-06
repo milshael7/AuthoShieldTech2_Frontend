@@ -1,6 +1,6 @@
 // frontend/src/context/SecurityContext.jsx
-// Security Context — Enterprise Hardened v13
-// QUIET MODE • EVENT-DRIVEN • NO SELF-NOISE • TRADING-SAFE
+// Security Context — Enterprise Hardened v14
+// QUIET-BY-DEFAULT • THREAT-REACTIVE • NO SELF-NOISE • PLATFORM-SAFE
 
 import React, {
   createContext,
@@ -37,13 +37,8 @@ export function SecurityProvider({ children }) {
 
   const [systemStatus, setSystemStatus] = useState("secure");
   const [integrityAlert, setIntegrityAlert] = useState(null);
-
   const [riskScore, setRiskScore] = useState(0);
   const [domains, setDomains] = useState([]);
-
-  const [auditFeed, setAuditFeed] = useState([]);
-  const [deviceAlerts, setDeviceAlerts] = useState([]);
-
   const [wsStatus, setWsStatus] = useState("idle");
 
   /* ================= REFS ================= */
@@ -51,9 +46,10 @@ export function SecurityProvider({ children }) {
   const socketRef = useRef(null);
   const reconnectTimerRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
-  const tokenRef = useRef(getToken());
   const mountedRef = useRef(true);
-  const quietRef = useRef(false);
+  const quietRef = useRef(true); // 🔑 default to quiet
+  const tokenRef = useRef(null);
+  const bootTimerRef = useRef(null);
 
   /* ================= WS URL ================= */
 
@@ -70,7 +66,7 @@ export function SecurityProvider({ children }) {
     }
   }
 
-  /* ================= SOCKET CLEANUP ================= */
+  /* ================= CLEANUP ================= */
 
   const closeSocket = useCallback(() => {
     if (reconnectTimerRef.current) {
@@ -92,13 +88,15 @@ export function SecurityProvider({ children }) {
   /* ================= CONNECT ================= */
 
   const connectSocket = useCallback(() => {
+    if (!mountedRef.current) return;
     if (quietRef.current) return;
+    if (document.hidden) return;
 
     const token = getToken();
-    tokenRef.current = token;
+    if (!token) return;
+    if (socketRef.current?.readyState === WebSocket.OPEN) return;
 
-    if (!token || !mountedRef.current) return;
-    if (socketRef.current?.readyState === 1) return;
+    tokenRef.current = token;
 
     const wsUrl = buildSecurityWsUrl(token);
     if (!wsUrl) return;
@@ -121,15 +119,16 @@ export function SecurityProvider({ children }) {
       if (!data?.type) return;
 
       if (data.type === "integrity_alert") {
+        quietRef.current = false;
         setIntegrityAlert(data);
         setSystemStatus("compromised");
-        quietRef.current = false;
       }
 
       if (data.type === "integrity_clear") {
         setIntegrityAlert(null);
         setSystemStatus("secure");
-        quietRef.current = true; // go quiet after clear
+        quietRef.current = true;
+        closeSocket();
       }
     };
 
@@ -144,11 +143,11 @@ export function SecurityProvider({ children }) {
       setWsStatus("disconnected");
 
       if (!mountedRef.current) return;
-      if (!getToken()) return;
+      if (quietRef.current) return;
       if (document.hidden) return;
 
-      if (reconnectAttemptsRef.current >= 3) {
-        quietRef.current = true; // stop thrashing
+      if (reconnectAttemptsRef.current >= 2) {
+        quietRef.current = true; // stop internal fighting
         return;
       }
 
@@ -156,27 +155,34 @@ export function SecurityProvider({ children }) {
 
       reconnectTimerRef.current = setTimeout(
         connectSocket,
-        3000 * reconnectAttemptsRef.current
+        4000 * reconnectAttemptsRef.current
       );
     };
 
     socketRef.current = socket;
   }, [bus, closeSocket]);
 
-  /* ================= BOOT ================= */
+  /* ================= BOOT (DELAYED) ================= */
 
   useEffect(() => {
     mountedRef.current = true;
 
-    if (getToken()) connectSocket();
+    // Delay security startup to let platform settle
+    bootTimerRef.current = setTimeout(() => {
+      if (getToken()) {
+        quietRef.current = false;
+        connectSocket();
+      }
+    }, 2000);
 
     return () => {
       mountedRef.current = false;
+      clearTimeout(bootTimerRef.current);
       closeSocket();
     };
   }, [connectSocket, closeSocket]);
 
-  /* ================= TOKEN CHANGE (EVENT-BASED) ================= */
+  /* ================= TOKEN CHANGE ================= */
 
   useEffect(() => {
     const handler = () => {
@@ -186,44 +192,50 @@ export function SecurityProvider({ children }) {
       tokenRef.current = latest;
       quietRef.current = false;
       closeSocket();
-      if (latest) connectSocket();
+
+      if (latest && !document.hidden) {
+        connectSocket();
+      }
     };
 
     window.addEventListener("storage", handler);
     return () => window.removeEventListener("storage", handler);
   }, [connectSocket, closeSocket]);
 
-  /* ================= REST TELEMETRY (PASSIVE) ================= */
+  /* ================= REST TELEMETRY (QUIET) ================= */
 
   useEffect(() => {
     let active = true;
 
     async function load() {
-      if (!getToken() || integrityAlert) return;
+      if (!active) return;
+      if (!getToken()) return;
+      if (integrityAlert) return;
 
       try {
         const summary = await api.postureSummary();
-        if (!active || !summary?.ok) return;
+        if (!summary?.ok) return;
 
         const score = Number(summary.score || 0);
         setRiskScore(score);
         setDomains(Array.isArray(summary.domains) ? summary.domains : []);
 
-        if (score < 30 && !integrityAlert) {
+        if (score < 30) {
           quietRef.current = true;
           setSystemStatus("secure");
         }
       } catch {
-        /* silent */
+        // intentional silence
       }
     }
 
-    load();
-    const t = setInterval(load, 60000);
+    const t = setTimeout(load, 5000); // delayed first call
+    const i = setInterval(load, 120000); // slower cadence
 
     return () => {
       active = false;
-      clearInterval(t);
+      clearTimeout(t);
+      clearInterval(i);
     };
   }, [integrityAlert]);
 
@@ -232,34 +244,21 @@ export function SecurityProvider({ children }) {
   const value = useMemo(
     () => ({
       wsStatus,
-      reconnect: connectSocket,
-      disconnect: closeSocket,
-
       systemStatus,
       integrityAlert,
-
       riskScore,
       domains,
-
-      auditFeed,
-      deviceAlerts,
-
-      pushAudit: (e) =>
-        setAuditFeed((p) => [e, ...p].slice(0, 150)),
-
-      pushDeviceAlert: (a) =>
-        setDeviceAlerts((p) => [a, ...p].slice(0, 75)),
+      reconnect: connectSocket,
+      disconnect: closeSocket,
     }),
     [
       wsStatus,
-      connectSocket,
-      closeSocket,
       systemStatus,
       integrityAlert,
       riskScore,
       domains,
-      auditFeed,
-      deviceAlerts,
+      connectSocket,
+      closeSocket,
     ]
   );
 
@@ -274,9 +273,8 @@ export function SecurityProvider({ children }) {
 
 export function useSecurity() {
   const ctx = useContext(SecurityContext);
-  if (!ctx)
-    throw new Error(
-      "useSecurity must be used inside <SecurityProvider />"
-    );
+  if (!ctx) {
+    throw new Error("useSecurity must be used inside <SecurityProvider />");
+  }
   return ctx;
 }
