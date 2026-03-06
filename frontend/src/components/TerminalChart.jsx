@@ -1,13 +1,11 @@
-// frontend/src/components/TerminalChart.jsx
 import React, { useEffect, useMemo, useRef } from "react";
 import { createChart } from "lightweight-charts";
 
 /**
  * TerminalChart — PRO Trading Chart
- * Supports:
  * ✔ Candles
  * ✔ Volume
- * ✔ Entry/Exit markers
+ * ✔ Entry / Exit markers
  * ✔ AI signals
  * ✔ PnL overlay
  */
@@ -30,8 +28,8 @@ export default function TerminalChart({
 
   /* ================= NORMALIZE DATA ================= */
 
-  const data = useMemo(() => {
-    return (candles || [])
+  const candleData = useMemo(() => {
+    return candles
       .map((c) => ({
         time: Number(c.time),
         open: Number(c.open),
@@ -43,7 +41,7 @@ export default function TerminalChart({
   }, [candles]);
 
   const volumeData = useMemo(() => {
-    return (volume || []).map((v) => ({
+    return volume.map((v) => ({
       time: Number(v.time),
       value: Number(v.value),
       color: v.color || "rgba(59,130,246,.45)",
@@ -51,15 +49,40 @@ export default function TerminalChart({
   }, [volume]);
 
   const pnlData = useMemo(() => {
-    return (pnlSeries || []).map((p) => ({
+    return pnlSeries.map((p) => ({
       time: Number(p.time),
       value: Number(p.value),
     }));
   }, [pnlSeries]);
 
+  /* ================= MARKERS ================= */
+
+  const markers = useMemo(() => {
+
+    const tradeMarkers = trades.map((t) => ({
+      time: Number(t.time),
+      position: t.side === "BUY" ? "belowBar" : "aboveBar",
+      color: t.side === "BUY" ? "#22c55e" : "#ef4444",
+      shape: t.side === "BUY" ? "arrowUp" : "arrowDown",
+      text: t.side,
+    }));
+
+    const aiMarkers = aiSignals.map((s) => ({
+      time: Number(s.time),
+      position: "aboveBar",
+      color: "#facc15",
+      shape: "circle",
+      text: "AI",
+    }));
+
+    return [...tradeMarkers, ...aiMarkers];
+
+  }, [trades, aiSignals]);
+
   /* ================= CHART INIT ================= */
 
   useEffect(() => {
+
     const el = wrapRef.current;
     if (!el) return;
 
@@ -110,9 +133,9 @@ export default function TerminalChart({
       scaleMargins: { top: 0.8, bottom: 0 },
     });
 
-    /* ================= PNL LINE ================= */
+    /* ================= PNL ================= */
 
-    const pnlSeriesLine = chart.addLineSeries({
+    const pnlLine = chart.addLineSeries({
       color: "#facc15",
       lineWidth: 2,
       priceScaleId: "left",
@@ -121,48 +144,48 @@ export default function TerminalChart({
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
-    pnlSeriesRef.current = pnlSeriesLine;
+    pnlSeriesRef.current = pnlLine;
 
     /* INITIAL DATA */
 
-    if (data.length) {
-      candleSeries.setData(data);
-      chart.timeScale().fitContent();
-    }
+    candleSeries.setData(candleData);
 
-    if (volumeData.length) {
+    if (volumeData.length)
       volumeSeries.setData(volumeData);
-    }
 
-    if (pnlData.length) {
-      pnlSeriesLine.setData(pnlData);
-    }
+    if (pnlData.length)
+      pnlLine.setData(pnlData);
+
+    if (markers.length)
+      candleSeries.setMarkers(markers);
+
+    chart.timeScale().fitContent();
 
     /* ================= RESIZE ================= */
 
     const ro = new ResizeObserver(() => {
       const rect = el.getBoundingClientRect();
-      chart.applyOptions({ width: Math.floor(rect.width), height });
+      chart.applyOptions({
+        width: Math.floor(rect.width),
+        height,
+      });
     });
 
     ro.observe(el);
 
     return () => {
-      try {
-        ro.disconnect();
-      } catch {}
-      try {
-        chart.remove();
-      } catch {}
+      try { ro.disconnect(); } catch {}
+      try { chart.remove(); } catch {}
       chartRef.current = null;
     };
+
   }, [height]);
 
   /* ================= UPDATE DATA ================= */
 
   useEffect(() => {
-    candleSeriesRef.current?.setData(data);
-  }, [data]);
+    candleSeriesRef.current?.setData(candleData);
+  }, [candleData]);
 
   useEffect(() => {
     volumeSeriesRef.current?.setData(volumeData);
@@ -172,37 +195,9 @@ export default function TerminalChart({
     pnlSeriesRef.current?.setData(pnlData);
   }, [pnlData]);
 
-  /* ================= ENTRY / EXIT MARKERS ================= */
-
   useEffect(() => {
-    if (!candleSeriesRef.current) return;
-
-    const markers = (trades || []).map((t) => ({
-      time: Number(t.time),
-      position: t.side === "BUY" ? "belowBar" : "aboveBar",
-      color: t.side === "BUY" ? "#22c55e" : "#ef4444",
-      shape: t.side === "BUY" ? "arrowUp" : "arrowDown",
-      text: t.side,
-    }));
-
-    candleSeriesRef.current.setMarkers(markers);
-  }, [trades]);
-
-  /* ================= AI SIGNAL OVERLAY ================= */
-
-  useEffect(() => {
-    if (!candleSeriesRef.current) return;
-
-    const markers = (aiSignals || []).map((s) => ({
-      time: Number(s.time),
-      position: "aboveBar",
-      color: "#facc15",
-      shape: "circle",
-      text: "AI",
-    }));
-
-    candleSeriesRef.current.setMarkers(markers);
-  }, [aiSignals]);
+    candleSeriesRef.current?.setMarkers(markers);
+  }, [markers]);
 
   return (
     <div
