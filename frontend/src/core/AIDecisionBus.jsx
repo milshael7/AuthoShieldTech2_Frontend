@@ -1,44 +1,59 @@
 // frontend/src/core/AIDecisionBus.jsx
 // ==========================================================
-// AI DECISION BUS — QUIET MODE v16
-// SINGLE-SOURCE DECISIONS • NO ECHO • NO SELF-FEEDBACK
-// THREAT-FIRST • PLATFORM-SAFE • TRADING-SAFE
+// AI DECISION BUS — QUIET MODE v17
+// SINGLE-SOURCE • BACKPRESSURE-AWARE • NO ECHO
+// THREAT-FIRST • EVENTBUS-COMPLIANT • ENTERPRISE-STABLE
 // ==========================================================
 
-import { createContext, useContext, useRef, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useRef,
+  useCallback,
+} from "react";
 import { useEventBus } from "./EventBus.jsx";
 
 const AIBusContext = createContext(null);
 
 /* ================= CONFIG ================= */
 
-// events that are allowed to propagate immediately
+// Decisions that must bypass cooldown + always propagate
 const CRITICAL_DECISIONS = new Set([
   "ai_threat_detected",
   "ai_lockdown",
 ]);
 
-// minimum spacing between same decision types (ms)
-const DECISION_COOLDOWN = 100;
+// Minimum spacing per decision type (ms)
+const DECISION_COOLDOWN = {
+  ai_trade_signal: 250,
+  ai_risk_escalation: 500,
+  ai_market_regime_change: 1000,
+  default: 300,
+};
 
 /* ================= PROVIDER ================= */
 
 export function AIDecisionProvider({ children }) {
   const bus = useEventBus();
 
-  const lastDecisionRef = useRef({}); // type → timestamp
+  // type → timestamp
+  const lastDecisionRef = useRef({});
 
-  /* ================= CORE EMIT ================= */
+  /* ================= EMIT CORE ================= */
 
   const emitDecision = useCallback(
     (type, payload = {}) => {
       const now = Date.now();
       const last = lastDecisionRef.current[type] || 0;
 
-      // 🔇 Quiet guard: suppress repetitive self-noise
+      const cooldown =
+        DECISION_COOLDOWN[type] ??
+        DECISION_COOLDOWN.default;
+
+      // 🔇 Quiet guard — suppress internal churn
       if (
         !CRITICAL_DECISIONS.has(type) &&
-        now - last < DECISION_COOLDOWN
+        now - last < cooldown
       ) {
         return;
       }
@@ -51,7 +66,7 @@ export function AIDecisionProvider({ children }) {
         ts: now,
       };
 
-      // 🔑 SINGLE broadcast channel (no echo)
+      // 🔑 SINGLE canonical channel
       bus.emit("ai_decision", event);
 
       // 🔔 Type-specific channel ONLY for critical decisions
