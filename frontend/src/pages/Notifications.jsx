@@ -1,26 +1,23 @@
-import React, { useEffect, useState } from "react";
+// frontend/src/pages/Notifications.jsx
+// ======================================================
+// NOTIFICATIONS — SOC STYLE ALERT STREAM
+// UI-only • Safe placeholder • Backend-ready
+// ======================================================
 
-/**
- * Notifications.jsx
- * SOC-style Notifications & Alerts
- *
- * ROLE:
- * - System alerts
- * - Security findings
- * - Operational signals
- *
- * SAFE:
- * - UI only
- * - No backend dependency
- * - Matches platform.css + layout.css
- */
+import React, { useEffect, useMemo, useState } from "react";
+
+/* ================= CONSTANTS ================= */
+
+const FILTERS = ["all", "ok", "warn", "bad"];
+
+/* ================= PAGE ================= */
 
 export default function Notifications() {
+  const [filter, setFilter] = useState("all");
   const [items, setItems] = useState([]);
-  const [filter, setFilter] = useState("all"); // all | ok | warn | bad
 
-  useEffect(() => {
-    setItems([
+  const demoItems = useMemo(
+    () => [
       {
         id: 1,
         level: "warn",
@@ -45,12 +42,18 @@ export default function Notifications() {
           "One device is running an outdated security agent.",
         time: "Yesterday",
       },
-    ]);
-  }, []);
+    ],
+    []
+  );
 
-  const visible = filter === "all"
-    ? items
-    : items.filter((i) => i.level === filter);
+  useEffect(() => {
+    setItems(demoItems);
+  }, [demoItems]);
+
+  const visible =
+    filter === "all"
+      ? items
+      : items.filter((i) => i.level === filter);
 
   return (
     <div className="postureWrap">
@@ -64,7 +67,7 @@ export default function Notifications() {
 
           {/* FILTER */}
           <div className="ctrlRow">
-            {["all", "ok", "warn", "bad"].map((f) => (
+            {FILTERS.map((f) => (
               <button
                 key={f}
                 className={`pill ${filter === f ? "active" : ""}`}
