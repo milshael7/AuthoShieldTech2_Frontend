@@ -1,11 +1,11 @@
 // frontend/src/pages/trading/TradingLayout.jsx
 // ============================================================
-// TRADING LAYOUT — ENTERPRISE TRADING MODULE v2
-// ROUTE-STABLE • REFRESH-SAFE • NO SNAP-BACK
+// TRADING LAYOUT — ENTERPRISE TRADING MODULE v3
+// CANONICAL ROUTES • SINGLE MOUNT • NO DOUBLE SOCKETS • QUIET
 // ============================================================
 
 import React from "react";
-import { NavLink, Routes, Route } from "react-router-dom";
+import { NavLink, Routes, Route, Navigate } from "react-router-dom";
 
 import TradingRoom from "../TradingRoom";
 import Market from "./Market";
@@ -73,7 +73,6 @@ export default function TradingLayout() {
       >
         <NavLink
           to="live"
-          end
           style={({ isActive }) =>
             isActive ? { ...linkBase, ...linkActive } : linkBase
           }
@@ -109,8 +108,8 @@ export default function TradingLayout() {
         }}
       >
         <Routes>
-          {/* DEFAULT ROUTE — CRITICAL (prevents dashboard snap-back) */}
-          <Route index element={<TradingRoom />} />
+          {/* CANONICAL ENTRY */}
+          <Route index element={<Navigate to="live" replace />} />
 
           {/* MODULE ROUTES */}
           <Route path="live" element={<TradingRoom />} />
