@@ -13,7 +13,6 @@ import AIControl from "./AIControl";
 import Analytics from "./Analytics";
 
 export default function TradingLayout() {
-
   const linkBase = {
     padding: "8px 18px",
     textDecoration: "none",
@@ -30,14 +29,21 @@ export default function TradingLayout() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        minHeight: 0,
+      }}
+    >
       {/* ================= HEADER ================= */}
       <div
         style={{
           padding: "18px 22px 14px",
           borderBottom: "1px solid rgba(255,255,255,.06)",
-          background: "linear-gradient(180deg, rgba(255,255,255,.02), transparent)",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,.02), transparent)",
         }}
       >
         <div style={{ fontSize: 18, fontWeight: 700 }}>
@@ -95,17 +101,24 @@ export default function TradingLayout() {
       </div>
 
       {/* ================= CONTENT ================= */}
-      <div style={{ flex: 1, overflow: "auto" }}>
-
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflow: "auto",
+        }}
+      >
         <Routes>
+          {/* DEFAULT ROUTE — CRITICAL (prevents dashboard snap-back) */}
+          <Route index element={<TradingRoom />} />
+
+          {/* MODULE ROUTES */}
           <Route path="live" element={<TradingRoom />} />
           <Route path="control" element={<AIControl />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="market" element={<Market />} />
         </Routes>
-
       </div>
-
     </div>
   );
 }
