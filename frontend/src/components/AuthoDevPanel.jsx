@@ -1,6 +1,6 @@
 // frontend/src/components/AuthoDevPanel.jsx
-// AuthoDevPanel — Shell-Safe Enterprise Advisor (HARDENED)
-// FIXED: no disposed objects • abort-safe • speech-safe • unmount-safe
+// AuthoDevPanel — Enterprise Advisor v6.5 (RESTORED)
+// SHELL-SAFE • ABORT-SAFE • SPEECH-SAFE • FULL COMMAND UI
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { readAloud, stopReadAloud } from "./ReadAloud";
@@ -67,20 +67,15 @@ export default function AuthoDevPanel({
   const [listening, setListening] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState(null);
 
-  /* ================= MOUNT / UNMOUNT ================= */
+  /* ================= LIFECYCLE ================= */
 
   useEffect(() => {
     mountedRef.current = true;
-
     return () => {
       mountedRef.current = false;
-
       try { recognitionRef.current?.stop(); } catch {}
       try { stopReadAloud(); } catch {}
       try { abortRef.current?.abort(); } catch {}
-
-      recognitionRef.current = null;
-      abortRef.current = null;
     };
   }, []);
 
@@ -91,22 +86,16 @@ export default function AuthoDevPanel({
     if (!raw) return;
     try {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed?.messages)) {
-        setMessages(parsed.messages);
-      }
+      if (Array.isArray(parsed?.messages)) setMessages(parsed.messages);
     } catch {}
   }, [storageKey]);
 
   useEffect(() => {
     if (!mountedRef.current) return;
-    safeSet(storageKey, JSON.stringify({
-      messages,
-      lastActive: Date.now(),
-    }));
+    safeSet(storageKey, JSON.stringify({ messages, lastActive: Date.now() }));
   }, [messages, storageKey]);
 
   useEffect(() => {
-    if (!mountedRef.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -114,40 +103,7 @@ export default function AuthoDevPanel({
 
   function handleSpeak(text, index) {
     setSpeakingIndex(index);
-    readAloud(text, () => {
-      if (mountedRef.current) setSpeakingIndex(null);
-    });
-  }
-
-  /* ================= VOICE INPUT ================= */
-
-  function startListening() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return;
-
-    try { recognitionRef.current?.stop(); } catch {}
-
-    const rec = new SR();
-    rec.lang = "en-US";
-    rec.interimResults = true;
-
-    rec.onstart = () => mountedRef.current && setListening(true);
-    rec.onend = () => mountedRef.current && setListening(false);
-
-    rec.onresult = (e) => {
-      if (!mountedRef.current) return;
-      const last = e.results?.[e.results.length - 1];
-      const text = last?.[0]?.transcript || "";
-      if (text) setInput(text);
-    };
-
-    recognitionRef.current = rec;
-    rec.start();
-  }
-
-  function stopListening() {
-    try { recognitionRef.current?.stop(); } catch {}
-    if (mountedRef.current) setListening(false);
+    readAloud(text, () => mountedRef.current && setSpeakingIndex(null));
   }
 
   /* ================= SEND ================= */
@@ -155,8 +111,6 @@ export default function AuthoDevPanel({
   async function sendMessage(customText = null, replaceIndex = null) {
     const messageText = String(customText ?? input ?? "").trim();
     if (!messageText || loading) return;
-
-    if (listening) stopListening();
 
     if (replaceIndex === null) {
       setMessages(m => [
@@ -183,12 +137,7 @@ export default function AuthoDevPanel({
         signal: controller.signal,
         body: JSON.stringify({
           message: messageText,
-          context: {
-            ...ctxFromParent,
-            module,
-            tradingActive: module === "trading",
-            location: window.location.pathname
-          }
+          context: { ...ctxFromParent, module, location: window.location.pathname }
         }),
       });
 
@@ -214,8 +163,27 @@ export default function AuthoDevPanel({
         { role: "ai", text: "Assistant unavailable.", ts: new Date().toLocaleTimeString() }
       ]);
     } finally {
-      if (mountedRef.current) setLoading(false);
+      mountedRef.current && setLoading(false);
     }
+  }
+
+  function regenerate(index) {
+    const previousUser = [...messages].slice(0, index).reverse()
+      .find(m => m.role === "user");
+    if (previousUser?.text) sendMessage(previousUser.text, index);
+  }
+
+  function share(text) {
+    if (navigator.share) navigator.share({ text }).catch(() => {});
+    else copyText(text);
+  }
+
+  function react(index, type) {
+    setMessages(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], reaction: type };
+      return copy;
+    });
   }
 
   /* ================= UI ================= */
@@ -240,9 +208,13 @@ export default function AuthoDevPanel({
             </div>
 
             {m.role === "ai" && (
-              <div style={{ display: "flex", gap: 14, marginTop: 12 }}>
-                <IconButton onClick={() => handleSpeak(m.text, i)}>🔊</IconButton>
-                <IconButton onClick={() => copyText(m.text)}>📋</IconButton>
+              <div style={{ display: "flex", gap: 14, marginTop: 12, opacity: .85 }}>
+                <IconBtn onClick={() => handleSpeak(m.text, i)}>🔊</IconBtn>
+                <IconBtn onClick={() => copyText(m.text)}>📋</IconBtn>
+                <IconBtn onClick={() => react(i, "up")}>👍</IconBtn>
+                <IconBtn onClick={() => react(i, "down")}>👎</IconBtn>
+                <IconBtn onClick={() => regenerate(i)}>🔁</IconBtn>
+                <IconBtn onClick={() => share(m.text)}>📤</IconBtn>
               </div>
             )}
           </div>
@@ -263,16 +235,26 @@ export default function AuthoDevPanel({
             }
           }}
         />
-        <button onClick={() => sendMessage()}>Send</button>
+        <button onClick={() => sendMessage()} disabled={loading}>
+          {loading ? "…" : "Send"}
+        </button>
       </div>
     </div>
   );
 }
 
-/* ================= UI HELPERS ================= */
+/* ================= UI ================= */
 
-const IconButton = ({ children, onClick }) => (
-  <button onClick={onClick} style={{ border: "none", background: "transparent", cursor: "pointer" }}>
+const IconBtn = ({ children, onClick }) => (
+  <button
+    onClick={onClick}
+    style={{
+      border: "none",
+      background: "transparent",
+      cursor: "pointer",
+      fontSize: 14
+    }}
+  >
     {children}
   </button>
 );
