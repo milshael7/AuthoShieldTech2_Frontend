@@ -1,7 +1,7 @@
 // frontend/src/context/SecurityContext.jsx
-// Security Context — Enterprise Hardened v16
-// QUIET-BY-DEFAULT • WS-AWARE • REST-FIRST • NO SELF-NOISE • PLATFORM-SAFE
-// WS exists but is ADVISORY, never blocking
+// Security Context — Enterprise Hardened v17
+// QUIET-BY-DEFAULT • REST-PRIMARY • WS-ADVISORY ONLY
+// NO ESCALATION LOOPS • NO SELF-NOISE • PLATFORM-SAFE
 
 import React, {
   createContext,
@@ -17,6 +17,11 @@ import { getToken, api } from "../lib/api.js";
 import { useEventBus } from "../core/EventBus.jsx";
 
 const SecurityContext = createContext(null);
+
+/* ================= CONFIG ================= */
+
+const ALERT_COOLDOWN = 30000; // 30s between escalations
+const WS_MAX_RETRY = 1;       // advisory only, never persistent
 
 /* ================= PROVIDER ================= */
 
@@ -34,10 +39,10 @@ export function SecurityProvider({ children }) {
   /* ================= REFS ================= */
 
   const mountedRef = useRef(true);
-  const quietRef = useRef(true); // 🔇 default quiet
+  const quietRef = useRef(true);          // 🔇 global quiet flag
   const lastAlertRef = useRef(0);
   const socketRef = useRef(null);
-  const reconnectRef = useRef(0);
+  const wsRetryRef = useRef(0);
 
   /* ================= LIFECYCLE ================= */
 
@@ -52,15 +57,16 @@ export function SecurityProvider({ children }) {
   }, []);
 
   /* ================= WS (ADVISORY ONLY) =================
-     - Never blocks platform
-     - Never retries aggressively
-     - Exists only to receive REAL alerts
+     - NEVER required for correctness
+     - NEVER blocks UI
+     - NEVER retries aggressively
   ======================================================== */
 
   const connectWS = useCallback(() => {
     if (!mountedRef.current) return;
     if (quietRef.current) return;
     if (socketRef.current) return;
+    if (wsRetryRef.current >= WS_MAX_RETRY) return;
 
     const token = getToken();
     if (!token) return;
@@ -82,7 +88,7 @@ export function SecurityProvider({ children }) {
     }
 
     ws.onopen = () => {
-      reconnectRef.current = 0;
+      wsRetryRef.current = 0;
       setWsStatus("connected");
     };
 
@@ -95,7 +101,7 @@ export function SecurityProvider({ children }) {
       }
 
       if (data?.type === "integrity_alert") {
-        quietRef.current = false;
+        // advisory confirmation only — REST remains source of truth
         setIntegrityAlert(data);
         setSystemStatus("compromised");
         bus.emit("security_threat_detected", data);
@@ -113,13 +119,6 @@ export function SecurityProvider({ children }) {
     ws.onclose = () => {
       socketRef.current = null;
       setWsStatus("quiet");
-
-      if (!mountedRef.current) return;
-      if (quietRef.current) return;
-      if (reconnectRef.current >= 1) return; // 🔇 single retry max
-
-      reconnectRef.current += 1;
-      setTimeout(connectWS, 5000);
     };
 
     ws.onerror = () => {
@@ -129,12 +128,13 @@ export function SecurityProvider({ children }) {
     };
 
     socketRef.current = ws;
+    wsRetryRef.current += 1;
   }, [bus]);
 
   /* ================= REST SECURITY TELEMETRY =================
-     - Single source of truth
-     - Slow cadence
-     - Silent on failure
+     - SINGLE SOURCE OF TRUTH
+     - SLOW CADENCE
+     - SILENT ON FAILURE
   ============================================================ */
 
   useEffect(() => {
@@ -153,24 +153,27 @@ export function SecurityProvider({ children }) {
         setRiskScore(score);
         setDomains(Array.isArray(summary.domains) ? summary.domains : []);
 
-        // 🔔 Escalate ONLY on real danger
+        const now = Date.now();
+
         if (score >= 75) {
           quietRef.current = false;
 
-          const now = Date.now();
-          if (now - lastAlertRef.current > 30000) {
+          if (now - lastAlertRef.current >= ALERT_COOLDOWN) {
             lastAlertRef.current = now;
 
-            setIntegrityAlert({
+            const alert = {
               type: "risk_threshold",
               score,
               ts: now,
-            });
+            };
 
+            setIntegrityAlert(alert);
             setSystemStatus("compromised");
-            bus.emit("security_threat_detected", { score });
 
-            // advisory WS connect
+            // 🔔 single controlled broadcast
+            bus.emit("security_threat_detected", alert);
+
+            // optional advisory channel
             connectWS();
           }
         } else {
