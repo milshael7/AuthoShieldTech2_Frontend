@@ -1,6 +1,7 @@
 // frontend/src/pages/TradingRoom.jsx
 // ============================================================
 // TRADING ROOM — REALTIME MARKET + PAPER ENGINE (ENTERPRISE)
+// AI decision stream + chart overlays
 // ============================================================
 
 import React, { useEffect, useRef, useState, useMemo } from "react";
@@ -27,6 +28,8 @@ export default function TradingRoom() {
 
   const [engineStatus, setEngineStatus] = useState("CONNECTED");
   const [engineMode, setEngineMode] = useState("Paper Trading");
+
+  const [decisions, setDecisions] = useState([]);
 
   /* ================= DERIVED DATA ================= */
 
@@ -72,7 +75,6 @@ export default function TradingRoom() {
       );
 
       const data = await res.json();
-
       if (!data?.ok) return;
 
       const formatted = (data.candles || []).map(c => ({
@@ -203,7 +205,6 @@ export default function TradingRoom() {
       });
 
       setPosition(snap.position || null);
-
       setTrades((snap.trades || []).slice(-10).reverse());
 
       if (snap.mode === "live") {
@@ -221,6 +222,36 @@ export default function TradingRoom() {
     loadPaper();
 
     const loop = setInterval(loadPaper, 4000);
+
+    return () => clearInterval(loop);
+
+  }, []);
+
+  /* ================= AI DECISIONS ================= */
+
+  async function loadDecisions() {
+
+    try {
+
+      const res = await fetch(`${API_BASE}/api/paper/decisions`, {
+        headers: authHeader(),
+      });
+
+      const data = await res.json();
+
+      if (!data?.ok) return;
+
+      setDecisions((data.decisions || []).slice(-12).reverse());
+
+    } catch {}
+
+  }
+
+  useEffect(() => {
+
+    loadDecisions();
+
+    const loop = setInterval(loadDecisions, 4000);
 
     return () => clearInterval(loop);
 
@@ -263,13 +294,7 @@ export default function TradingRoom() {
           height={460}
         />
 
-        {/* ACCOUNT */}
-
-        <div style={{
-          display: "flex",
-          gap: 20,
-          marginTop: 20
-        }}>
+        <div style={{ display: "flex", gap: 20, marginTop: 20 }}>
 
           <Panel title="Wallet">
             USD: ${wallet.usd.toFixed(2)} <br />
@@ -287,8 +312,6 @@ export default function TradingRoom() {
           </Panel>
 
         </div>
-
-        {/* TRADES */}
 
         <Panel title="Recent Trades" style={{ marginTop: 20 }}>
           {trades.length === 0 && (
@@ -319,9 +342,29 @@ export default function TradingRoom() {
         <div>Status: {engineStatus}</div>
         <div>Mode: {engineMode}</div>
 
-        <div style={{ marginTop: 20, opacity: 0.7 }}>
-          Live decision stream will appear here.
-        </div>
+        <h4 style={{ marginTop: 20 }}>
+          AI Decisions
+        </h4>
+
+        {decisions.length === 0 && (
+          <div style={{ opacity: 0.6 }}>
+            No AI decisions yet
+          </div>
+        )}
+
+        {decisions.map((d, i) => (
+          <div key={i} style={{
+            marginBottom: 10,
+            padding: 8,
+            background: "#0f172a",
+            borderRadius: 6
+          }}>
+            <strong>{d.action}</strong> {d.symbol}
+            <div style={{ fontSize: 12, opacity: 0.7 }}>
+              confidence {Math.round((d.confidence || 0) * 100)}%
+            </div>
+          </div>
+        ))}
 
       </div>
 
