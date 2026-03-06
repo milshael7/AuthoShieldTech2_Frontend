@@ -1,5 +1,6 @@
 // frontend/src/components/ExecutiveRiskBanner.jsx
 // Global Executive Command Banner — Reactive Command Edition
+// FIXED: API contract safe • shell-stable • no hard crashes
 
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
@@ -14,18 +15,26 @@ export default function ExecutiveRiskBanner() {
 
     async function load() {
       try {
-        const [riskRes, churnRes] = await Promise.all([
-          api.adminExecutiveRisk(),
-          api.adminPredictiveChurn(),
-        ]);
+        // Always load executive risk (required)
+        const riskRes = await api.adminExecutiveRisk();
+
+        // Predictive churn is OPTIONAL (may not exist yet)
+        let churnRes = null;
+        if (typeof api.adminPredictiveChurn === "function") {
+          try {
+            churnRes = await api.adminPredictiveChurn();
+          } catch {
+            churnRes = null;
+          }
+        }
 
         if (!alive) return;
 
         const executiveRisk = riskRes?.executiveRisk || null;
         const predictiveChurn = churnRes?.predictiveChurn || null;
 
-        const risk = executiveRisk?.riskIndex ?? 0;
-        const churn = predictiveChurn?.score ?? 0;
+        const risk = Number(executiveRisk?.riskIndex || 0);
+        const churn = Number(predictiveChurn?.score || 0);
 
         const nextSeverity =
           risk >= 75 || churn >= 75
@@ -34,21 +43,21 @@ export default function ExecutiveRiskBanner() {
             ? "elevated"
             : "stable";
 
-        // Broadcast only if changed
+        // Broadcast only on change
         if (previousSeverity.current !== nextSeverity) {
           window.dispatchEvent(
             new CustomEvent("executive:severity-change", {
               detail: { severity: nextSeverity },
             })
           );
-
           previousSeverity.current = nextSeverity;
         }
 
         setSeverity(nextSeverity);
         setData({ executiveRisk, predictiveChurn });
       } catch (e) {
-        console.error("ExecutiveRiskBanner error:", e);
+        // HARD RULE: never crash the shell
+        console.warn("ExecutiveRiskBanner soft failure:", e);
       }
     }
 
@@ -61,7 +70,8 @@ export default function ExecutiveRiskBanner() {
     };
   }, []);
 
-  // Soft page overlay for CRITICAL
+  /* ================= BODY EFFECT ================= */
+
   useEffect(() => {
     const body = document.body;
 
