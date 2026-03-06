@@ -62,6 +62,9 @@ import ManagerCommand from "./pages/manager/ManagerCommand.jsx";
 
 /* USER */
 import UserIndex from "./pages/user/index.jsx";
+import UserReports from "./pages/user/Reports.jsx";
+import Managed from "./pages/user/Managed.jsx";
+import Autoprotect from "./pages/user/Autoprotect.jsx";
 
 /* SECURITY */
 import SecurityOverview from "./components/security/SecurityOverview.jsx";
@@ -180,6 +183,9 @@ function AppRoutes({ user, ready }) {
       >
         <Route index element={<UserIndex />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="reports" element={<UserReports />} />
+        <Route path="managed" element={<Managed />} />
+        <Route path="autoprotect" element={<Autoprotect />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
@@ -253,7 +259,6 @@ export default function App() {
       <AIDecisionProvider>
         <BrainAdapter />
         <AutoDevEngine />
-
         <CompanyProvider>
           <ToolProvider user={user}>
             <SecurityProvider>
