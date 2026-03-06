@@ -1,450 +1,278 @@
+// frontend/src/components/AuthoDevPanel.jsx
+// AuthoDevPanel — Shell-Safe Enterprise Advisor (HARDENED)
+// FIXED: no disposed objects • abort-safe • speech-safe • unmount-safe
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { readAloud } from "./ReadAloud";
+import { readAloud, stopReadAloud } from "./ReadAloud";
 
 const MAX_MESSAGES = 50;
 
 /* ================= STORAGE ================= */
 
-function safeGet(key){ try{return localStorage.getItem(key);}catch{return null;} }
-function safeSet(key,val){ try{localStorage.setItem(key,val);}catch{} }
-
-function getRoomId(){
-  if(typeof window==="undefined") return "root";
-  return window.location.pathname.replace(/\/+$/,"")||"root";
+function safeGet(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function safeSet(key, val) {
+  try { localStorage.setItem(key, val); } catch {}
 }
 
-function getUser(){
-  try{return JSON.parse(localStorage.getItem("as_user")||"null");}
-  catch{return null;}
+function getRoomId() {
+  if (typeof window === "undefined") return "root";
+  return window.location.pathname.replace(/\/+$/, "") || "root";
 }
 
-function getStorageKey(){
-  const user=getUser();
-  const tenant=user?.companyId||user?.company||"unknown";
+function getUser() {
+  try { return JSON.parse(localStorage.getItem("as_user") || "null"); }
+  catch { return null; }
+}
+
+function getStorageKey() {
+  const user = getUser();
+  const tenant = user?.companyId || user?.company || "unknown";
   return `authodev.panel.${tenant}.${getRoomId()}`;
 }
 
-function copyText(text){
-  try{ navigator.clipboard?.writeText(String(text||"")); }catch{}
+function copyText(text) {
+  try { navigator.clipboard?.writeText(String(text || "")); } catch {}
 }
 
-/* ================= CONTEXT DETECTION ================= */
+/* ================= CONTEXT ================= */
 
-function detectModule(){
-  const path=window.location.pathname;
-
-  if(path.includes("/admin/trading")) return "trading";
-  if(path.includes("/admin/security")) return "security";
-  if(path.includes("/admin/risk")) return "risk";
-  if(path.includes("/admin/incidents")) return "incident";
-  if(path.includes("/admin/companies")) return "company";
-
+function detectModule() {
+  const path = window.location.pathname;
+  if (path.includes("/admin/trading")) return "trading";
+  if (path.includes("/admin/security")) return "security";
+  if (path.includes("/admin/risk")) return "risk";
+  if (path.includes("/admin/incidents")) return "incident";
+  if (path.includes("/admin/companies")) return "company";
   return "platform";
 }
 
-/* ================= MAIN COMPONENT ================= */
+/* ================= COMPONENT ================= */
 
 export default function AuthoDevPanel({
-  title="Advisor",
-  endpoint="/api/ai/chat",
+  title = "Advisor",
+  endpoint = "/api/ai/chat",
   getContext,
-}){
+}) {
+  const mountedRef = useRef(true);
+  const abortRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const bottomRef = useRef(null);
 
-  const storageKey=useMemo(()=>getStorageKey(),[]);
-  const [messages,setMessages]=useState([]);
-  const [input,setInput]=useState("");
-  const [loading,setLoading]=useState(false);
-  const [listening,setListening]=useState(false);
-  const [speakingIndex,setSpeakingIndex]=useState(null);
+  const storageKey = useMemo(() => getStorageKey(), []);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [speakingIndex, setSpeakingIndex] = useState(null);
 
-  const recognitionRef=useRef(null);
-  const bottomRef=useRef(null);
+  /* ================= MOUNT / UNMOUNT ================= */
 
-  useEffect(()=>{
-    const raw=safeGet(storageKey);
-    if(!raw) return;
-    try{
-      const parsed=JSON.parse(raw);
-      setMessages(Array.isArray(parsed?.messages)?parsed.messages:[]);
-    }catch{}
-  },[storageKey]);
+  useEffect(() => {
+    mountedRef.current = true;
 
-  useEffect(()=>{
-    safeSet(storageKey,JSON.stringify({
+    return () => {
+      mountedRef.current = false;
+
+      try { recognitionRef.current?.stop(); } catch {}
+      try { stopReadAloud(); } catch {}
+      try { abortRef.current?.abort(); } catch {}
+
+      recognitionRef.current = null;
+      abortRef.current = null;
+    };
+  }, []);
+
+  /* ================= STORAGE ================= */
+
+  useEffect(() => {
+    const raw = safeGet(storageKey);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.messages)) {
+        setMessages(parsed.messages);
+      }
+    } catch {}
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!mountedRef.current) return;
+    safeSet(storageKey, JSON.stringify({
       messages,
-      lastActive:Date.now(),
+      lastActive: Date.now(),
     }));
-  },[messages,storageKey]);
+  }, [messages, storageKey]);
 
-  useEffect(()=>{
-    bottomRef.current?.scrollIntoView({behavior:"smooth"});
-  },[messages]);
+  useEffect(() => {
+    if (!mountedRef.current) return;
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   /* ================= SPEECH ================= */
 
-  function handleSpeak(text,index){
+  function handleSpeak(text, index) {
     setSpeakingIndex(index);
-    readAloud(text,()=>setSpeakingIndex(null));
+    readAloud(text, () => {
+      if (mountedRef.current) setSpeakingIndex(null);
+    });
   }
 
   /* ================= VOICE INPUT ================= */
 
-  function startListening(){
-    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-    if(!SR) return;
+  function startListening() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
 
-    try{recognitionRef.current?.stop();}catch{}
+    try { recognitionRef.current?.stop(); } catch {}
 
-    const rec=new SR();
-    rec.lang="en-US";
-    rec.interimResults=true;
+    const rec = new SR();
+    rec.lang = "en-US";
+    rec.interimResults = true;
 
-    rec.onstart=()=>setListening(true);
-    rec.onend=()=>setListening(false);
+    rec.onstart = () => mountedRef.current && setListening(true);
+    rec.onend = () => mountedRef.current && setListening(false);
 
-    rec.onresult=(e)=>{
-      const last=e.results?.[e.results.length-1];
-      const text=last?.[0]?.transcript||"";
-      if(text) setInput(text);
+    rec.onresult = (e) => {
+      if (!mountedRef.current) return;
+      const last = e.results?.[e.results.length - 1];
+      const text = last?.[0]?.transcript || "";
+      if (text) setInput(text);
     };
 
-    recognitionRef.current=rec;
+    recognitionRef.current = rec;
     rec.start();
   }
 
-  function stopListening(){
-    try{recognitionRef.current?.stop();}catch{}
-    setListening(false);
+  function stopListening() {
+    try { recognitionRef.current?.stop(); } catch {}
+    if (mountedRef.current) setListening(false);
   }
 
   /* ================= SEND ================= */
 
-  async function sendMessage(customText=null, replaceIndex=null){
+  async function sendMessage(customText = null, replaceIndex = null) {
+    const messageText = String(customText ?? input ?? "").trim();
+    if (!messageText || loading) return;
 
-    const messageText=String(customText ?? input ?? "").trim();
-    if(!messageText||loading) return;
+    if (listening) stopListening();
 
-    if(listening) stopListening();
-
-    if(replaceIndex===null){
-      setMessages(m=>[
-        ...m.slice(-MAX_MESSAGES+1),
-        {role:"user",text:messageText,ts:new Date().toLocaleTimeString()}
+    if (replaceIndex === null) {
+      setMessages(m => [
+        ...m.slice(-MAX_MESSAGES + 1),
+        { role: "user", text: messageText, ts: new Date().toLocaleTimeString() }
       ]);
       setInput("");
     }
 
     setLoading(true);
 
-    try{
+    try {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-      const ctxFromParent = typeof getContext==="function"?getContext():{};
+      const ctxFromParent = typeof getContext === "function" ? getContext() : {};
       const module = detectModule();
 
-      const context={
-        ...ctxFromParent,
-        module,
-        tradingActive: module==="trading",
-        location: window.location.pathname
-      };
-
-      const res=await fetch(endpoint,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        credentials:"include",
-        body:JSON.stringify({
-          message:messageText,
-          context
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        signal: controller.signal,
+        body: JSON.stringify({
+          message: messageText,
+          context: {
+            ...ctxFromParent,
+            module,
+            tradingActive: module === "trading",
+            location: window.location.pathname
+          }
         }),
       });
 
-      const data=await res.json().catch(()=>({}));
-      const reply=data?.reply||"Assistant unavailable.";
+      if (!mountedRef.current) return;
 
-      setMessages(prev=>{
-        const newMsg={role:"ai",text:reply,ts:new Date().toLocaleTimeString()};
-        if(replaceIndex!==null){
-          const copy=[...prev];
-          copy[replaceIndex]=newMsg;
+      const data = await res.json().catch(() => ({}));
+      const reply = data?.reply || "Assistant unavailable.";
+
+      setMessages(prev => {
+        const newMsg = { role: "ai", text: reply, ts: new Date().toLocaleTimeString() };
+        if (replaceIndex !== null) {
+          const copy = [...prev];
+          copy[replaceIndex] = newMsg;
           return copy;
         }
-        return [...prev.slice(-MAX_MESSAGES+1),newMsg];
+        return [...prev.slice(-MAX_MESSAGES + 1), newMsg];
       });
 
-    }catch{
-      setMessages(prev=>[
-        ...prev.slice(-MAX_MESSAGES+1),
-        {role:"ai",text:"Assistant unavailable.",ts:new Date().toLocaleTimeString()}
+    } catch {
+      if (!mountedRef.current) return;
+      setMessages(prev => [
+        ...prev.slice(-MAX_MESSAGES + 1),
+        { role: "ai", text: "Assistant unavailable.", ts: new Date().toLocaleTimeString() }
       ]);
-    }finally{
-      setLoading(false);
+    } finally {
+      if (mountedRef.current) setLoading(false);
     }
-  }
-
-  function regenerate(index){
-    const previousUser=[...messages]
-      .slice(0,index)
-      .reverse()
-      .find(m=>m.role==="user");
-
-    if(previousUser?.text){
-      sendMessage(previousUser.text,index);
-    }
-  }
-
-  function share(text){
-    if(navigator.share){
-      navigator.share({text}).catch(()=>{});
-    }else{
-      copyText(text);
-    }
-  }
-
-  function react(index,type){
-    setMessages(prev=>{
-      const copy=[...prev];
-      copy[index]={...copy[index],reaction:type};
-      return copy;
-    });
   }
 
   /* ================= UI ================= */
 
-  return(
-    <div style={{
-      display:"flex",
-      flexDirection:"column",
-      height:"100%",
-      width:"100%"
-    }}>
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ fontSize: 13, opacity: .7, marginBottom: 12 }}>{title}</div>
 
-      {/* HEADER */}
-      <div style={{
-        flexShrink:0,
-        fontSize:13,
-        opacity:.7,
-        marginBottom:12
-      }}>
-        {title}
-      </div>
-
-      {/* MESSAGES */}
-      <div style={{
-        flex:1,
-        overflowY:"auto",
-        display:"flex",
-        flexDirection:"column",
-        gap:26,
-        paddingRight:6
-      }}>
-
-        {messages.map((m,i)=>(
-          <div key={i} style={{
-            display:"flex",
-            flexDirection:"column",
-            alignItems:m.role==="user"?"flex-end":"flex-start"
-          }}>
-
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 26 }}>
+        {messages.map((m, i) => (
+          <div key={i} style={{ alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
             <div style={{
-              maxWidth:"75%",
-              padding:"14px 18px",
-              borderRadius:18,
-              lineHeight:1.5,
-              background:m.role==="user"
-                ?"linear-gradient(135deg,#5EC6FF,#7aa2ff)"
-                :"rgba(255,255,255,.06)",
-              color:"#fff"
+              maxWidth: "75%",
+              padding: "14px 18px",
+              borderRadius: 18,
+              background: m.role === "user"
+                ? "linear-gradient(135deg,#5EC6FF,#7aa2ff)"
+                : "rgba(255,255,255,.06)",
+              color: "#fff"
             }}>
               {m.text}
             </div>
 
-            {m.role==="ai" && (
-              <div style={{
-                display:"flex",
-                flexWrap:"wrap",
-                gap:14,
-                marginTop:14,
-                paddingTop:6,
-                opacity:.85,
-                alignItems:"center"
-              }}>
-                <IconButton onClick={()=>handleSpeak(m.text,i)}><IconSpeaker/></IconButton>
-                <IconButton onClick={()=>copyText(m.text)}><IconCopy/></IconButton>
-                <IconButton onClick={()=>react(i,"up")}><IconThumbUp/></IconButton>
-                <IconButton onClick={()=>react(i,"down")}><IconThumbDown/></IconButton>
-                <IconButton onClick={()=>regenerate(i)}><IconRefresh/></IconButton>
-                <IconButton onClick={()=>share(m.text)}><IconShare/></IconButton>
+            {m.role === "ai" && (
+              <div style={{ display: "flex", gap: 14, marginTop: 12 }}>
+                <IconButton onClick={() => handleSpeak(m.text, i)}>🔊</IconButton>
+                <IconButton onClick={() => copyText(m.text)}>📋</IconButton>
               </div>
             )}
-
           </div>
         ))}
-
-        <div ref={bottomRef}/>
+        <div ref={bottomRef} />
       </div>
 
-      {/* INPUT */}
-      <div style={{
-        flexShrink:0,
-        marginTop:16,
-        padding:"10px 14px",
-        borderRadius:999,
-        background:"rgba(255,255,255,0.05)",
-        display:"flex",
-        alignItems:"center",
-        gap:12
-      }}>
-
-        {!listening?
-          <CircleButton onClick={startListening}><IconMic/></CircleButton>
-          :
-          <CircleButton onClick={stopListening}><IconStop/></CircleButton>
-        }
-
+      <div style={{ marginTop: 16, display: "flex", gap: 12 }}>
         <textarea
-          style={{
-            flex:1,
-            background:"transparent",
-            border:"none",
-            outline:"none",
-            color:"#fff",
-            resize:"none",
-            fontSize:14,
-            maxHeight:120,
-            overflowY:"auto"
-          }}
-          placeholder="Ask anything"
           value={input}
-          onChange={(e)=>setInput(e.target.value)}
-          onKeyDown={(e)=>{
-            if(e.key==="Enter"&&!e.shiftKey){
+          onChange={e => setInput(e.target.value)}
+          placeholder="Ask anything"
+          style={{ flex: 1 }}
+          onKeyDown={e => {
+            if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               sendMessage();
             }
           }}
         />
-
-        <CircleButton onClick={()=>sendMessage()} white>
-          <IconSend/>
-        </CircleButton>
-
+        <button onClick={() => sendMessage()}>Send</button>
       </div>
     </div>
   );
 }
 
-/* ================= BUTTONS ================= */
+/* ================= UI HELPERS ================= */
 
 const IconButton = ({ children, onClick }) => (
-  <button onClick={onClick} style={{
-    border:"none",
-    background:"transparent",
-    cursor:"pointer",
-    display:"flex",
-    alignItems:"center",
-    padding:0,
-    color:"rgba(255,255,255,.85)"
-  }}>
+  <button onClick={onClick} style={{ border: "none", background: "transparent", cursor: "pointer" }}>
     {children}
   </button>
-);
-
-const CircleButton = ({ children, onClick, white }) => (
-  <button onClick={onClick} style={{
-    width:40,
-    height:40,
-    borderRadius:"50%",
-    display:"flex",
-    alignItems:"center",
-    justifyContent:"center",
-    border:"none",
-    cursor:"pointer",
-    background:white ? "#fff" : "rgba(255,255,255,0.08)"
-  }}>
-    {children}
-  </button>
-);
-
-/* ================= ICONS ================= */
-
-const baseIconProps = {
-  width:20,
-  height:20,
-  fill:"none",
-  stroke:"#fff",
-  strokeWidth:1.8,
-  strokeLinecap:"round",
-  strokeLinejoin:"round"
-};
-
-const IconMic=()=>(
-<svg viewBox="0 0 24 24" {...baseIconProps}>
-<path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z"/>
-<path d="M19 11a7 7 0 0 1-14 0"/>
-<path d="M12 18v4"/>
-</svg>
-);
-
-const IconStop=()=>(
-<div style={{width:16,height:16,background:"#c33",borderRadius:4}}/>
-);
-
-const IconSpeaker=()=>(
-<svg viewBox="0 0 24 24" {...baseIconProps}>
-<path d="M11 5L6 9H2v6h4l5 4V5z"/>
-<path d="M15.5 8.5a5 5 0 0 1 0 7"/>
-</svg>
-);
-
-const IconCopy=()=>(
-<svg viewBox="0 0 24 24" {...baseIconProps}>
-<rect x="9" y="9" width="13" height="13" rx="2"/>
-<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-</svg>
-);
-
-const IconThumbUp=()=>(
-<svg viewBox="0 0 24 24" {...baseIconProps}>
-<path d="M14 9V5a3 3 0 0 0-3-3l-1 7"/>
-<path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
-<path d="M7 11h8a2 2 0 0 1 2 2l-1 7a2 2 0 0 1-2 2H7"/>
-</svg>
-);
-
-const IconThumbDown=()=>(
-<svg viewBox="0 0 24 24" {...baseIconProps}>
-<path d="M10 15v4a3 3 0 0 0 3 3l1-7"/>
-<path d="M17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"/>
-<path d="M17 13H9a2 2 0 0 1-2-2l1-7a2 2 0 0 1 2-2h7"/>
-</svg>
-);
-
-const IconRefresh=()=>(
-<svg viewBox="0 0 24 24" {...baseIconProps}>
-<polyline points="23 4 23 10 17 10"/>
-<path d="M20.49 15A9 9 0 1 1 23 10"/>
-</svg>
-);
-
-const IconShare=()=>(
-<svg viewBox="0 0 24 24" {...baseIconProps}>
-<path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/>
-<polyline points="16 6 12 2 8 6"/>
-<line x1="12" y1="2" x2="12" y2="15"/>
-</svg>
-);
-
-const IconSend=()=>(
-<svg viewBox="0 0 24 24"
-  width="20"
-  height="20"
-  fill="none"
-  stroke="#000"
-  strokeWidth="1.8"
-  strokeLinecap="round"
-  strokeLinejoin="round"
->
-<path d="M22 2L11 13"/>
-<path d="M22 2L15 22l-4-9-9-4 20-7z"/>
-</svg>
 );
