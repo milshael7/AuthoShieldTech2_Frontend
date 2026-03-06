@@ -5,20 +5,16 @@
 // Tool-driven • Entitlement-aware • Unified layout
 // ======================================================
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { req } from "../lib/api.js";
 import NotificationList from "../components/NotificationList.jsx";
 import PosturePanel from "../components/PosturePanel.jsx";
 
 /* ================= HELPERS ================= */
 
-function safeArray(v) {
-  return Array.isArray(v) ? v : [];
-}
-
-function safeStr(v, fallback = "—") {
-  return typeof v === "string" && v.trim() ? v : fallback;
-}
+const safeArray = (v) => (Array.isArray(v) ? v : []);
+const safeStr = (v, fallback = "—") =>
+  typeof v === "string" && v.trim() ? v : fallback;
 
 /* ================= PAGE ================= */
 
@@ -30,23 +26,17 @@ export default function User() {
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-
   const [postureKey, setPostureKey] = useState(0);
 
-  async function loadWorkspace() {
+  const loadWorkspace = useCallback(async () => {
     setLoading(true);
     setErr("");
 
     try {
-      const [
-        meRes,
-        entRes,
-        toolsRes,
-        eventsRes,
-      ] = await Promise.all([
+      const [meRes, entRes, toolsRes, eventsRes] = await Promise.all([
         req("/api/users/me"),
-        req("/api/entitlements/me"),
-        req("/api/security/tools"),
+        req("/api/entitlements/me", { silent: true }),
+        req("/api/security/tools", { silent: true }),
         req("/api/security/events", { silent: true }),
       ]);
 
@@ -54,23 +44,21 @@ export default function User() {
       setEntitlements(safeArray(entRes?.entitlements?.tools));
       setTools(safeArray(toolsRes?.tools));
       setNotifications(safeArray(eventsRes?.events || eventsRes));
-
     } catch (e) {
       setErr(e?.message || "Failed to load user workspace");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  function refreshPosture() {
+  const refreshPosture = () => {
     setPostureKey((k) => k + 1);
-  }
+  };
 
   useEffect(() => {
     loadWorkspace();
     refreshPosture();
-    // eslint-disable-next-line
-  }, []);
+  }, [loadWorkspace]);
 
   /* ================= DERIVED ================= */
 
@@ -85,7 +73,6 @@ export default function User() {
 
   return (
     <div className="grid">
-
       {/* ================= HEADER ================= */}
       <div className="card" style={{ gridColumn: "1 / -1" }}>
         <h2>User Security Workspace</h2>
@@ -183,7 +170,6 @@ export default function User() {
 
         <NotificationList items={notifications} />
       </div>
-
     </div>
   );
 }
