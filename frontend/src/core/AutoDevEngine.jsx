@@ -1,36 +1,56 @@
 // frontend/src/core/AutoDevEngine.jsx
 // ==========================================================
-// AUTODEV ENGINE — QUIET MODE v17
-// PASSIVE OBSERVER • NO SPAM • NO SELF-FEEDBACK
-// ESCALATES ONLY WHEN NECESSARY
+// AUTODEV ENGINE — QUIET MODE v18
+// PASSIVE • NON-INTRUSIVE • SECURITY-AWARE
+// OBSERVES ONLY • ESCALATES ONLY VIA SECURITY BUS
+// NO INTERNAL FEEDBACK LOOPS
 // ==========================================================
 
 import { useEffect, useRef } from "react";
 import { useEventBus } from "./EventBus.jsx";
 
-const ERROR_COOLDOWN = 30000; // 30s per error type
-const NETWORK_COOLDOWN = 60000; // 60s offline notice
+const ERROR_COOLDOWN = 60000;   // 60s per unique error
+const NETWORK_COOLDOWN = 120000; // 2 min offline notice
+const MAX_EMITS_PER_SESSION = 20;
 
 export default function AutoDevEngine() {
   const bus = useEventBus();
 
-  const lastErrorRef = useRef({});
-  const lastNetworkRef = useRef(0);
+  const lastEmitRef = useRef({});
+  const emitCountRef = useRef(0);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    function shouldEmit(key, cooldown) {
-      const now = Date.now();
-      const last = lastErrorRef.current[key] || 0;
-      if (now - last < cooldown) return false;
-      lastErrorRef.current[key] = now;
-      return true;
-    }
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
+  /* ================= EMIT GUARD ================= */
+
+  function canEmit(key, cooldown) {
+    if (!mountedRef.current) return false;
+    if (emitCountRef.current >= MAX_EMITS_PER_SESSION) return false;
+
+    const now = Date.now();
+    const last = lastEmitRef.current[key] || 0;
+    if (now - last < cooldown) return false;
+
+    lastEmitRef.current[key] = now;
+    emitCountRef.current += 1;
+    return true;
+  }
+
+  /* ================= JS ERROR OBSERVER ================= */
+
+  useEffect(() => {
     function handleError(event) {
-      const key = `error:${event.message}:${event.lineno}`;
-      if (!shouldEmit(key, ERROR_COOLDOWN)) return;
+      const key = `js:${event.message}:${event.lineno}`;
+      if (!canEmit(key, ERROR_COOLDOWN)) return;
 
-      bus.emit("autodev_error", {
+      bus.emit("autodev_observation", {
+        kind: "runtime_error",
         message: event.message,
         source: event.filename,
         line: event.lineno,
@@ -41,9 +61,10 @@ export default function AutoDevEngine() {
     function handlePromise(event) {
       const reason = String(event.reason || "unknown");
       const key = `promise:${reason}`;
-      if (!shouldEmit(key, ERROR_COOLDOWN)) return;
+      if (!canEmit(key, ERROR_COOLDOWN)) return;
 
-      bus.emit("autodev_promise_failure", {
+      bus.emit("autodev_observation", {
+        kind: "promise_rejection",
         reason,
         ts: Date.now(),
       });
@@ -58,18 +79,20 @@ export default function AutoDevEngine() {
     };
   }, [bus]);
 
+  /* ================= NETWORK OBSERVER ================= */
+
   useEffect(() => {
     const interval = setInterval(() => {
       if (!navigator.onLine) {
-        const now = Date.now();
-        if (now - lastNetworkRef.current < NETWORK_COOLDOWN) return;
-        lastNetworkRef.current = now;
+        const key = "network:offline";
+        if (!canEmit(key, NETWORK_COOLDOWN)) return;
 
-        bus.emit("autodev_network_offline", {
-          ts: now,
+        bus.emit("autodev_observation", {
+          kind: "network_offline",
+          ts: Date.now(),
         });
       }
-    }, 15000);
+    }, 20000);
 
     return () => clearInterval(interval);
   }, [bus]);
