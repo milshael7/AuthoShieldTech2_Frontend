@@ -60,6 +60,9 @@ import UserGovernance from "./pages/admin/UserGovernance.jsx";
 /* MANAGER */
 import ManagerCommand from "./pages/manager/ManagerCommand.jsx";
 
+/* USER */
+import UserIndex from "./pages/user/index.jsx";
+
 /* SECURITY */
 import SecurityOverview from "./components/security/SecurityOverview.jsx";
 import RiskMonitor from "./pages/RiskMonitor.jsx";
@@ -175,7 +178,7 @@ function AppRoutes({ user, ready }) {
           </PlatformGate>
         }
       >
-        <Route index element={<SecurityOverview />} />
+        <Route index element={<UserIndex />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
@@ -202,7 +205,6 @@ export default function App() {
         const token = getToken();
         const storedUser = getSavedUser();
 
-        // 🔧 FIX: ALWAYS resolve ready
         if (!token || !storedUser) {
           setUser(null);
           setReady(true);
@@ -242,7 +244,6 @@ export default function App() {
     bootAuth();
   }, [base]);
 
-  /* 🔇 QUIET MODE: nothing boots until auth decision is final */
   if (!ready) {
     return <div style={{ padding: 40 }}>Initializing platform…</div>;
   }
