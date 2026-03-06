@@ -1,6 +1,7 @@
 // frontend/src/components/AuthoDevPanel.jsx
 // AuthoDevPanel — Advisor v6.5 UI-RESTORED
 // UI CONTRACT PRESERVED • SHELL-SAFE • NO FEATURE REMOVALS
+// FIX: icon spacing tightened only (NO redesign)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { readAloud, stopReadAloud } from "./ReadAloud";
@@ -226,8 +227,8 @@ export default function AuthoDevPanel({
               <div
                 style={{
                   display: "flex",
-                  gap: 12,
-                  marginTop: 8,
+                  gap: 6,          // 🔧 TIGHTENED HERE (was 12+)
+                  marginTop: 6,    // 🔧 reduced vertical spacing
                   opacity: 0.75,
                 }}
               >
@@ -253,7 +254,7 @@ export default function AuthoDevPanel({
           background: "rgba(255,255,255,.05)",
           display: "flex",
           alignItems: "center",
-          gap: 12,
+          gap: 10, // 🔧 slightly tighter
         }}
       >
         <IconBtn onClick={!listening ? startListening : stopListening}>
@@ -307,20 +308,19 @@ const IconBtn = ({ children, onClick }) => (
   </button>
 );
 
+/* Icons unchanged */
 const IconSpeaker = () => (
   <svg viewBox="0 0 24 24" {...iconBase}>
     <path d="M11 5L6 9H2v6h4l5 4V5z" />
     <path d="M15.5 8.5a5 5 0 0 1 0 7" />
   </svg>
 );
-
 const IconCopy = () => (
   <svg viewBox="0 0 24 24" {...iconBase}>
     <rect x="9" y="9" width="13" height="13" rx="2" />
     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
   </svg>
 );
-
 const IconThumbUp = () => (
   <svg viewBox="0 0 24 24" {...iconBase}>
     <path d="M14 9V5a3 3 0 0 0-3-3l-1 7" />
@@ -328,7 +328,6 @@ const IconThumbUp = () => (
     <path d="M7 11h8a2 2 0 0 1 2 2l-1 7a2 2 0 0 1-2 2H7" />
   </svg>
 );
-
 const IconThumbDown = () => (
   <svg viewBox="0 0 24 24" {...iconBase}>
     <path d="M10 15v4a3 3 0 0 0 3 3l1-7" />
@@ -336,14 +335,12 @@ const IconThumbDown = () => (
     <path d="M17 13H9a2 2 0 0 1-2-2l1-7a2 2 0 0 1 2-2h7" />
   </svg>
 );
-
 const IconRefresh = () => (
   <svg viewBox="0 0 24 24" {...iconBase}>
     <polyline points="23 4 23 10 17 10" />
     <path d="M20.49 15A9 9 0 1 1 23 10" />
   </svg>
 );
-
 const IconShare = () => (
   <svg viewBox="0 0 24 24" {...iconBase}>
     <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
@@ -351,7 +348,6 @@ const IconShare = () => (
     <line x1="12" y1="2" x2="12" y2="15" />
   </svg>
 );
-
 const IconMic = () => (
   <svg viewBox="0 0 24 24" {...iconBase}>
     <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z" />
@@ -359,7 +355,6 @@ const IconMic = () => (
     <path d="M12 18v4" />
   </svg>
 );
-
 const IconSend = () => (
   <svg viewBox="0 0 24 24" {...iconBase}>
     <path d="M22 2L11 13" />
