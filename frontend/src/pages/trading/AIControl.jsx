@@ -1,9 +1,12 @@
 // frontend/src/pages/trading/AIControl.jsx
 // ============================================================
-// AI CONTROL ROOM — CORE MANAGEMENT PANEL
+// AI CONTROL ROOM — CONNECTED TO BACKEND ENGINE
 // ============================================================
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { getToken } from "../../lib/api.js";
+
+const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
 
 export default function AIControl() {
 
@@ -12,11 +15,82 @@ export default function AIControl() {
   const [riskPercent, setRiskPercent] = useState(1.5);
   const [positionMultiplier, setPositionMultiplier] = useState(1);
   const [aggressiveness, setAggressiveness] = useState("Balanced");
+  const [saving, setSaving] = useState(false);
+
+  /* ================= LOAD CONFIG ================= */
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  async function loadConfig() {
+
+    try {
+
+      const res = await fetch(`${API_BASE}/api/ai/config`, {
+        headers: authHeader()
+      });
+
+      const data = await res.json();
+
+      if (!data?.ok) return;
+
+      const cfg = data.config;
+
+      setEnabled(cfg.enabled);
+      setMaxTrades(cfg.maxTrades);
+      setRiskPercent(cfg.riskPercent);
+      setPositionMultiplier(cfg.positionMultiplier);
+      setAggressiveness(cfg.strategyMode);
+
+    } catch {}
+
+  }
+
+  /* ================= SAVE CONFIG ================= */
+
+  async function saveConfig() {
+
+    setSaving(true);
+
+    try {
+
+      await fetch(`${API_BASE}/api/ai/config`, {
+
+        method: "POST",
+
+        headers: {
+          ...authHeader(),
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+
+          enabled,
+          maxTrades: Number(maxTrades),
+          riskPercent: Number(riskPercent),
+          positionMultiplier: Number(positionMultiplier),
+          strategyMode: aggressiveness
+
+        })
+
+      });
+
+    } catch {}
+
+    setSaving(false);
+
+  }
+
+  /* ================= UI ================= */
 
   return (
+
     <div style={{ padding: 24, color: "#fff" }}>
 
-      <h2 style={{ marginBottom: 20 }}>AI Control Room</h2>
+      <h2 style={{ marginBottom: 20 }}>
+        AI Control Room
+      </h2>
 
       <div style={{
         background: "#111827",
@@ -26,9 +100,12 @@ export default function AIControl() {
         maxWidth: 800
       }}>
 
-        {/* AI STATUS */}
+        {/* STATUS */}
+
         <div style={{ marginBottom: 20 }}>
+
           <strong>AI Status:</strong>
+
           <button
             onClick={() => setEnabled(!enabled)}
             style={{
@@ -43,58 +120,41 @@ export default function AIControl() {
           >
             {enabled ? "ACTIVE" : "PAUSED"}
           </button>
+
         </div>
 
         {/* MAX TRADES */}
-        <div style={{ marginBottom: 20 }}>
-          <label>Max Trades Per Day:</label>
-          <input
-            type="number"
-            value={maxTrades}
-            onChange={(e) => setMaxTrades(e.target.value)}
-            style={{
-              marginLeft: 15,
-              padding: 6,
-              width: 100
-            }}
-          />
-        </div>
+
+        <Control
+          label="Max Trades Per Day"
+          value={maxTrades}
+          onChange={setMaxTrades}
+        />
 
         {/* RISK */}
-        <div style={{ marginBottom: 20 }}>
-          <label>Risk % Per Trade:</label>
-          <input
-            type="number"
-            step="0.1"
-            value={riskPercent}
-            onChange={(e) => setRiskPercent(e.target.value)}
-            style={{
-              marginLeft: 15,
-              padding: 6,
-              width: 100
-            }}
-          />
-        </div>
+
+        <Control
+          label="Risk % Per Trade"
+          value={riskPercent}
+          step="0.1"
+          onChange={setRiskPercent}
+        />
 
         {/* POSITION MULTIPLIER */}
-        <div style={{ marginBottom: 20 }}>
-          <label>Position Multiplier:</label>
-          <input
-            type="number"
-            step="0.1"
-            value={positionMultiplier}
-            onChange={(e) => setPositionMultiplier(e.target.value)}
-            style={{
-              marginLeft: 15,
-              padding: 6,
-              width: 100
-            }}
-          />
-        </div>
 
-        {/* AGGRESSIVENESS */}
+        <Control
+          label="Position Multiplier"
+          value={positionMultiplier}
+          step="0.1"
+          onChange={setPositionMultiplier}
+        />
+
+        {/* STRATEGY */}
+
         <div style={{ marginBottom: 20 }}>
+
           <label>Strategy Mode:</label>
+
           <select
             value={aggressiveness}
             onChange={(e) => setAggressiveness(e.target.value)}
@@ -104,9 +164,14 @@ export default function AIControl() {
             <option>Balanced</option>
             <option>Aggressive</option>
           </select>
+
         </div>
 
+        {/* SAVE BUTTON */}
+
         <button
+          onClick={saveConfig}
+          disabled={saving}
           style={{
             marginTop: 10,
             padding: "8px 18px",
@@ -117,10 +182,55 @@ export default function AIControl() {
             borderRadius: 6
           }}
         >
-          Save Configuration
+
+          {saving ? "Saving..." : "Save Configuration"}
+
         </button>
 
       </div>
+
     </div>
+
   );
+
+}
+
+/* ================= SMALL CONTROL COMPONENT ================= */
+
+function Control({ label, value, onChange, step = 1 }) {
+
+  return (
+
+    <div style={{ marginBottom: 20 }}>
+
+      <label>{label}:</label>
+
+      <input
+        type="number"
+        value={value}
+        step={step}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          marginLeft: 15,
+          padding: 6,
+          width: 100
+        }}
+      />
+
+    </div>
+
+  );
+
+}
+
+/* ================= AUTH HEADER ================= */
+
+function authHeader() {
+
+  const token = getToken();
+
+  return token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
+
 }
