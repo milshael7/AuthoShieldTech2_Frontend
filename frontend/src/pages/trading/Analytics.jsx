@@ -1,11 +1,13 @@
 // frontend/src/pages/trading/Analytics.jsx
 // ============================================================
 // ANALYTICS ROOM — INSTITUTIONAL AI PERFORMANCE DASHBOARD
+// Now includes Portfolio Allocation
 // ============================================================
 
 import React, { useEffect, useState } from "react";
 import { getToken } from "../../lib/api.js";
 import EquityCurve from "../../components/EquityCurve.jsx";
+import PortfolioAllocation from "../../components/PortfolioAllocation.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
 
@@ -45,8 +47,6 @@ export default function Analytics() {
       const pnl =
         trades.reduce((s,t)=>s+(t.profit||0),0);
 
-      /* PROFIT FACTOR */
-
       const grossProfit =
         wins.reduce((s,t)=>s+t.profit,0);
 
@@ -55,8 +55,6 @@ export default function Analytics() {
 
       const profitFactor =
         grossLoss ? grossProfit/grossLoss : 0;
-
-      /* SHARPE */
 
       const returns = trades.map(t=>t.profit||0);
 
@@ -192,6 +190,19 @@ export default function Analytics() {
           </div>
 
         </div>
+
+      </Panel>
+
+      {/* PORTFOLIO ALLOCATION */}
+
+      <Panel
+        title="Portfolio Allocation"
+        style={{marginTop:30}}
+      >
+
+        <PortfolioAllocation
+          trades={tradeLog}
+        />
 
       </Panel>
 
