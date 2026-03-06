@@ -1,5 +1,18 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// frontend/src/components/security/SecurityRadar.jsx
+// SecurityRadar — QUIET COMPLIANCE v18
+// PASSIVE • BACKOFF • NO CONSOLE NOISE • SIGNAL-ONLY
+// LOUD ONLY WHEN DATA IS VALID
+
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import { api } from "../lib/api";
+
+/* ================= UTIL ================= */
 
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
@@ -31,64 +44,73 @@ function riskTier(score) {
   return { level: "CRITICAL", desc: "Immediate action required", color: "#ff5a5f" };
 }
 
-function buildRecommendations(domains) {
-  if (!domains.length) return [];
-
-  const sorted = [...domains].sort((a, b) => a.coverage - b.coverage);
-  const weak = sorted.filter((d) => d.coverage < 75);
-
-  return weak.slice(0, 3).map((d) => ({
-    title: `Improve ${d.label}`,
-    priority:
-      d.coverage < 60
-        ? "High Priority"
-        : "Recommended Improvement",
-    message:
-      d.coverage < 60
-        ? `Coverage is critically low. Immediate deployment of additional controls is advised to reduce exposure.`
-        : `Coverage is below optimal levels. Strengthening this control will significantly improve your overall security posture.`,
-  }));
-}
+/* ================= COMPONENT ================= */
 
 export default function SecurityRadar() {
-  const [status, setStatus] = useState("Loading…");
+  const [status, setStatus] = useState("IDLE");
   const [posture, setPosture] = useState(null);
-  const canvasRef = useRef(null);
 
-  async function load() {
+  const canvasRef = useRef(null);
+  const timerRef = useRef(null);
+  const failureRef = useRef(0);
+  const quietRef = useRef(false);
+
+  /* ================= SAFE LOAD ================= */
+
+  const load = useCallback(async () => {
+    if (quietRef.current) return;
+
     try {
       const data = await api.postureSummary();
+
+      if (!data || typeof data !== "object") {
+        throw new Error("invalid_payload");
+      }
+
       setPosture(data);
       setStatus("LIVE");
-    } catch (e) {
-      console.error("SecurityRadar error:", e);
-      setStatus("ERROR");
+
+      failureRef.current = 0;
+    } catch {
+      failureRef.current += 1;
+      setStatus("DEGRADED");
+
+      // 🔇 after 3 failures, go quiet
+      if (failureRef.current >= 3) {
+        quietRef.current = true;
+        setStatus("QUIET");
+      }
     }
-  }
+  }, []);
+
+  /* ================= BOOT ================= */
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 10000);
-    return () => clearInterval(t);
-  }, []);
 
-  useEffect(() => {
-    const handler = () => load();
-    window.addEventListener("security:refresh", handler);
-    return () => window.removeEventListener("security:refresh", handler);
-  }, []);
+    timerRef.current = setInterval(() => {
+      if (!quietRef.current) load();
+    }, 30000); // slower, safer, quieter
 
-  const domains = useMemo(() => posture?.domains || [], [posture]);
+    return () => clearInterval(timerRef.current);
+  }, [load]);
+
+  /* ================= DATA ================= */
+
+  const domains = useMemo(
+    () => Array.isArray(posture?.domains) ? posture.domains : [],
+    [posture]
+  );
+
   const score = posture?.score || 0;
   const gradeInfo = gradeFromScore(score);
   const tier = riskTier(score);
-  const recommendations = buildRecommendations(domains);
 
   /* ================= RADAR DRAW ================= */
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !domains.length) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -96,24 +118,19 @@ export default function SecurityRadar() {
     const dpr = window.devicePixelRatio || 1;
     const cssW = canvas.clientWidth;
     const cssH = canvas.clientHeight;
-    canvas.width = Math.floor(cssW * dpr);
-    canvas.height = Math.floor(cssH * dpr);
+
+    canvas.width = cssW * dpr;
+    canvas.height = cssH * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     ctx.clearRect(0, 0, cssW, cssH);
 
-    const bg = ctx.createLinearGradient(0, 0, 0, cssH);
-    bg.addColorStop(0, "rgba(20,25,35,0.7)");
-    bg.addColorStop(1, "rgba(10,14,20,0.85)");
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, cssW, cssH);
-
-    const n = domains.length || 1;
     const cx = cssW * 0.5;
     const cy = cssH * 0.55;
     const R = Math.min(cssW, cssH) * 0.32;
+    const n = domains.length;
 
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
     ctx.lineWidth = 1;
 
     for (let k = 1; k <= 5; k++) {
@@ -123,30 +140,25 @@ export default function SecurityRadar() {
         const a = (Math.PI * 2 * i) / n - Math.PI / 2;
         const x = cx + Math.cos(a) * r;
         const y = cy + Math.sin(a) * r;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
       }
       ctx.closePath();
       ctx.stroke();
     }
 
-    if (!domains.length) return;
-
-    ctx.fillStyle = "rgba(94,198,255,0.25)";
-    ctx.strokeStyle = "rgba(94,198,255,0.95)";
-    ctx.lineWidth = 2;
-
     ctx.beginPath();
-    for (let i = 0; i < n; i++) {
-      const d = domains[i];
+    domains.forEach((d, i) => {
       const cov = clamp((Number(d.coverage) || 0) / 100, 0, 1);
       const a = (Math.PI * 2 * i) / n - Math.PI / 2;
       const x = cx + Math.cos(a) * R * cov;
       const y = cy + Math.sin(a) * R * cov;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
     ctx.closePath();
+
+    ctx.fillStyle = "rgba(94,198,255,0.25)";
+    ctx.strokeStyle = "rgba(94,198,255,0.9)";
+    ctx.lineWidth = 2;
     ctx.fill();
     ctx.stroke();
   }, [domains]);
@@ -208,37 +220,6 @@ export default function SecurityRadar() {
           }}
         />
       </div>
-
-      {recommendations.length > 0 && (
-        <div style={{ marginTop: 30 }}>
-          <h4 style={{ marginBottom: 12 }}>
-            Executive Action Recommendations
-          </h4>
-
-          {recommendations.map((rec, i) => (
-            <div
-              key={i}
-              style={{
-                padding: 16,
-                borderRadius: 14,
-                marginBottom: 14,
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>
-                {rec.title}
-              </div>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>
-                {rec.priority}
-              </div>
-              <div style={{ marginTop: 6 }}>
-                {rec.message}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
