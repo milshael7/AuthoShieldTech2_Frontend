@@ -1,29 +1,32 @@
 // frontend/src/pages/Company.jsx
-// Company Workspace — Scoped Organization Control Layer
-// No global visibility
-// No admin override
-// Internal user governance only
+// ======================================================
+// COMPANY WORKSPACE — ORGANIZATION CONTROL
+// Strict tenant scope • No global visibility
+// Backend-aligned • No phantom APIs
+// ======================================================
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
-import NotificationList from "../components/NotificationList.jsx";
 import PosturePanel from "../components/PosturePanel.jsx";
 import { useCompany } from "../context/CompanyContext";
 
-function safeArray(v) {
-  return Array.isArray(v) ? v : [];
-}
+/* ================= HELPERS ================= */
+
+const arr = (v) => (Array.isArray(v) ? v : []);
+
+/* ================= PAGE ================= */
 
 export default function Company() {
   const { setCompany } = useCompany();
 
   const [company, setCompanyData] = useState(null);
-  const [notes, setNotes] = useState([]);
-  const [memberId, setMemberId] = useState("");
-  const [memberDetails, setMemberDetails] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [incidents, setIncidents] = useState([]);
+
+  const [newMemberId, setNewMemberId] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-
   const [postureKey, setPostureKey] = useState(0);
 
   async function loadRoom() {
@@ -31,24 +34,26 @@ export default function Company() {
     setErr("");
 
     try {
-      const [c, n, members] = await Promise.all([
-        api.companyMe(),
-        api.companyNotifications(),
-        api.companyMembers?.() || Promise.resolve({ users: [] }),
+      const [companies, users, ev, inc] = await Promise.all([
+        api.listCompanies(),
+        api.listUsers(),
+        api.securityEvents(),
+        api.incidents(),
       ]);
 
-      setCompanyData(c || null);
-      setNotes(safeArray(n));
-      setMemberDetails(safeArray(members?.users));
+      const c =
+        arr(companies?.companies || companies).find(
+          (x) => x.id
+        ) || null;
 
-      // 🔥 LOCK CONTEXT TO THIS COMPANY
+      setCompanyData(c);
+      setMembers(arr(users));
+      setEvents(arr(ev?.events));
+      setIncidents(arr(inc?.incidents));
+
       if (c?.id) {
-        setCompany({
-          id: c.id,
-          name: c.name,
-        });
+        setCompany({ id: c.id, name: c.name });
       }
-
     } catch (e) {
       setErr(e?.message || "Failed to load company workspace");
     } finally {
@@ -56,176 +61,124 @@ export default function Company() {
     }
   }
 
-  function refreshPosture() {
-    setPostureKey((k) => k + 1);
-  }
-
   useEffect(() => {
     loadRoom();
-    refreshPosture();
+    setPostureKey((k) => k + 1);
   }, []);
 
-  const stats = useMemo(() => {
-    return {
-      total: memberDetails.length,
-      mfaEnabled: memberDetails.filter((u) => u.mfa === true).length,
-      locked: memberDetails.filter((u) => u.locked === true).length,
-    };
-  }, [memberDetails]);
+  /* ================= ACTIONS ================= */
 
   async function addMember() {
-    try {
-      const id = memberId.trim();
-      if (!id) return;
-      await api.companyAddMember(id);
-      setMemberId("");
-      await loadRoom();
-      refreshPosture();
-    } catch (e) {
-      alert(e.message);
-    }
+    if (!company || !newMemberId.trim()) return;
+
+    await api.req(`/api/company/${company.id}/members`, {
+      method: "POST",
+      body: { userId: newMemberId.trim() },
+    });
+
+    setNewMemberId("");
+    loadRoom();
   }
 
-  async function removeMember(id) {
-    try {
-      await api.companyRemoveMember(id);
-      await loadRoom();
-      refreshPosture();
-    } catch (e) {
-      alert(e.message);
-    }
+  async function removeMember(userId) {
+    if (!company) return;
+
+    await api.req(
+      `/api/company/${company.id}/members/${userId}`,
+      { method: "DELETE" }
+    );
+
+    loadRoom();
   }
 
-  async function markRead(id) {
-    try {
-      await api.companyMarkRead(id);
-      await loadRoom();
-    } catch (e) {
-      alert(e.message);
-    }
-  }
+  /* ================= STATS ================= */
+
+  const stats = useMemo(
+    () => ({
+      members: members.length,
+      incidents: incidents.length,
+      events: events.length,
+    }),
+    [members, incidents, events]
+  );
+
+  /* ================= UI ================= */
 
   return (
     <div className="grid">
 
-      {/* ================= HEADER ================= */}
-      <div className="card" style={{ gridColumn: "1 / -1" }}>
-        <h2>Organization Control Workspace</h2>
+      <div className="card">
+        <h2>Company Workspace</h2>
+        {company && <small>{company.name}</small>}
 
-        {company && (
-          <>
-            <div className="pill">
-              <b>{company.name}</b>
-              <span className="badge">{company.sizeTier}</span>
-            </div>
-
-            <small style={{ opacity: 0.6 }}>
-              Company-level governance. Internal visibility only.
-              No cross-organization access.
-            </small>
-          </>
-        )}
-
-        <div style={{ height: 12 }} />
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ marginTop: 12 }}>
           <button onClick={loadRoom} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh Workspace"}
+            {loading ? "Refreshing…" : "Refresh"}
           </button>
-
-          <button onClick={refreshPosture}>
+          <button onClick={() => setPostureKey((k) => k + 1)}>
             Refresh Posture
           </button>
         </div>
 
-        {err && <p className="error" style={{ marginTop: 10 }}>{err}</p>}
+        {err && <p className="error">{err}</p>}
       </div>
 
-      {/* ================= POSTURE ================= */}
-      <div style={{ gridColumn: "1 / -1" }}>
-        <PosturePanel
-          key={postureKey}
-          title="Company Security Posture"
-          subtitle="Aggregate internal security health"
-        />
+      <PosturePanel
+        key={postureKey}
+        title="Company Security Posture"
+        subtitle="Tenant-scoped security health"
+      />
+
+      <div className="kpi">
+        <div><b>{stats.members}</b><span>Members</span></div>
+        <div><b>{stats.incidents}</b><span>Incidents</span></div>
+        <div><b>{stats.events}</b><span>Security Events</span></div>
       </div>
 
-      {/* ================= MEMBER STATS ================= */}
       <div className="card">
-        <h3>Member Overview</h3>
-
-        <div className="kpi">
-          <div><b>{stats.total}</b><span>Total Members</span></div>
-          <div><b>{stats.mfaEnabled}</b><span>MFA Enabled</span></div>
-          <div><b>{stats.locked}</b><span>Locked Accounts</span></div>
-        </div>
-      </div>
-
-      {/* ================= MEMBER MANAGEMENT ================= */}
-      <div className="card">
-        <h3>Member Governance</h3>
-
-        <div style={{ height: 10 }} />
+        <h3>Member Management</h3>
 
         <div className="row">
-          <div className="col">
-            <input
-              placeholder="Member userId"
-              value={memberId}
-              onChange={(e) => setMemberId(e.target.value)}
-            />
-          </div>
-          <div className="col">
-            <button onClick={addMember} disabled={!memberId.trim()}>
-              Add Member
-            </button>
-          </div>
+          <input
+            placeholder="User ID"
+            value={newMemberId}
+            onChange={(e) => setNewMemberId(e.target.value)}
+          />
+          <button onClick={addMember}>Add</button>
         </div>
 
-        <div style={{ height: 16 }} />
-
-        <div className="tableWrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>MFA</th>
-                <th>Status</th>
-                <th>Action</th>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {members.map((u) => (
+              <tr key={u.id}>
+                <td>{u.email}</td>
+                <td>{u.role}</td>
+                <td>{u.subscriptionStatus}</td>
+                <td>
+                  <button onClick={() => removeMember(u.id)}>
+                    Remove
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {memberDetails.map((u) => (
-                <tr key={u.id}>
-                  <td><small>{u.name}</small></td>
-                  <td><small>{u.email}</small></td>
-                  <td><small>{u.mfa ? "Enabled" : "Disabled"}</small></td>
-                  <td><small>{u.locked ? "Locked" : "Active"}</small></td>
-                  <td>
-                    <button onClick={() => removeMember(u.id)}>
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
+            ))}
 
-              {memberDetails.length === 0 && (
-                <tr>
-                  <td colSpan={5}>
-                    <small className="muted">No members registered.</small>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ================= NOTIFICATIONS ================= */}
-      <div className="card">
-        <h3>Organization Notifications</h3>
-        <NotificationList items={notes} onRead={markRead} />
+            {members.length === 0 && (
+              <tr>
+                <td colSpan={4}>
+                  <small>No members</small>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
     </div>
