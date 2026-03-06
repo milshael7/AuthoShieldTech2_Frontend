@@ -1,24 +1,30 @@
 // frontend/src/core/AutoDevEngine.jsx
 // ==========================================================
-// AUTODEV ENGINE — QUIET MODE v18
+// AUTODEV ENGINE — QUIET MODE v19
 // PASSIVE • NON-INTRUSIVE • SECURITY-AWARE
-// OBSERVES ONLY • ESCALATES ONLY VIA SECURITY BUS
-// NO INTERNAL FEEDBACK LOOPS
+// OBSERVES ONLY • ESCALATES ONLY VIA EVENT BUS
+// HARD CAPPED • NO INTERNAL FEEDBACK LOOPS
 // ==========================================================
 
 import { useEffect, useRef } from "react";
 import { useEventBus } from "./EventBus.jsx";
 
-const ERROR_COOLDOWN = 60000;   // 60s per unique error
-const NETWORK_COOLDOWN = 120000; // 2 min offline notice
-const MAX_EMITS_PER_SESSION = 20;
+/* ================= CONFIG ================= */
+
+const ERROR_COOLDOWN = 60000;      // 60s per unique error
+const NETWORK_COOLDOWN = 120000;  // 2 min offline notice
+const MAX_EMITS_PER_SESSION = 15; // hard ceiling (lowered)
+
+/* ================= ENGINE ================= */
 
 export default function AutoDevEngine() {
   const bus = useEventBus();
 
   const lastEmitRef = useRef({});
   const emitCountRef = useRef(0);
-  const mountedRef = useRef(true);
+  const mountedRef = useRef(false);
+
+  /* ================= LIFECYCLE ================= */
 
   useEffect(() => {
     mountedRef.current = true;
@@ -46,14 +52,16 @@ export default function AutoDevEngine() {
 
   useEffect(() => {
     function handleError(event) {
+      if (!event?.message) return;
+
       const key = `js:${event.message}:${event.lineno}`;
       if (!canEmit(key, ERROR_COOLDOWN)) return;
 
       bus.emit("autodev_observation", {
         kind: "runtime_error",
         message: event.message,
-        source: event.filename,
-        line: event.lineno,
+        source: event.filename || null,
+        line: event.lineno || null,
         ts: Date.now(),
       });
     }
@@ -92,7 +100,7 @@ export default function AutoDevEngine() {
           ts: Date.now(),
         });
       }
-    }, 20000);
+    }, 30000); // slower cadence
 
     return () => clearInterval(interval);
   }, [bus]);
