@@ -1,17 +1,30 @@
-// frontend/src/pages/trading/Market.jsx
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import "../../styles/terminal.css";
 
 /**
- * Market.jsx — CLEAN VERSION (NO BRAND WATERMARK)
+ * Market.jsx — MULTI-ASSET PORTFOLIO MARKET
  */
 
-const SYMBOLS = [
-  "OANDA:EURUSD",
-  "OANDA:GBPUSD",
-  "BINANCE:BTCUSDT",
-  "BINANCE:ETHUSDT",
-];
+const SYMBOL_GROUPS = {
+  Crypto: [
+    "BINANCE:BTCUSDT",
+    "BINANCE:ETHUSDT",
+    "BINANCE:SOLUSDT",
+  ],
+  Forex: [
+    "OANDA:EURUSD",
+    "OANDA:GBPUSD",
+  ],
+  Indices: [
+    "FOREXCOM:SPXUSD",
+    "FOREXCOM:NSXUSD",
+  ],
+  Commodities: [
+    "FOREXCOM:XAUUSD",
+  ]
+};
+
+const ALL_SYMBOLS = Object.values(SYMBOL_GROUPS).flat();
 
 const SNAP_POS = { x: 16, y: 110 };
 const SNAP_DELAY = 2200;
@@ -22,7 +35,7 @@ export default function Market({
   tradesUsed = 0,
 }) {
 
-  const [symbol, setSymbol] = useState(SYMBOLS[0]);
+  const [symbol, setSymbol] = useState(ALL_SYMBOLS[0]);
   const [tf, setTf] = useState("D");
   const [side, setSide] = useState("BUY");
 
@@ -35,7 +48,7 @@ export default function Market({
 
   const limitReached = tradesUsed >= dailyLimit;
 
-  /* ================= TRADINGVIEW EMBED ================= */
+  /* ================= TRADINGVIEW ================= */
 
   const tvSrc = useMemo(() => {
     const params = new URLSearchParams({
@@ -45,12 +58,15 @@ export default function Market({
       style: "1",
       locale: "en",
     });
+
     return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
+
   }, [symbol, tf]);
 
   /* ================= DRAG LOGIC ================= */
 
   const clampToViewport = useCallback((x, y) => {
+
     const padding = 12;
     const maxX = window.innerWidth - 320;
     const maxY = window.innerHeight - 420;
@@ -59,9 +75,11 @@ export default function Market({
       x: Math.max(padding, Math.min(maxX, x)),
       y: Math.max(padding, Math.min(maxY, y)),
     };
+
   }, []);
 
   const startDrag = useCallback((e) => {
+
     const t = e.touches ? e.touches[0] : e;
 
     dragData.current = {
@@ -72,9 +90,11 @@ export default function Market({
 
     setDocked(false);
     clearTimeout(snapTimer.current);
+
   }, [pos]);
 
   const onMove = useCallback((e) => {
+
     if (!dragData.current.dragging) return;
 
     const t = e.touches ? e.touches[0] : e;
@@ -85,9 +105,11 @@ export default function Market({
     );
 
     setPos(newPos);
+
   }, [clampToViewport]);
 
   const endDrag = useCallback(() => {
+
     if (!dragData.current.dragging) return;
 
     dragData.current.dragging = false;
@@ -96,9 +118,11 @@ export default function Market({
       setDocked(true);
       setPos(SNAP_POS);
     }, SNAP_DELAY);
+
   }, []);
 
   useEffect(() => {
+
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", endDrag);
     window.addEventListener("touchmove", onMove);
@@ -111,57 +135,84 @@ export default function Market({
       window.removeEventListener("touchend", endDrag);
       clearTimeout(snapTimer.current);
     };
+
   }, [onMove, endDrag]);
 
   function togglePanel() {
+
     if (limitReached) return;
 
     clearTimeout(snapTimer.current);
-    setPanelOpen((v) => !v);
+
+    setPanelOpen(v => !v);
     setDocked(true);
     setPos(SNAP_POS);
+
   }
 
   /* ================= UI ================= */
 
   return (
+
     <div className={`terminalRoot ${mode === "live" ? "liveMode" : ""}`}>
 
       <div className={`marketBanner ${mode === "live" ? "warn" : ""}`}>
+
         <b>Mode:</b> {mode.toUpperCase()} •
         <b> Trades Used:</b> {tradesUsed}/{dailyLimit}
+
         {limitReached && (
-          <span className="warnText"> — Daily trade limit reached</span>
+          <span className="warnText">
+            {" "}— Daily trade limit reached
+          </span>
         )}
+
       </div>
 
+      {/* TOP BAR */}
+
       <header className="tvTopBar">
+
         <div className="tvTopLeft">
 
           <select
             className="tvSelect"
             value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
+            onChange={(e)=>setSymbol(e.target.value)}
           >
-            {SYMBOLS.map((s) => (
-              <option key={s} value={s}>{s}</option>
+
+            {Object.entries(SYMBOL_GROUPS).map(([group,list])=>(
+              <optgroup key={group} label={group}>
+
+                {list.map(s=>(
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+
+              </optgroup>
             ))}
+
           </select>
 
           <div className="tvTfRow">
-            {["1", "5", "15", "60", "D"].map((x) => (
+
+            {["1","5","15","60","D"].map(x=>(
               <button
                 key={x}
-                className={tf === x ? "tvPill active" : "tvPill"}
-                onClick={() => setTf(x)}
+                className={tf===x?"tvPill active":"tvPill"}
+                onClick={()=>setTf(x)}
               >
                 {x}
               </button>
             ))}
+
           </div>
+
         </div>
 
         <div className="tvTopRight">
+
           <button
             className="tvPrimary"
             onClick={togglePanel}
@@ -169,12 +220,15 @@ export default function Market({
           >
             Prepare Trade
           </button>
+
         </div>
+
       </header>
 
       <div className={`tvBody ${panelOpen && docked ? "withPanel" : ""}`}>
 
         <main className="tvChartArea">
+
           <iframe
             className="tvIframe"
             title="market-chart"
@@ -184,10 +238,13 @@ export default function Market({
             sandbox="allow-scripts allow-same-origin"
             referrerPolicy="no-referrer"
           />
+
         </main>
 
         {panelOpen && docked && (
+
           <aside className="dockPanel">
+
             <TradePanel
               symbol={symbol}
               side={side}
@@ -195,15 +252,20 @@ export default function Market({
               onClose={togglePanel}
               mode={mode}
             />
+
           </aside>
+
         )}
+
       </div>
 
       {panelOpen && !docked && (
+
         <div
           className="floatingPanel"
           style={{ left: pos.x, top: pos.y }}
         >
+
           <TradePanel
             symbol={symbol}
             side={side}
@@ -213,11 +275,15 @@ export default function Market({
             draggable
             onDragStart={startDrag}
           />
+
         </div>
+
       )}
 
     </div>
+
   );
+
 }
 
 /* ================= TRADE PANEL ================= */
@@ -231,8 +297,11 @@ function TradePanel({
   draggable,
   onDragStart,
 }) {
+
   return (
+
     <div className="tradePanel">
+
       <header
         className="tpHeader"
         onMouseDown={draggable ? onDragStart : undefined}
@@ -243,31 +312,36 @@ function TradePanel({
       </header>
 
       <div className="orderSide">
+
         <button
-          className={`orderBtn sell ${side === "SELL" ? "active" : ""}`}
-          onClick={() => setSide("SELL")}
+          className={`orderBtn sell ${side==="SELL"?"active":""}`}
+          onClick={()=>setSide("SELL")}
         >
           SELL
         </button>
 
         <button
-          className={`orderBtn buy ${side === "BUY" ? "active" : ""}`}
-          onClick={() => setSide("BUY")}
+          className={`orderBtn buy ${side==="BUY"?"active":""}`}
+          onClick={()=>setSide("BUY")}
         >
           BUY
         </button>
+
       </div>
 
       <input className="tradeInput" placeholder="Reference Price" />
       <input className="tradeInput" placeholder="Position Size" />
 
-      <button className={`tvPrimary full ${mode === "live" ? "warn" : ""}`}>
+      <button className={`tvPrimary full ${mode==="live"?"warn":""}`}>
         Queue {side} Intent
       </button>
 
-      <small className="muted" style={{ marginTop: 8 }}>
+      <small className="muted" style={{marginTop:8}}>
         Trade intent only. Execution occurs in Trading Control Room.
       </small>
+
     </div>
+
   );
+
 }
