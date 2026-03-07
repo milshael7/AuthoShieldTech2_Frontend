@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from "react";
-import { createChart } from "lightweight-charts";
+import { createChart, CrosshairMode } from "lightweight-charts";
 
 /**
  * TerminalChart — Institutional Trading Chart
@@ -49,7 +49,7 @@ export default function TerminalChart({
     return volume.map((v) => ({
       time: Number(v.time),
       value: Number(v.value),
-      color: v.color || "rgba(59,130,246,.45)",
+      color: v.color || "rgba(100,116,139,.45)",
     }));
   }, [volume]);
 
@@ -70,8 +70,7 @@ export default function TerminalChart({
 
     for (let i = 20; i < candleData.length; i++) {
 
-      const slice =
-        candleData.slice(i - 20, i);
+      const slice = candleData.slice(i - 20, i);
 
       const avg =
         slice.reduce((s, c) => s + c.close, 0) /
@@ -94,17 +93,9 @@ export default function TerminalChart({
 
     const tradeMarkers = trades.map((t) => ({
       time: Number(t.time),
-      position: t.side === "BUY"
-        ? "belowBar"
-        : "aboveBar",
-      color:
-        t.side === "BUY"
-          ? "#22c55e"
-          : "#ef4444",
-      shape:
-        t.side === "BUY"
-          ? "arrowUp"
-          : "arrowDown",
+      position: t.side === "BUY" ? "belowBar" : "aboveBar",
+      color: t.side === "BUY" ? "#22c55e" : "#ef4444",
+      shape: t.side === "BUY" ? "arrowUp" : "arrowDown",
       text: t.side,
     }));
 
@@ -136,30 +127,31 @@ export default function TerminalChart({
       height,
 
       layout: {
-        background: { color: "rgba(0,0,0,0.18)" },
-        textColor: "rgba(255,255,255,0.78)",
+        background: { color: "#0b1220" },
+        textColor: "#9ca3af",
       },
 
       grid: {
-        vertLines: { color: "rgba(255,255,255,0.06)" },
-        horzLines: { color: "rgba(255,255,255,0.06)" },
+        vertLines: { color: "rgba(148,163,184,.05)" },
+        horzLines: { color: "rgba(148,163,184,.05)" },
       },
 
       rightPriceScale: {
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "rgba(148,163,184,.15)",
       },
 
       leftPriceScale: {
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "rgba(148,163,184,.15)",
       },
 
       crosshair: {
-        mode: 1,
+        mode: CrosshairMode.Normal,
       },
 
       timeScale: {
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "rgba(148,163,184,.15)",
         timeVisible: true,
+        secondsVisible: false,
       },
 
     });
@@ -168,14 +160,14 @@ export default function TerminalChart({
 
     const candleSeries = chart.addCandlestickSeries({
 
-      upColor: "rgba(43,213,118,0.85)",
-      downColor: "rgba(255,90,95,0.85)",
+      upColor: "#22c55e",
+      downColor: "#ef4444",
 
-      borderUpColor: "rgba(43,213,118,0.85)",
-      borderDownColor: "rgba(255,90,95,0.85)",
+      borderUpColor: "#22c55e",
+      borderDownColor: "#ef4444",
 
-      wickUpColor: "rgba(255,255,255,0.55)",
-      wickDownColor: "rgba(255,255,255,0.55)",
+      wickUpColor: "#22c55e",
+      wickDownColor: "#ef4444",
 
     });
 
@@ -193,7 +185,7 @@ export default function TerminalChart({
       priceScaleId: "",
 
       scaleMargins: {
-        top: 0.8,
+        top: 0.82,
         bottom: 0,
       },
 
@@ -247,14 +239,11 @@ export default function TerminalChart({
 
     const ro = new ResizeObserver(() => {
 
-      const rect =
-        el.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
 
       chart.applyOptions({
-
         width: Math.floor(rect.width),
         height,
-
       });
 
     });
@@ -302,9 +291,9 @@ export default function TerminalChart({
         width: "100%",
         height,
         borderRadius: 14,
-        border: "1px solid rgba(255,255,255,0.10)",
+        border: "1px solid rgba(148,163,184,.15)",
         overflow: "hidden",
-        background: "rgba(0,0,0,0.18)",
+        background: "#0b1220",
       }}
     />
 
