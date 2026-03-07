@@ -1,6 +1,6 @@
 // ============================================================
 // TRADING ROOM — INSTITUTIONAL LIVE DESK
-// AI decision stream + chart overlays + risk dashboard
+// Real-time market snapshot feed + AI desk
 // ============================================================
 
 import React, { useEffect, useRef, useState, useMemo } from "react";
@@ -121,7 +121,7 @@ export default function TradingRoom() {
   },[candles]);
 
   /* =========================================================
-  LOAD HISTORICAL
+  LOAD HISTORICAL CANDLES
   ========================================================= */
 
   async function loadCandles(){
@@ -130,7 +130,7 @@ export default function TradingRoom() {
 
       const res =
         await fetch(
-          `${API_BASE}/api/market/candles/${SYMBOL}?limit=${MAX_CANDLES}`,
+          `${API_BASE}/api/market/candles?symbol=${SYMBOL}&limit=${MAX_CANDLES}`,
           {headers:authHeader()}
         );
 
@@ -175,14 +175,19 @@ export default function TradingRoom() {
     if(!token || !API_BASE) return;
 
     const url = new URL(API_BASE);
+
     const protocol =
       url.protocol==="https:"?"wss:":"ws:";
 
     const ws = new WebSocket(
-      `${protocol}//${url.host}/ws/market?token=${encodeURIComponent(token)}`
+      `${protocol}//${url.host}/ws?channel=market&token=${encodeURIComponent(token)}`
     );
 
     wsRef.current = ws;
+
+    ws.onopen = ()=>{
+      setEngineStatus("CONNECTED");
+    };
 
     ws.onmessage = (msg)=>{
 
@@ -190,12 +195,21 @@ export default function TradingRoom() {
 
         const data = JSON.parse(msg.data);
 
-        if(data.type!=="tick") return;
-        if(data.symbol!==SYMBOL) return;
+        if(data.channel!=="market") return;
+        if(data.type!=="snapshot") return;
 
-        setPrice(Number(data.price));
+        const market = data.data;
+
+        const node = market[SYMBOL];
+
+        if(!node) return;
+
+        const priceNow = Number(node.price);
+
+        setPrice(priceNow);
 
         const ts = Math.floor(data.ts/1000);
+
         const bucket =
           Math.floor(ts/CANDLE_SECONDS) *
           CANDLE_SECONDS;
@@ -208,10 +222,10 @@ export default function TradingRoom() {
           candle = {
 
             time:bucket,
-            open:data.price,
-            high:data.price,
-            low:data.price,
-            close:data.price
+            open:priceNow,
+            high:priceNow,
+            low:priceNow,
+            close:priceNow
 
           };
 
@@ -226,9 +240,9 @@ export default function TradingRoom() {
           candle = {
 
             ...candle,
-            high:Math.max(candle.high,data.price),
-            low:Math.min(candle.low,data.price),
-            close:data.price
+            high:Math.max(candle.high,priceNow),
+            low:Math.min(candle.low,priceNow),
+            close:priceNow
 
           };
 
@@ -370,41 +384,12 @@ export default function TradingRoom() {
         flexDirection:"column"
       }}>
 
-        {/* Chart Toolbar */}
-
         <div style={{
-          display:"flex",
-          justifyContent:"space-between",
-          alignItems:"center",
+          fontWeight:700,
           marginBottom:10
         }}>
-
-          <div style={{fontWeight:700}}>
-            {SYMBOL}
-          </div>
-
-          <div style={{
-            display:"flex",
-            gap:10,
-            fontSize:12,
-            opacity:0.8
-          }}>
-
-            <span>1m</span>
-            <span>5m</span>
-            <span>15m</span>
-            <span>1h</span>
-            <span>D</span>
-
-            <span style={{opacity:0.6}}>▮▮</span>
-            <span style={{opacity:0.6}}>ƒx</span>
-            <span style={{opacity:0.6}}>⚙</span>
-
-          </div>
-
+          {SYMBOL}
         </div>
-
-        {/* Price */}
 
         <div style={{
           fontSize:13,
@@ -413,8 +398,6 @@ export default function TradingRoom() {
         }}>
           Live Price: {price?.toLocaleString()||"Loading..."}
         </div>
-
-        {/* Chart Panel */}
 
         <div style={{
           border:"1px solid rgba(255,255,255,.08)",
