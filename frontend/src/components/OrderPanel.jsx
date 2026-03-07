@@ -6,8 +6,14 @@ const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
 export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
 
   const [side,setSide] = useState("BUY");
+  const [orderType,setOrderType] = useState("MARKET");
+
   const [size,setSize] = useState("");
+  const [limitPrice,setLimitPrice] = useState("");
+  const [stopLoss,setStopLoss] = useState("");
+  const [takeProfit,setTakeProfit] = useState("");
   const [risk,setRisk] = useState("");
+
   const [loading,setLoading] = useState(false);
   const [msg,setMsg] = useState("");
 
@@ -44,8 +50,12 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
             body:JSON.stringify({
               symbol,
               side,
+              type:orderType,
               qty:Number(size),
-              price
+              price: orderType==="LIMIT" ? Number(limitPrice) : price,
+              stopLoss: stopLoss ? Number(stopLoss) : null,
+              takeProfit: takeProfit ? Number(takeProfit) : null,
+              risk: risk ? Number(risk) : null
             })
           }
         );
@@ -57,6 +67,9 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
       }else{
         setMsg("Order submitted");
         setSize("");
+        setLimitPrice("");
+        setStopLoss("");
+        setTakeProfit("");
       }
 
     }catch{
@@ -70,7 +83,7 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
   return(
 
     <div style={{
-      width:260,
+      width:270,
       background:"#111827",
       padding:16,
       borderLeft:"1px solid rgba(255,255,255,.06)",
@@ -94,7 +107,50 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
         fontSize:12,
         opacity:.7
       }}>
-        Price: {price?.toLocaleString()}
+        Market Price: {price?.toLocaleString()}
+      </div>
+
+      {/* ORDER TYPE */}
+
+      <div style={{
+        display:"flex",
+        gap:6
+      }}>
+
+        <button
+          onClick={()=>setOrderType("MARKET")}
+          style={{
+            flex:1,
+            background:
+              orderType==="MARKET"
+              ? "#2563eb"
+              : "#1f2937",
+            border:"none",
+            padding:"6px 0",
+            color:"#fff",
+            borderRadius:6
+          }}
+        >
+          Market
+        </button>
+
+        <button
+          onClick={()=>setOrderType("LIMIT")}
+          style={{
+            flex:1,
+            background:
+              orderType==="LIMIT"
+              ? "#2563eb"
+              : "#1f2937",
+            border:"none",
+            padding:"6px 0",
+            color:"#fff",
+            borderRadius:6
+          }}
+        >
+          Limit
+        </button>
+
       </div>
 
       {/* SIDE */}
@@ -165,6 +221,85 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
 
       </div>
 
+      {/* LIMIT PRICE */}
+
+      {orderType==="LIMIT" && (
+
+        <div>
+
+          <div style={{fontSize:11,opacity:.6}}>
+            Limit Price
+          </div>
+
+          <input
+            value={limitPrice}
+            onChange={e=>setLimitPrice(e.target.value)}
+            placeholder="Enter price"
+            style={{
+              width:"100%",
+              padding:8,
+              marginTop:4,
+              background:"#020617",
+              border:"1px solid rgba(255,255,255,.08)",
+              borderRadius:6,
+              color:"#fff"
+            }}
+          />
+
+        </div>
+
+      )}
+
+      {/* STOP LOSS */}
+
+      <div>
+
+        <div style={{fontSize:11,opacity:.6}}>
+          Stop Loss
+        </div>
+
+        <input
+          value={stopLoss}
+          onChange={e=>setStopLoss(e.target.value)}
+          placeholder="Optional"
+          style={{
+            width:"100%",
+            padding:8,
+            marginTop:4,
+            background:"#020617",
+            border:"1px solid rgba(255,255,255,.08)",
+            borderRadius:6,
+            color:"#fff"
+          }}
+        />
+
+      </div>
+
+      {/* TAKE PROFIT */}
+
+      <div>
+
+        <div style={{fontSize:11,opacity:.6}}>
+          Take Profit
+        </div>
+
+        <input
+          value={takeProfit}
+          onChange={e=>setTakeProfit(e.target.value)}
+          placeholder="Optional"
+          style={{
+            width:"100%",
+            padding:8,
+            marginTop:4,
+            background:"#020617",
+            border:"1px solid rgba(255,255,255,.08)",
+            borderRadius:6,
+            color:"#fff"
+          }}
+        />
+
+      </div>
+
       {/* RISK */}
 
       <div>
@@ -205,7 +340,7 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
           fontWeight:600
         }}
       >
-        {loading ? "Sending..." : "Execute Order"}
+        {loading ? "Sending..." : `Execute ${side}`}
       </button>
 
       {/* STATUS */}
