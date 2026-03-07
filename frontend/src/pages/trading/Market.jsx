@@ -1,28 +1,17 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import TerminalChart from "../../components/TerminalChart";
 import "../../styles/terminal.css";
 
 /**
  * Market.jsx — INTERNAL MULTI-ASSET MARKET PANEL
- * Institutional style — no external TradingView iframe
+ * Institutional style — internal chart engine
  */
 
 const SYMBOL_GROUPS = {
-  Crypto: [
-    "BTCUSDT",
-    "ETHUSDT",
-    "SOLUSDT",
-  ],
-  Forex: [
-    "EURUSD",
-    "GBPUSD",
-  ],
-  Indices: [
-    "SPX",
-    "NASDAQ",
-  ],
-  Commodities: [
-    "GOLD",
-  ]
+  Crypto: ["BTCUSDT","ETHUSDT","SOLUSDT"],
+  Forex: ["EURUSD","GBPUSD"],
+  Indices: ["SPX","NASDAQ"],
+  Commodities: ["GOLD"]
 };
 
 const ALL_SYMBOLS = Object.values(SYMBOL_GROUPS).flat();
@@ -31,106 +20,152 @@ const SNAP_POS = { x: 16, y: 110 };
 const SNAP_DELAY = 2200;
 
 export default function Market({
-  mode = "paper",
-  dailyLimit = 5,
-  tradesUsed = 0,
-}) {
+  mode="paper",
+  dailyLimit=5,
+  tradesUsed=0
+}){
 
-  const [symbol, setSymbol] = useState(ALL_SYMBOLS[0]);
-  const [tf, setTf] = useState("D");
-  const [side, setSide] = useState("BUY");
+  const [symbol,setSymbol] = useState(ALL_SYMBOLS[0]);
+  const [tf,setTf] = useState("D");
+  const [side,setSide] = useState("BUY");
 
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [docked, setDocked] = useState(true);
-  const [pos, setPos] = useState(SNAP_POS);
+  const [panelOpen,setPanelOpen] = useState(false);
+  const [docked,setDocked] = useState(true);
+  const [pos,setPos] = useState(SNAP_POS);
 
-  const dragData = useRef({ x: 0, y: 0, dragging: false });
+  const dragData = useRef({x:0,y:0,dragging:false});
   const snapTimer = useRef(null);
 
   const limitReached = tradesUsed >= dailyLimit;
 
+  /* ================= CHART STATE ================= */
+
+  const [candles,setCandles] = useState([]);
+  const [volume,setVolume] = useState([]);
+  const [trades,setTrades] = useState([]);
+  const [aiSignals,setAiSignals] = useState([]);
+  const [pnlSeries,setPnlSeries] = useState([]);
+
+  /* ================= DEMO DATA (until live feed connects) ================= */
+
+  useEffect(()=>{
+
+    let price = 65000;
+
+    const fake=[];
+
+    for(let i=0;i<120;i++){
+
+      const open = price;
+      const move = (Math.random()-0.5)*600;
+
+      const close = open + move;
+
+      const high = Math.max(open,close)+Math.random()*200;
+      const low = Math.min(open,close)-Math.random()*200;
+
+      price = close;
+
+      fake.push({
+        time:Math.floor(Date.now()/1000)-((120-i)*60),
+        open,
+        high,
+        low,
+        close
+      });
+
+    }
+
+    setCandles(fake);
+
+  },[symbol]);
+
   /* ================= DRAG LOGIC ================= */
 
-  const clampToViewport = useCallback((x, y) => {
+  const clampToViewport = useCallback((x,y)=>{
 
-    const padding = 12;
-    const maxX = window.innerWidth - 340;
-    const maxY = window.innerHeight - 420;
+    const padding=12;
+    const maxX=window.innerWidth-340;
+    const maxY=window.innerHeight-420;
 
-    return {
-      x: Math.max(padding, Math.min(maxX, x)),
-      y: Math.max(padding, Math.min(maxY, y)),
+    return{
+      x:Math.max(padding,Math.min(maxX,x)),
+      y:Math.max(padding,Math.min(maxY,y))
     };
 
-  }, []);
+  },[]);
 
-  const startDrag = useCallback((e) => {
+  const startDrag = useCallback((e)=>{
 
     const t = e.touches ? e.touches[0] : e;
 
-    dragData.current = {
-      dragging: true,
-      x: t.clientX - pos.x,
-      y: t.clientY - pos.y,
+    dragData.current={
+      dragging:true,
+      x:t.clientX-pos.x,
+      y:t.clientY-pos.y
     };
 
     setDocked(false);
     clearTimeout(snapTimer.current);
 
-  }, [pos]);
+  },[pos]);
 
-  const onMove = useCallback((e) => {
+  const onMove = useCallback((e)=>{
 
-    if (!dragData.current.dragging) return;
+    if(!dragData.current.dragging) return;
 
     const t = e.touches ? e.touches[0] : e;
 
     const newPos = clampToViewport(
-      t.clientX - dragData.current.x,
-      t.clientY - dragData.current.y
+      t.clientX-dragData.current.x,
+      t.clientY-dragData.current.y
     );
 
     setPos(newPos);
 
-  }, [clampToViewport]);
+  },[clampToViewport]);
 
-  const endDrag = useCallback(() => {
+  const endDrag = useCallback(()=>{
 
-    if (!dragData.current.dragging) return;
+    if(!dragData.current.dragging) return;
 
-    dragData.current.dragging = false;
+    dragData.current.dragging=false;
 
-    snapTimer.current = setTimeout(() => {
+    snapTimer.current=setTimeout(()=>{
+
       setDocked(true);
       setPos(SNAP_POS);
-    }, SNAP_DELAY);
 
-  }, []);
+    },SNAP_DELAY);
 
-  useEffect(() => {
+  },[]);
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", endDrag);
-    window.addEventListener("touchmove", onMove);
-    window.addEventListener("touchend", endDrag);
+  useEffect(()=>{
 
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", endDrag);
-      window.removeEventListener("touchmove", onMove);
-      window.removeEventListener("touchend", endDrag);
+    window.addEventListener("mousemove",onMove);
+    window.addEventListener("mouseup",endDrag);
+    window.addEventListener("touchmove",onMove);
+    window.addEventListener("touchend",endDrag);
+
+    return()=>{
+
+      window.removeEventListener("mousemove",onMove);
+      window.removeEventListener("mouseup",endDrag);
+      window.removeEventListener("touchmove",onMove);
+      window.removeEventListener("touchend",endDrag);
       clearTimeout(snapTimer.current);
+
     };
 
-  }, [onMove, endDrag]);
+  },[onMove,endDrag]);
 
-  function togglePanel() {
+  function togglePanel(){
 
-    if (limitReached) return;
+    if(limitReached) return;
 
     clearTimeout(snapTimer.current);
 
-    setPanelOpen(v => !v);
+    setPanelOpen(v=>!v);
     setDocked(true);
     setPos(SNAP_POS);
 
@@ -138,24 +173,24 @@ export default function Market({
 
   /* ================= UI ================= */
 
-  return (
+  return(
 
-    <div className={`terminalRoot ${mode === "live" ? "liveMode" : ""}`}>
+    <div className={`terminalRoot ${mode==="live"?"liveMode":""}`}>
 
-      <div className={`marketBanner ${mode === "live" ? "warn" : ""}`}>
+      <div className={`marketBanner ${mode==="live"?"warn":""}`}>
 
         <b>Mode:</b> {mode.toUpperCase()} •
         <b> Trades Used:</b> {tradesUsed}/{dailyLimit}
 
-        {limitReached && (
+        {limitReached &&
           <span className="warnText">
             {" "}— Daily trade limit reached
           </span>
-        )}
+        }
 
       </div>
 
-      {/* ================= TOP BAR ================= */}
+      {/* TOP BAR */}
 
       <header className="tvTopBar">
 
@@ -171,9 +206,7 @@ export default function Market({
               <optgroup key={group} label={group}>
 
                 {list.map(s=>(
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
+                  <option key={s} value={s}>{s}</option>
                 ))}
 
               </optgroup>
@@ -211,13 +244,11 @@ export default function Market({
 
       </header>
 
-      {/* ================= BODY ================= */}
+      {/* BODY */}
 
       <div className={`tvBody ${panelOpen && docked ? "withPanel" : ""}`}>
 
         <main className="tvChartArea">
-
-          {/* INTERNAL CHART PANEL */}
 
           <div className="internalChart">
 
@@ -228,11 +259,14 @@ export default function Market({
 
             <div className="chartCanvas">
 
-              {/* Chart engine will mount here */}
-
-              <div className="chartPlaceholder">
-                Internal Chart Engine
-              </div>
+              <TerminalChart
+                candles={candles}
+                volume={volume}
+                trades={trades}
+                aiSignals={aiSignals}
+                pnlSeries={pnlSeries}
+                height={520}
+              />
 
             </div>
 
@@ -240,7 +274,7 @@ export default function Market({
 
         </main>
 
-        {panelOpen && docked && (
+        {panelOpen && docked &&
 
           <aside className="dockPanel">
 
@@ -254,15 +288,15 @@ export default function Market({
 
           </aside>
 
-        )}
+        }
 
       </div>
 
-      {panelOpen && !docked && (
+      {panelOpen && !docked &&
 
         <div
           className="floatingPanel"
-          style={{ left: pos.x, top: pos.y }}
+          style={{left:pos.x,top:pos.y}}
         >
 
           <TradePanel
@@ -277,7 +311,7 @@ export default function Market({
 
         </div>
 
-      )}
+      }
 
     </div>
 
@@ -294,20 +328,28 @@ function TradePanel({
   onClose,
   mode,
   draggable,
-  onDragStart,
-}) {
+  onDragStart
+}){
 
-  return (
+  return(
 
     <div className="tradePanel">
 
       <header
         className="tpHeader"
-        onMouseDown={draggable ? onDragStart : undefined}
-        onTouchStart={draggable ? onDragStart : undefined}
+        onMouseDown={draggable?onDragStart:undefined}
+        onTouchStart={draggable?onDragStart:undefined}
       >
+
         <span>{symbol}</span>
-        <button className="tpClose" onClick={onClose}>✕</button>
+
+        <button
+          className="tpClose"
+          onClick={onClose}
+        >
+          ✕
+        </button>
+
       </header>
 
       <div className="orderSide">
@@ -328,10 +370,19 @@ function TradePanel({
 
       </div>
 
-      <input className="tradeInput" placeholder="Reference Price" />
-      <input className="tradeInput" placeholder="Position Size" />
+      <input
+        className="tradeInput"
+        placeholder="Reference Price"
+      />
 
-      <button className={`tvPrimary full ${mode==="live"?"warn":""}`}>
+      <input
+        className="tradeInput"
+        placeholder="Position Size"
+      />
+
+      <button
+        className={`tvPrimary full ${mode==="live"?"warn":""}`}
+      >
         Queue {side} Intent
       </button>
 
