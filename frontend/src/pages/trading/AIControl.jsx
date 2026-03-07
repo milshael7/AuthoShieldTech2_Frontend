@@ -1,6 +1,6 @@
 // ============================================================
 // AI CONTROL ROOM — INSTITUTIONAL ENGINE CONTROL
-// Paper/Live Mode • Risk Controls • Hourly + Daily Trade Limits
+// Kill Switch • Paper/Live Mode • Risk Controls • AI Status
 // ============================================================
 
 import React, { useEffect, useState } from "react";
@@ -14,8 +14,6 @@ export default function AIControl(){
   const [tradingMode,setTradingMode] = useState("paper");
 
   const [maxTrades,setMaxTrades] = useState(5);
-  const [maxTradesPerHour,setMaxTradesPerHour] = useState(1);
-
   const [riskPercent,setRiskPercent] = useState(1.5);
   const [positionMultiplier,setPositionMultiplier] = useState(1);
 
@@ -50,10 +48,7 @@ export default function AIControl(){
 
       setEnabled(Boolean(cfg.enabled));
       setTradingMode(cfg.tradingMode || "paper");
-
       setMaxTrades(Number(cfg.maxTrades || 5));
-      setMaxTradesPerHour(Number(cfg.maxTradesPerHour || 1));
-
       setRiskPercent(Number(cfg.riskPercent || 1.5));
       setPositionMultiplier(Number(cfg.positionMultiplier || 1));
       setAggressiveness(cfg.strategyMode || "Balanced");
@@ -88,13 +83,9 @@ export default function AIControl(){
 
             enabled,
             tradingMode,
-
             maxTrades:Number(maxTrades),
-            maxTradesPerHour:Number(maxTradesPerHour),
-
             riskPercent:Number(riskPercent),
             positionMultiplier:Number(positionMultiplier),
-
             strategyMode:aggressiveness
 
           })
@@ -261,13 +252,7 @@ export default function AIControl(){
 
         </div>
 
-        {/* TRADE LIMITS */}
-
-        <Control
-          label="Max Trades Per Hour"
-          value={maxTradesPerHour}
-          onChange={setMaxTradesPerHour}
-        />
+        {/* CONTROLS */}
 
         <Control
           label="Max Trades Per Day"
