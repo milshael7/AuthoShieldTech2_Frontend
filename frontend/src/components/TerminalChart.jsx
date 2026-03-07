@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, CrosshairMode } from "lightweight-charts";
 
 /**
@@ -9,8 +9,8 @@ import { createChart, CrosshairMode } from "lightweight-charts";
  * ✔ Trade markers
  * ✔ AI signals
  * ✔ PnL overlay
- * ✔ Liquidity zones
  * ✔ Trend overlay
+ * ✔ Chart type switch
  */
 
 export default function TerminalChart({
@@ -31,271 +31,308 @@ export default function TerminalChart({
   const pnlSeriesRef = useRef(null);
   const trendSeriesRef = useRef(null);
 
+  const lineSeriesRef = useRef(null);
+  const areaSeriesRef = useRef(null);
+
+  const [chartType,setChartType] = useState("candles");
+  const [showTrend,setShowTrend] = useState(true);
+
   /* ================= NORMALIZE ================= */
 
-  const candleData = useMemo(() => {
-    return candles
-      .map((c) => ({
-        time: Number(c.time),
-        open: Number(c.open),
-        high: Number(c.high),
-        low: Number(c.low),
-        close: Number(c.close),
-      }))
-      .filter((c) => Number.isFinite(c.time));
-  }, [candles]);
+  const candleData = useMemo(()=>{
 
-  const volumeData = useMemo(() => {
-    return volume.map((v) => ({
-      time: Number(v.time),
-      value: Number(v.value),
-      color: v.color || "rgba(100,116,139,.45)",
+    return candles.map(c=>({
+      time:Number(c.time),
+      open:Number(c.open),
+      high:Number(c.high),
+      low:Number(c.low),
+      close:Number(c.close)
     }));
-  }, [volume]);
 
-  const pnlData = useMemo(() => {
-    return pnlSeries.map((p) => ({
-      time: Number(p.time),
-      value: Number(p.value),
+  },[candles]);
+
+  const lineData = useMemo(()=>{
+
+    return candleData.map(c=>({
+      time:c.time,
+      value:c.close
     }));
-  }, [pnlSeries]);
+
+  },[candleData]);
+
+  const volumeData = useMemo(()=>{
+
+    return volume.map(v=>({
+      time:Number(v.time),
+      value:Number(v.value),
+      color:v.color || "rgba(100,116,139,.45)"
+    }));
+
+  },[volume]);
+
+  const pnlData = useMemo(()=>{
+
+    return pnlSeries.map(p=>({
+      time:Number(p.time),
+      value:Number(p.value)
+    }));
+
+  },[pnlSeries]);
 
   /* ================= TREND ================= */
 
-  const trendData = useMemo(() => {
+  const trendData = useMemo(()=>{
 
-    if (candleData.length < 20) return [];
+    if(candleData.length<20) return [];
 
-    const out = [];
+    const out=[];
 
-    for (let i = 20; i < candleData.length; i++) {
+    for(let i=20;i<candleData.length;i++){
 
-      const slice = candleData.slice(i - 20, i);
+      const slice=candleData.slice(i-20,i);
 
       const avg =
-        slice.reduce((s, c) => s + c.close, 0) /
+        slice.reduce((s,c)=>s+c.close,0)/
         slice.length;
 
       out.push({
-        time: candleData[i].time,
-        value: avg
+        time:candleData[i].time,
+        value:avg
       });
 
     }
 
     return out;
 
-  }, [candleData]);
+  },[candleData]);
 
   /* ================= MARKERS ================= */
 
-  const markers = useMemo(() => {
+  const markers = useMemo(()=>{
 
-    const tradeMarkers = trades.map((t) => ({
-      time: Number(t.time),
-      position: t.side === "BUY" ? "belowBar" : "aboveBar",
-      color: t.side === "BUY" ? "#22c55e" : "#ef4444",
-      shape: t.side === "BUY" ? "arrowUp" : "arrowDown",
-      text: t.side,
+    const tradeMarkers = trades.map(t=>({
+
+      time:Number(t.time),
+      position:t.side==="BUY"?"belowBar":"aboveBar",
+      color:t.side==="BUY"?"#22c55e":"#ef4444",
+      shape:t.side==="BUY"?"arrowUp":"arrowDown",
+      text:t.side
+
     }));
 
-    const aiMarkers = aiSignals.map((s) => ({
-      time: Number(s.time),
-      position: "aboveBar",
-      color: "#facc15",
-      shape: "circle",
-      text: "AI",
+    const aiMarkers = aiSignals.map(s=>({
+
+      time:Number(s.time),
+      position:"aboveBar",
+      color:"#facc15",
+      shape:"circle",
+      text:"AI"
+
     }));
 
-    return [...tradeMarkers, ...aiMarkers];
+    return [...tradeMarkers,...aiMarkers];
 
-  }, [trades, aiSignals]);
+  },[trades,aiSignals]);
 
   /* ================= CHART INIT ================= */
 
-  useEffect(() => {
+  useEffect(()=>{
 
     const el = wrapRef.current;
-    if (!el) return;
+    if(!el) return;
 
-    try {
+    try{
       chartRef.current?.remove();
-    } catch {}
+    }catch{}
 
-    const chart = createChart(el, {
+    const chart = createChart(el,{
 
       height,
 
-      layout: {
-        background: { color: "#0b1220" },
-        textColor: "#9ca3af",
+      layout:{
+        background:{color:"#0b1220"},
+        textColor:"#9ca3af"
       },
 
-      grid: {
-        vertLines: { color: "rgba(148,163,184,.05)" },
-        horzLines: { color: "rgba(148,163,184,.05)" },
+      grid:{
+        vertLines:{color:"rgba(148,163,184,.05)"},
+        horzLines:{color:"rgba(148,163,184,.05)"}
       },
 
-      rightPriceScale: {
-        borderColor: "rgba(148,163,184,.15)",
+      rightPriceScale:{
+        borderColor:"rgba(148,163,184,.15)"
       },
 
-      leftPriceScale: {
-        borderColor: "rgba(148,163,184,.15)",
+      crosshair:{
+        mode:CrosshairMode.Normal
       },
 
-      crosshair: {
-        mode: CrosshairMode.Normal,
-      },
-
-      timeScale: {
-        borderColor: "rgba(148,163,184,.15)",
-        timeVisible: true,
-        secondsVisible: false,
-      },
+      timeScale:{
+        borderColor:"rgba(148,163,184,.15)",
+        timeVisible:true
+      }
 
     });
 
-    /* ================= CANDLES ================= */
+    /* ===== CANDLES ===== */
 
     const candleSeries = chart.addCandlestickSeries({
 
-      upColor: "#22c55e",
-      downColor: "#ef4444",
+      upColor:"#22c55e",
+      downColor:"#ef4444",
 
-      borderUpColor: "#22c55e",
-      borderDownColor: "#ef4444",
+      borderUpColor:"#22c55e",
+      borderDownColor:"#ef4444",
 
-      wickUpColor: "#22c55e",
-      wickDownColor: "#ef4444",
+      wickUpColor:"#22c55e",
+      wickDownColor:"#ef4444"
 
     });
 
     candleSeries.applyOptions({
-      priceLineVisible: true,
-      priceLineColor: accent,
+      priceLineVisible:true,
+      priceLineColor:accent
     });
 
-    /* ================= VOLUME ================= */
+    /* ===== LINE ===== */
+
+    const lineSeries = chart.addLineSeries({
+      color:"#60a5fa",
+      lineWidth:2
+    });
+
+    /* ===== AREA ===== */
+
+    const areaSeries = chart.addAreaSeries({
+
+      topColor:"rgba(96,165,250,.35)",
+      bottomColor:"rgba(96,165,250,.02)",
+      lineColor:"#60a5fa",
+      lineWidth:2
+
+    });
+
+    /* ===== VOLUME ===== */
 
     const volumeSeries = chart.addHistogramSeries({
 
-      priceFormat: { type: "volume" },
+      priceFormat:{type:"volume"},
+      priceScaleId:"",
 
-      priceScaleId: "",
-
-      scaleMargins: {
-        top: 0.82,
-        bottom: 0,
-      },
+      scaleMargins:{
+        top:0.82,
+        bottom:0
+      }
 
     });
 
-    /* ================= PNL ================= */
+    /* ===== PNL ===== */
 
     const pnlLine = chart.addLineSeries({
 
-      color: "#facc15",
-      lineWidth: 2,
-      priceScaleId: "left",
+      color:"#facc15",
+      lineWidth:2,
+      priceScaleId:"left"
 
     });
 
-    /* ================= TREND ================= */
+    /* ===== TREND ===== */
 
     const trendLine = chart.addLineSeries({
 
-      color: "#60a5fa",
-      lineWidth: 2,
+      color:"#38bdf8",
+      lineWidth:2
 
     });
 
-    chartRef.current = chart;
+    chartRef.current=chart;
 
-    candleSeriesRef.current = candleSeries;
-    volumeSeriesRef.current = volumeSeries;
-    pnlSeriesRef.current = pnlLine;
-    trendSeriesRef.current = trendLine;
-
-    /* ================= INITIAL DATA ================= */
-
-    candleSeries.setData(candleData);
-
-    if (volumeData.length)
-      volumeSeries.setData(volumeData);
-
-    if (pnlData.length)
-      pnlLine.setData(pnlData);
-
-    if (trendData.length)
-      trendLine.setData(trendData);
-
-    if (markers.length)
-      candleSeries.setMarkers(markers);
+    candleSeriesRef.current=candleSeries;
+    volumeSeriesRef.current=volumeSeries;
+    pnlSeriesRef.current=pnlLine;
+    trendSeriesRef.current=trendLine;
+    lineSeriesRef.current=lineSeries;
+    areaSeriesRef.current=areaSeries;
 
     chart.timeScale().fitContent();
 
-    /* ================= RESIZE ================= */
+  },[height]);
 
-    const ro = new ResizeObserver(() => {
+  /* ================= DATA ================= */
 
-      const rect = el.getBoundingClientRect();
+  useEffect(()=>{
 
-      chart.applyOptions({
-        width: Math.floor(rect.width),
-        height,
-      });
+    if(chartType==="candles")
+      candleSeriesRef.current?.setData(candleData);
 
-    });
+    if(chartType==="line")
+      lineSeriesRef.current?.setData(lineData);
 
-    ro.observe(el);
+    if(chartType==="area")
+      areaSeriesRef.current?.setData(lineData);
 
-    return () => {
+  },[candleData,lineData,chartType]);
 
-      try { ro.disconnect(); } catch {}
-      try { chart.remove(); } catch {}
-
-      chartRef.current = null;
-
-    };
-
-  }, [height]);
-
-  /* ================= DATA UPDATES ================= */
-
-  useEffect(() => {
-    candleSeriesRef.current?.setData(candleData);
-  }, [candleData]);
-
-  useEffect(() => {
+  useEffect(()=>{
     volumeSeriesRef.current?.setData(volumeData);
-  }, [volumeData]);
+  },[volumeData]);
 
-  useEffect(() => {
+  useEffect(()=>{
     pnlSeriesRef.current?.setData(pnlData);
-  }, [pnlData]);
+  },[pnlData]);
 
-  useEffect(() => {
-    trendSeriesRef.current?.setData(trendData);
-  }, [trendData]);
+  useEffect(()=>{
 
-  useEffect(() => {
+    if(showTrend)
+      trendSeriesRef.current?.setData(trendData);
+    else
+      trendSeriesRef.current?.setData([]);
+
+  },[trendData,showTrend]);
+
+  useEffect(()=>{
     candleSeriesRef.current?.setMarkers(markers);
-  }, [markers]);
+  },[markers]);
 
-  return (
+  /* ================= UI ================= */
 
-    <div
-      ref={wrapRef}
-      style={{
-        width: "100%",
-        height,
-        borderRadius: 14,
-        border: "1px solid rgba(148,163,184,.15)",
-        overflow: "hidden",
-        background: "#0b1220",
-      }}
-    />
+  return(
+
+    <div style={{width:"100%"}}>
+
+      {/* ===== TOOLBAR ===== */}
+
+      <div style={{
+        display:"flex",
+        gap:8,
+        marginBottom:6
+      }}>
+
+        <button onClick={()=>setChartType("candles")}>📊</button>
+        <button onClick={()=>setChartType("line")}>📈</button>
+        <button onClick={()=>setChartType("area")}>≈</button>
+
+        <button onClick={()=>setShowTrend(v=>!v)}>
+          ƒx
+        </button>
+
+      </div>
+
+      {/* ===== CHART ===== */}
+
+      <div
+        ref={wrapRef}
+        style={{
+          width:"100%",
+          height,
+          borderRadius:14,
+          border:"1px solid rgba(148,163,184,.15)",
+          overflow:"hidden",
+          background:"#0b1220"
+        }}
+      />
+
+    </div>
 
   );
 
