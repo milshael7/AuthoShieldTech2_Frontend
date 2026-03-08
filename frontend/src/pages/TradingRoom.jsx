@@ -6,9 +6,11 @@ import { getToken } from "../lib/api.js";
 const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
 const SYMBOL = "BTCUSDT";
 const CANDLE_SECONDS = 60;
+const MAX_CANDLES = 500;
+
+const STORAGE_KEY = "trading_candles_BTC";
 
 /* ================= GLOBAL CACHE ================= */
-/* Keeps candles alive even when page changes */
 
 if (!window.__TRADING_CACHE__) {
   window.__TRADING_CACHE__ = {
@@ -17,15 +19,48 @@ if (!window.__TRADING_CACHE__) {
   };
 }
 
+/* ================= LOAD PERSISTED ================= */
+
+function loadPersisted() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed;
+  } catch {
+    return [];
+  }
+}
+
+function savePersisted(candles) {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(candles.slice(-MAX_CANDLES))
+    );
+  } catch {}
+}
+
 export default function TradingRoom(){
 
   const marketWsRef = useRef(null);
   const paperWsRef = useRef(null);
 
-  const lastCandleRef = useRef(window.__TRADING_CACHE__.lastCandle);
+  const persisted = loadPersisted();
+
+  const lastCandleRef = useRef(
+    window.__TRADING_CACHE__.lastCandle ||
+    persisted[persisted.length - 1] ||
+    null
+  );
 
   const [candles,setCandles] = useState(
-    window.__TRADING_CACHE__.candles
+    window.__TRADING_CACHE__.candles.length
+      ? window.__TRADING_CACHE__.candles
+      : persisted
   );
 
   const [price,setPrice] = useState(null);
@@ -76,16 +111,14 @@ export default function TradingRoom(){
       };
 
       ws.onclose = ()=>{
-
         marketWsRef.current = null;
-
       };
 
     }catch{}
 
   },[]);
 
-  /* ================= PAPER ENGINE WEBSOCKET ================= */
+  /* ================= PAPER ENGINE ================= */
 
   useEffect(()=>{
 
@@ -129,9 +162,7 @@ export default function TradingRoom(){
       };
 
       ws.onclose = ()=>{
-
         paperWsRef.current = null;
-
       };
 
     }catch{}
@@ -148,45 +179,48 @@ export default function TradingRoom(){
 
     const last = lastCandleRef.current;
 
-    if(!last || last.time !== candleTime){
+    setCandles(prev=>{
 
-      const newCandle={
-        time:candleTime,
-        open:priceNow,
-        high:priceNow,
-        low:priceNow,
-        close:priceNow
-      };
+      let next;
 
-      lastCandleRef.current=newCandle;
+      if(!last || last.time !== candleTime){
 
-      const updated=[...candles.slice(-200),newCandle];
+        const newCandle={
+          time:candleTime,
+          open:priceNow,
+          high:priceNow,
+          low:priceNow,
+          close:priceNow
+        };
 
-      window.__TRADING_CACHE__.candles = updated;
-      window.__TRADING_CACHE__.lastCandle = newCandle;
+        lastCandleRef.current=newCandle;
 
-      setCandles(updated);
+        next=[...prev.slice(-MAX_CANDLES),newCandle];
 
-    }else{
+      }else{
 
-      const updated={
-        ...last,
-        high:Math.max(last.high,priceNow),
-        low:Math.min(last.low,priceNow),
-        close:priceNow
-      };
+        const updated={
+          ...last,
+          high:Math.max(last.high,priceNow),
+          low:Math.min(last.low,priceNow),
+          close:priceNow
+        };
 
-      lastCandleRef.current=updated;
+        lastCandleRef.current=updated;
 
-      const arr=[...candles];
-      arr[arr.length-1]=updated;
+        next=[...prev];
+        next[next.length-1]=updated;
 
-      window.__TRADING_CACHE__.candles = arr;
-      window.__TRADING_CACHE__.lastCandle = updated;
+      }
 
-      setCandles(arr);
+      window.__TRADING_CACHE__.candles = next;
+      window.__TRADING_CACHE__.lastCandle = lastCandleRef.current;
 
-    }
+      savePersisted(next);
+
+      return next;
+
+    });
 
   }
 
@@ -267,7 +301,7 @@ export default function TradingRoom(){
         price={price}
       />
 
-      {/* ================= AI ENGINE PANEL ================= */}
+      {/* ================= AI PANEL ================= */}
 
       <div style={{
         width:280,
@@ -284,8 +318,6 @@ export default function TradingRoom(){
         <div style={{marginTop:10}}>
           AI Confidence: {(aiConfidence*100).toFixed(0)}%
         </div>
-
-        {/* ================= SIGNAL STREAM ================= */}
 
         <div style={{marginTop:20}}>
 
