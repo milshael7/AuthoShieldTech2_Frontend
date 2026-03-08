@@ -27,9 +27,9 @@ export default function Market(){
   const [candles,setCandles] = useState([]);
   const [ready,setReady] = useState(false);
 
-  function safeNumber(v){
+  function toNumber(v){
     const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
+    return Number.isFinite(n) ? n : null;
   }
 
   /* ================= LOAD HISTORY ================= */
@@ -51,16 +51,36 @@ export default function Market(){
       const data = await res.json();
       if(!data?.ok || !Array.isArray(data.candles)) return;
 
-      const formatted = data.candles.map(c=>({
-        time:Number(c.time),
-        open:safeNumber(c.open),
-        high:safeNumber(c.high),
-        low:safeNumber(c.low),
-        close:safeNumber(c.close)
-      }));
+      const formatted = data.candles
+        .map(c=>{
+
+          const time = toNumber(c.time);
+          const open = toNumber(c.open);
+          const high = toNumber(c.high);
+          const low  = toNumber(c.low);
+          const close= toNumber(c.close);
+
+          if(
+            time === null ||
+            open === null ||
+            high === null ||
+            low  === null ||
+            close=== null
+          ){
+            return null;
+          }
+
+          if(high < low) return null;
+
+          return { time, open, high, low, close };
+
+        })
+        .filter(Boolean)
+        .sort((a,b)=>a.time - b.time);
 
       if(formatted.length){
-        lastCandleRef.current = formatted[formatted.length-1];
+        lastCandleRef.current =
+          formatted[formatted.length-1];
       }
 
       setCandles(formatted);
@@ -69,7 +89,7 @@ export default function Market(){
     }catch{}
   }
 
-  /* ================= MARKET WS ================= */
+  /* ================= SYMBOL CHANGE ================= */
 
   useEffect(()=>{
 
@@ -80,6 +100,8 @@ export default function Market(){
     loadHistory(symbol);
 
   },[symbol]);
+
+  /* ================= MARKET WS ================= */
 
   useEffect(()=>{
 
@@ -113,7 +135,9 @@ export default function Market(){
           const market = data?.data?.[symbol];
           if(!market) return;
 
-          const priceNow = safeNumber(market.price);
+          const priceNow = toNumber(market.price);
+          if(priceNow === null) return;
+
           setPrice(priceNow);
 
           const now = Math.floor(Date.now()/1000);
@@ -137,7 +161,8 @@ export default function Market(){
               };
 
               lastCandleRef.current=newCandle;
-              next=[...prev,newCandle].slice(-MAX_CANDLES);
+              next=[...prev,newCandle]
+                .slice(-MAX_CANDLES);
 
             }else{
 
@@ -155,6 +180,7 @@ export default function Market(){
             }
 
             return next;
+
           });
 
         }catch{}
