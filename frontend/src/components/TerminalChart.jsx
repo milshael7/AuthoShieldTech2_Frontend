@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, CrosshairMode } from "lightweight-charts";
 
-/**
- * TerminalChart — Institutional Trading Chart
- */
+/*
+TerminalChart — STABLE REALTIME VERSION
+*/
 
 export default function TerminalChart({
   candles = [],
@@ -11,9 +11,8 @@ export default function TerminalChart({
   trades = [],
   aiSignals = [],
   pnlSeries = [],
-  height = 520,
-  accent = "rgba(122,167,255,0.85)",
-}) {
+  height = 520
+}){
 
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
@@ -24,8 +23,7 @@ export default function TerminalChart({
   const trendSeriesRef = useRef(null);
   const emaSeriesRef = useRef(null);
 
-  const lineSeriesRef = useRef(null);
-  const areaSeriesRef = useRef(null);
+  const lastTimeRef = useRef(null);
 
   const [chartType,setChartType] = useState("candles");
   const [showTrend,setShowTrend] = useState(true);
@@ -73,7 +71,7 @@ export default function TerminalChart({
 
   },[pnlSeries]);
 
-  /* ================= TREND (SMA 20) ================= */
+  /* ================= TREND ================= */
 
   const trendData = useMemo(()=>{
 
@@ -100,7 +98,7 @@ export default function TerminalChart({
 
   },[candleData]);
 
-  /* ================= EMA 50 ================= */
+  /* ================= EMA ================= */
 
   const emaData = useMemo(()=>{
 
@@ -161,9 +159,7 @@ export default function TerminalChart({
     const el = wrapRef.current;
     if(!el) return;
 
-    try{
-      chartRef.current?.remove();
-    }catch{}
+    try{ chartRef.current?.remove() }catch{}
 
     const chart = createChart(el,{
 
@@ -194,8 +190,6 @@ export default function TerminalChart({
 
     });
 
-    /* SERIES */
-
     candleSeriesRef.current = chart.addCandlestickSeries({
       upColor:"#22c55e",
       downColor:"#ef4444",
@@ -204,17 +198,6 @@ export default function TerminalChart({
       wickUpColor:"#22c55e",
       wickDownColor:"#ef4444"
     });
-
-    lineSeriesRef.current =
-      chart.addLineSeries({color:"#60a5fa",lineWidth:2});
-
-    areaSeriesRef.current =
-      chart.addAreaSeries({
-        topColor:"rgba(96,165,250,.35)",
-        bottomColor:"rgba(96,165,250,.02)",
-        lineColor:"#60a5fa",
-        lineWidth:2
-      });
 
     volumeSeriesRef.current =
       chart.addHistogramSeries({
@@ -242,11 +225,9 @@ export default function TerminalChart({
         lineWidth:2
       });
 
-    chartRef.current=chart;
+    chartRef.current = chart;
 
     chart.timeScale().fitContent();
-
-    /* RESIZE OBSERVER */
 
     const ro = new ResizeObserver(entries=>{
 
@@ -270,20 +251,38 @@ export default function TerminalChart({
 
   },[height]);
 
-  /* ================= DATA ================= */
+  /* ================= DATA UPDATE ================= */
 
   useEffect(()=>{
 
-    if(chartType==="candles")
-      candleSeriesRef.current?.setData(candleData);
+    if(!candleSeriesRef.current) return;
 
-    if(chartType==="line")
-      lineSeriesRef.current?.setData(lineData);
+    if(!candleData.length) return;
 
-    if(chartType==="area")
-      areaSeriesRef.current?.setData(lineData);
+    const last = candleData[candleData.length-1];
 
-  },[candleData,lineData,chartType]);
+    if(lastTimeRef.current === null){
+
+      candleSeriesRef.current.setData(candleData);
+
+      lastTimeRef.current = last.time;
+
+      return;
+
+    }
+
+    if(last.time === lastTimeRef.current){
+
+      candleSeriesRef.current.update(last);
+
+    }else{
+
+      candleSeriesRef.current.update(last);
+      lastTimeRef.current = last.time;
+
+    }
+
+  },[candleData]);
 
   useEffect(()=>{
     volumeSeriesRef.current?.setData(volumeData);
@@ -321,8 +320,6 @@ export default function TerminalChart({
 
     <div style={{width:"100%"}}>
 
-      {/* TOOLBAR */}
-
       <div style={{
         display:"flex",
         gap:8,
@@ -337,8 +334,6 @@ export default function TerminalChart({
         <button onClick={()=>setShowEMA(v=>!v)}>EMA</button>
 
       </div>
-
-      {/* CHART */}
 
       <div
         ref={wrapRef}
