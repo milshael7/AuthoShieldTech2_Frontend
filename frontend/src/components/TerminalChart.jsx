@@ -1,10 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, CrosshairMode } from "lightweight-charts";
 
-/*
-TerminalChart — STABLE REALTIME VERSION
-*/
-
 export default function TerminalChart({
   candles = [],
   volume = [],
@@ -25,7 +21,6 @@ export default function TerminalChart({
 
   const lastTimeRef = useRef(null);
 
-  const [chartType,setChartType] = useState("candles");
   const [showTrend,setShowTrend] = useState(true);
   const [showEMA,setShowEMA] = useState(true);
 
@@ -42,15 +37,6 @@ export default function TerminalChart({
     }));
 
   },[candles]);
-
-  const lineData = useMemo(()=>{
-
-    return candleData.map(c=>({
-      time:c.time,
-      value:c.close
-    }));
-
-  },[candleData]);
 
   const volumeData = useMemo(()=>{
 
@@ -71,87 +57,6 @@ export default function TerminalChart({
 
   },[pnlSeries]);
 
-  /* ================= TREND ================= */
-
-  const trendData = useMemo(()=>{
-
-    if(candleData.length<20) return [];
-
-    const out=[];
-
-    for(let i=20;i<candleData.length;i++){
-
-      const slice=candleData.slice(i-20,i);
-
-      const avg =
-        slice.reduce((s,c)=>s+c.close,0)/
-        slice.length;
-
-      out.push({
-        time:candleData[i].time,
-        value:avg
-      });
-
-    }
-
-    return out;
-
-  },[candleData]);
-
-  /* ================= EMA ================= */
-
-  const emaData = useMemo(()=>{
-
-    if(candleData.length<50) return [];
-
-    const out=[];
-    const k = 2/(50+1);
-
-    let ema=candleData[0].close;
-
-    candleData.forEach(c=>{
-
-      ema = c.close*k + ema*(1-k);
-
-      out.push({
-        time:c.time,
-        value:ema
-      });
-
-    });
-
-    return out;
-
-  },[candleData]);
-
-  /* ================= MARKERS ================= */
-
-  const markers = useMemo(()=>{
-
-    const tradeMarkers = trades.map(t=>({
-
-      time:Number(t.time),
-      position:t.side==="BUY"?"belowBar":"aboveBar",
-      color:t.side==="BUY"?"#22c55e":"#ef4444",
-      shape:t.side==="BUY"?"arrowUp":"arrowDown",
-      text:t.side
-
-    }));
-
-    const aiMarkers = aiSignals.map(s=>({
-
-      time:Number(s.time),
-      position:"aboveBar",
-      color:"#facc15",
-      shape:"circle",
-      text:"AI"
-
-    }));
-
-    return [...tradeMarkers,...aiMarkers];
-
-  },[trades,aiSignals]);
-
   /* ================= CHART INIT ================= */
 
   useEffect(()=>{
@@ -164,6 +69,7 @@ export default function TerminalChart({
     const chart = createChart(el,{
 
       height,
+      width: el.clientWidth,
 
       layout:{
         background:{color:"#0b1220"},
@@ -227,16 +133,14 @@ export default function TerminalChart({
 
     chartRef.current = chart;
 
-    chart.timeScale().fitContent();
-
     const ro = new ResizeObserver(entries=>{
 
       const rect = entries[0].contentRect;
 
-      chart.applyOptions({
-        width:rect.width,
-        height
-      });
+      chart.resize(rect.width, height);
+
+      // important
+      chart.timeScale().fitContent();
 
     });
 
@@ -257,29 +161,30 @@ export default function TerminalChart({
 
     if(!candleSeriesRef.current) return;
 
-    if(!candleData.length) return;
+    if(!candleData.length) {
+      lastTimeRef.current = null;
+      return;
+    }
 
     const last = candleData[candleData.length-1];
 
+    // FULL DATA RESET
     if(lastTimeRef.current === null){
 
       candleSeriesRef.current.setData(candleData);
-
       lastTimeRef.current = last.time;
+
+      // 🔥 force proper scaling
+      chartRef.current?.timeScale().fitContent();
 
       return;
-
     }
 
-    if(last.time === lastTimeRef.current){
+    // REALTIME UPDATE
+    candleSeriesRef.current.update(last);
 
-      candleSeriesRef.current.update(last);
-
-    }else{
-
-      candleSeriesRef.current.update(last);
+    if(last.time !== lastTimeRef.current){
       lastTimeRef.current = last.time;
-
     }
 
   },[candleData]);
@@ -293,47 +198,27 @@ export default function TerminalChart({
   },[pnlData]);
 
   useEffect(()=>{
-
-    if(showTrend)
-      trendSeriesRef.current?.setData(trendData);
-    else
-      trendSeriesRef.current?.setData([]);
-
-  },[trendData,showTrend]);
-
-  useEffect(()=>{
-
-    if(showEMA)
-      emaSeriesRef.current?.setData(emaData);
-    else
-      emaSeriesRef.current?.setData([]);
-
-  },[emaData,showEMA]);
-
-  useEffect(()=>{
-    candleSeriesRef.current?.setMarkers(markers);
-  },[markers]);
-
-  /* ================= UI ================= */
+    candleSeriesRef.current?.setMarkers(
+      [...trades.map(t=>({
+        time:Number(t.time),
+        position:t.side==="BUY"?"belowBar":"aboveBar",
+        color:t.side==="BUY"?"#22c55e":"#ef4444",
+        shape:t.side==="BUY"?"arrowUp":"arrowDown",
+        text:t.side
+      })),
+      ...aiSignals.map(s=>({
+        time:Number(s.time),
+        position:"aboveBar",
+        color:"#facc15",
+        shape:"circle",
+        text:"AI"
+      }))]
+    );
+  },[trades,aiSignals]);
 
   return(
 
     <div style={{width:"100%"}}>
-
-      <div style={{
-        display:"flex",
-        gap:8,
-        marginBottom:6
-      }}>
-
-        <button onClick={()=>setChartType("candles")}>📊</button>
-        <button onClick={()=>setChartType("line")}>📈</button>
-        <button onClick={()=>setChartType("area")}>≈</button>
-
-        <button onClick={()=>setShowTrend(v=>!v)}>SMA</button>
-        <button onClick={()=>setShowEMA(v=>!v)}>EMA</button>
-
-      </div>
 
       <div
         ref={wrapRef}
