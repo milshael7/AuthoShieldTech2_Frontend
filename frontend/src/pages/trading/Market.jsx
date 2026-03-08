@@ -1,11 +1,12 @@
-import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import TerminalChart from "../../components/TerminalChart";
+import { getToken } from "../../lib/api.js";
 import "../../styles/terminal.css";
 
-/**
- * Market.jsx — INTERNAL MULTI-ASSET MARKET PANEL
- * FIXED: live candle updates instead of static candles
- */
+/*
+REAL MARKET PANEL
+Real websocket price → candle builder → chart
+*/
 
 const SYMBOL_GROUPS = {
   Crypto: ["BTCUSDT","ETHUSDT","SOLUSDT"],
@@ -16,231 +17,119 @@ const SYMBOL_GROUPS = {
 
 const ALL_SYMBOLS = Object.values(SYMBOL_GROUPS).flat();
 
-const SNAP_POS = { x: 16, y: 110 };
-const SNAP_DELAY = 2200;
+const CANDLE_SECONDS = 60;
+const MAX_CANDLES = 200;
 
-/* timeframe → seconds */
-const TF_SECONDS = {
-  "1":60,
-  "5":300,
-  "15":900,
-  "60":3600,
-  "D":86400
-};
+const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
 
-export default function Market({
-  mode="paper",
-  dailyLimit=5,
-  tradesUsed=0
-}){
+export default function Market(){
+
+  const wsRef = useRef(null);
+  const lastCandleRef = useRef(null);
 
   const [symbol,setSymbol] = useState(ALL_SYMBOLS[0]);
-  const [tf,setTf] = useState("1");
-  const [side,setSide] = useState("BUY");
-
-  const [panelOpen,setPanelOpen] = useState(false);
-  const [docked,setDocked] = useState(true);
-  const [pos,setPos] = useState(SNAP_POS);
-
-  const dragData = useRef({x:0,y:0,dragging:false});
-  const snapTimer = useRef(null);
-
-  const limitReached = tradesUsed >= dailyLimit;
-
-  /* ================= CHART STATE ================= */
-
+  const [price,setPrice] = useState(null);
   const [candles,setCandles] = useState([]);
-  const [volume,setVolume] = useState([]);
-  const [trades,setTrades] = useState([]);
-  const [aiSignals,setAiSignals] = useState([]);
-  const [pnlSeries,setPnlSeries] = useState([]);
 
-  /* ================= INITIAL CANDLES ================= */
+  function safeNumber(v){
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
 
-  useEffect(()=>{
+  function updateCandles(priceNow){
 
-    const interval = TF_SECONDS[tf] || 60;
+    const now = Math.floor(Date.now()/1000);
+    const candleTime = Math.floor(now / CANDLE_SECONDS) * CANDLE_SECONDS;
 
-    let price =
-      symbol==="BTCUSDT" ? 65000 :
-      symbol==="ETHUSDT" ? 3500 :
-      symbol==="SOLUSDT" ? 150 :
-      100;
+    const last = lastCandleRef.current;
 
-    const fake=[];
+    if(!last || last.time !== candleTime){
 
-    for(let i=0;i<120;i++){
+      const newCandle = {
+        time:candleTime,
+        open:priceNow,
+        high:priceNow,
+        low:priceNow,
+        close:priceNow
+      };
 
-      const open = price;
-      const move = (Math.random()-0.5) * price * 0.01;
-      const close = open + move;
+      lastCandleRef.current = newCandle;
 
-      const high = Math.max(open,close) + Math.random()*price*0.003;
-      const low = Math.min(open,close) - Math.random()*price*0.003;
+      setCandles(prev=>{
+        const next = [...prev,newCandle];
+        return next.slice(-MAX_CANDLES);
+      });
 
-      price = close;
+    }else{
 
-      fake.push({
-        time: Math.floor(Date.now()/1000) - ((120-i)*interval),
-        open,
-        high,
-        low,
-        close
+      const updated = {
+        ...last,
+        high:Math.max(last.high,priceNow),
+        low:Math.min(last.low,priceNow),
+        close:priceNow
+      };
+
+      lastCandleRef.current = updated;
+
+      setCandles(prev=>{
+        const next=[...prev];
+        next[next.length-1] = updated;
+        return next;
       });
 
     }
 
-    setCandles(fake);
-
-  },[symbol,tf]);
-
-  /* ================= LIVE PRICE ENGINE ================= */
-
-  useEffect(()=>{
-
-    const timer = setInterval(()=>{
-
-      setCandles(prev=>{
-
-        if(prev.length===0) return prev;
-
-        const last = prev[prev.length-1];
-
-        const move =
-          (Math.random()-0.5) * last.close * 0.002;
-
-        const newClose = last.close + move;
-
-        const newCandle = {
-
-          time: Math.floor(Date.now()/1000),
-
-          open: last.close,
-          high: Math.max(last.close,newClose),
-          low: Math.min(last.close,newClose),
-          close: newClose
-
-        };
-
-        return [...prev.slice(-119), newCandle];
-
-      });
-
-    },2000);
-
-    return ()=>clearInterval(timer);
-
-  },[symbol,tf]);
-
-  /* ================= DRAG LOGIC ================= */
-
-  const clampToViewport = useCallback((x,y)=>{
-
-    const padding=12;
-    const maxX=window.innerWidth-340;
-    const maxY=window.innerHeight-420;
-
-    return{
-      x:Math.max(padding,Math.min(maxX,x)),
-      y:Math.max(padding,Math.min(maxY,y))
-    };
-
-  },[]);
-
-  const startDrag = useCallback((e)=>{
-
-    const t = e.touches ? e.touches[0] : e;
-
-    dragData.current={
-      dragging:true,
-      x:t.clientX-pos.x,
-      y:t.clientY-pos.y
-    };
-
-    setDocked(false);
-    clearTimeout(snapTimer.current);
-
-  },[pos]);
-
-  const onMove = useCallback((e)=>{
-
-    if(!dragData.current.dragging) return;
-
-    const t = e.touches ? e.touches[0] : e;
-
-    const newPos = clampToViewport(
-      t.clientX-dragData.current.x,
-      t.clientY-dragData.current.y
-    );
-
-    setPos(newPos);
-
-  },[clampToViewport]);
-
-  const endDrag = useCallback(()=>{
-
-    if(!dragData.current.dragging) return;
-
-    dragData.current.dragging=false;
-
-    snapTimer.current=setTimeout(()=>{
-
-      setDocked(true);
-      setPos(SNAP_POS);
-
-    },SNAP_DELAY);
-
-  },[]);
-
-  useEffect(()=>{
-
-    window.addEventListener("mousemove",onMove);
-    window.addEventListener("mouseup",endDrag);
-    window.addEventListener("touchmove",onMove);
-    window.addEventListener("touchend",endDrag);
-
-    return()=>{
-
-      window.removeEventListener("mousemove",onMove);
-      window.removeEventListener("mouseup",endDrag);
-      window.removeEventListener("touchmove",onMove);
-      window.removeEventListener("touchend",endDrag);
-      clearTimeout(snapTimer.current);
-
-    };
-
-  },[onMove,endDrag]);
-
-  function togglePanel(){
-
-    if(limitReached) return;
-
-    clearTimeout(snapTimer.current);
-
-    setPanelOpen(v=>!v);
-    setDocked(true);
-    setPos(SNAP_POS);
-
   }
 
-  /* ================= UI ================= */
+  useEffect(()=>{
+
+    if(wsRef.current || !API_BASE) return;
+
+    const token = getToken();
+    if(!token) return;
+
+    try{
+
+      const url = new URL(API_BASE);
+      const protocol = url.protocol==="https:"?"wss:":"ws:";
+
+      const ws = new WebSocket(
+        `${protocol}//${url.host}/ws?channel=market&token=${encodeURIComponent(token)}`
+      );
+
+      wsRef.current = ws;
+
+      ws.onmessage = (msg)=>{
+
+        try{
+
+          const data = JSON.parse(msg.data);
+          const market = data?.data?.[symbol];
+
+          if(!market) return;
+
+          const priceNow = safeNumber(market.price);
+
+          setPrice(priceNow);
+          updateCandles(priceNow);
+
+        }catch{}
+
+      };
+
+      ws.onclose = ()=>{
+        wsRef.current = null;
+      };
+
+      return ()=>ws.close();
+
+    }catch{}
+
+  },[symbol]);
 
   return(
 
-    <div className={`terminalRoot ${mode==="live"?"liveMode":""}`}>
-
-      <div className={`marketBanner ${mode==="live"?"warn":""}`}>
-
-        <b>Mode:</b> {mode.toUpperCase()} •
-        <b> Trades Used:</b> {tradesUsed}/{dailyLimit}
-
-        {limitReached &&
-          <span className="warnText">
-            {" "}— Daily trade limit reached
-          </span>
-        }
-
-      </div>
+    <div className="terminalRoot">
 
       <header className="tvTopBar">
 
@@ -262,65 +151,30 @@ export default function Market({
 
           </select>
 
-          <div className="tvTfRow">
-
-            {["1","5","15","60","D"].map(x=>(
-              <button
-                key={x}
-                className={tf===x?"tvPill active":"tvPill"}
-                onClick={()=>setTf(x)}
-              >
-                {x}
-              </button>
-            ))}
-
-          </div>
-
         </div>
 
         <div className="tvTopRight">
 
-          <button
-            className="tvPrimary"
-            onClick={togglePanel}
-            disabled={limitReached}
-          >
-            Prepare Trade
-          </button>
+          <div style={{fontWeight:600}}>
+            {symbol} — {price ? price.toLocaleString() : "Loading"}
+          </div>
 
         </div>
 
       </header>
 
-      <div className={`tvBody ${panelOpen && docked ? "withPanel" : ""}`}>
+      <main className="tvChartArea">
 
-        <main className="tvChartArea">
+        <TerminalChart
+          candles={candles}
+          volume={[]}
+          trades={[]}
+          aiSignals={[]}
+          pnlSeries={[]}
+          height={520}
+        />
 
-          <div className="internalChart">
-
-            <div className="chartHeader">
-              <strong>{symbol}</strong>
-              <span className="tfLabel">{tf}</span>
-            </div>
-
-            <div className="chartCanvas">
-
-              <TerminalChart
-                candles={candles}
-                volume={volume}
-                trades={trades}
-                aiSignals={aiSignals}
-                pnlSeries={pnlSeries}
-                height={520}
-              />
-
-            </div>
-
-          </div>
-
-        </main>
-
-      </div>
+      </main>
 
     </div>
 
