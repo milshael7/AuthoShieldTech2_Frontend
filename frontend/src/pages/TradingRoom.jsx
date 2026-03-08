@@ -33,9 +33,7 @@ export default function TradingRoom(){
       const res = await fetch(
         `${API_BASE}/api/paper/status`,
         {
-          headers:{
-            Authorization:`Bearer ${token}`
-          }
+          headers:{ Authorization:`Bearer ${token}` }
         }
       );
 
@@ -46,6 +44,7 @@ export default function TradingRoom(){
       const snap = data.snapshot || {};
 
       setEquity(Number(snap.equity || 0));
+
       setWallet({
         usd:Number(snap.cashBalance || 0),
         btc:Number(snap.position?.qty || 0)
@@ -65,9 +64,7 @@ export default function TradingRoom(){
       const res = await fetch(
         `${API_BASE}/api/paper/decisions`,
         {
-          headers:{
-            Authorization:`Bearer ${token}`
-          }
+          headers:{ Authorization:`Bearer ${token}` }
         }
       );
 
@@ -81,7 +78,7 @@ export default function TradingRoom(){
 
   }
 
-  /* ================= LOAD SNAPSHOT LOOP ================= */
+  /* ================= LOAD LOOP ================= */
 
   useEffect(()=>{
 
@@ -141,7 +138,7 @@ export default function TradingRoom(){
 
   },[]);
 
-  /* ================= CANDLE BUILDER ================= */
+  /* ================= CANDLES ================= */
 
   function updateCandles(priceNow){
 
@@ -263,10 +260,13 @@ export default function TradingRoom(){
         price={price}
       />
 
+      {/* ================= AI ENGINE PANEL ================= */}
+
       <div style={{
-        width:260,
+        width:280,
         padding:16,
-        background:"#111827"
+        background:"#111827",
+        overflowY:"auto"
       }}>
 
         <h3>AI Engine</h3>
@@ -275,8 +275,50 @@ export default function TradingRoom(){
         <div>Cash: ${wallet.usd.toFixed(2)}</div>
 
         <div style={{marginTop:10}}>
-          AI Confidence:
-          {(aiConfidence*100).toFixed(0)}%
+          AI Confidence: {(aiConfidence*100).toFixed(0)}%
+        </div>
+
+        {/* ================= SIGNAL STREAM ================= */}
+
+        <div style={{marginTop:20}}>
+
+          <strong>AI Signal Stream</strong>
+
+          <div style={{marginTop:10}}>
+
+            {decisions.slice(-8).reverse().map((d,i)=>(
+
+              <div key={i} style={{
+                borderBottom:"1px solid rgba(255,255,255,.05)",
+                padding:"6px 0",
+                fontSize:12
+              }}>
+
+                <div style={{
+                  color:
+                    d.action==="BUY" ? "#22c55e" :
+                    d.action==="SELL" ? "#ef4444" :
+                    "#9ca3af"
+                }}>
+                  {d.action}
+                </div>
+
+                <div>
+                  conf {(Number(d.confidence||0)*100).toFixed(0)}%
+                </div>
+
+                {d.riskPct &&
+                  <div>
+                    risk {(Number(d.riskPct)*100).toFixed(2)}%
+                  </div>
+                }
+
+              </div>
+
+            ))}
+
+          </div>
+
         </div>
 
       </div>
