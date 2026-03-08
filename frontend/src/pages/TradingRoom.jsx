@@ -9,7 +9,9 @@ const CANDLE_SECONDS = 60;
 
 export default function TradingRoom(){
 
-  const wsRef = useRef(null);
+  const marketWsRef = useRef(null);
+  const paperWsRef = useRef(null);
+
   const lastCandleRef = useRef(null);
 
   const [candles,setCandles] = useState([]);
@@ -24,83 +26,11 @@ export default function TradingRoom(){
 
   const token = getToken();
 
-  /* ================= PAPER SNAPSHOT ================= */
-
-  async function loadPaperState(){
-
-    try{
-
-      const res = await fetch(
-        `${API_BASE}/api/paper/status`,
-        {
-          headers:{ Authorization:`Bearer ${token}` }
-        }
-      );
-
-      const data = await res.json();
-
-      if(!data?.ok) return;
-
-      const snap = data.snapshot || {};
-
-      setEquity(Number(snap.equity || 0));
-
-      setWallet({
-        usd:Number(snap.cashBalance || 0),
-        btc:Number(snap.position?.qty || 0)
-      });
-
-      setPosition(snap.position || null);
-      setTrades(snap.trades || []);
-
-    }catch{}
-
-  }
-
-  async function loadDecisions(){
-
-    try{
-
-      const res = await fetch(
-        `${API_BASE}/api/paper/decisions`,
-        {
-          headers:{ Authorization:`Bearer ${token}` }
-        }
-      );
-
-      const data = await res.json();
-
-      if(data?.ok){
-        setDecisions(data.decisions || []);
-      }
-
-    }catch{}
-
-  }
-
-  /* ================= LOAD LOOP ================= */
-
-  useEffect(()=>{
-
-    loadPaperState();
-    loadDecisions();
-
-    const loop = setInterval(()=>{
-
-      loadPaperState();
-      loadDecisions();
-
-    },3000);
-
-    return ()=>clearInterval(loop);
-
-  },[]);
-
   /* ================= MARKET WEBSOCKET ================= */
 
   useEffect(()=>{
 
-    if(wsRef.current) return;
+    if(marketWsRef.current) return;
 
     try{
 
@@ -111,7 +41,7 @@ export default function TradingRoom(){
         `${protocol}//${url.host}/ws?channel=market&token=${encodeURIComponent(token)}`
       );
 
-      wsRef.current = ws;
+      marketWsRef.current = ws;
 
       ws.onmessage = (msg)=>{
 
@@ -127,6 +57,55 @@ export default function TradingRoom(){
           setPrice(p);
 
           updateCandles(p);
+
+        }catch{}
+
+      };
+
+      return ()=>ws.close();
+
+    }catch{}
+
+  },[]);
+
+  /* ================= PAPER ENGINE WEBSOCKET ================= */
+
+  useEffect(()=>{
+
+    if(paperWsRef.current) return;
+
+    try{
+
+      const url = new URL(API_BASE);
+      const protocol = url.protocol==="https:"?"wss:":"ws:";
+
+      const ws = new WebSocket(
+        `${protocol}//${url.host}/ws?channel=paper&token=${encodeURIComponent(token)}`
+      );
+
+      paperWsRef.current = ws;
+
+      ws.onmessage = (msg)=>{
+
+        try{
+
+          const data = JSON.parse(msg.data);
+
+          if(data?.channel !== "paper") return;
+
+          const snap = data.snapshot || {};
+          const dec = data.decisions || [];
+
+          setEquity(Number(snap.equity || 0));
+
+          setWallet({
+            usd:Number(snap.cashBalance || 0),
+            btc:Number(snap.position?.qty || 0)
+          });
+
+          setPosition(snap.position || null);
+          setTrades(snap.trades || []);
+          setDecisions(dec);
 
         }catch{}
 
