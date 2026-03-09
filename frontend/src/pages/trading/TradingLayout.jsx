@@ -1,6 +1,6 @@
 // ============================================================
-// TRADING TERMINAL — ENTERPRISE TRADING MODULE v6
-// Persistent engine mount • AI telemetry enabled
+// TRADING TERMINAL — ENTERPRISE TRADING MODULE v7
+// FULL persistent workspace (no panel resets)
 // ============================================================
 
 import React, { useEffect, useState } from "react";
@@ -14,7 +14,7 @@ import Analytics from "./Analytics";
 
 const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
 
-export default function TradingLayout() {
+export default function TradingLayout(){
 
   const location = useLocation();
   const token = getToken();
@@ -28,9 +28,7 @@ export default function TradingLayout() {
 
   const page = location.pathname.split("/").pop();
 
-  /* =========================================================
-  TELEMETRY LOOP
-  ========================================================= */
+  /* ================= TELEMETRY ================= */
 
   useEffect(()=>{
 
@@ -57,8 +55,7 @@ export default function TradingLayout() {
         setAiRate(tele.decisionsPerMinute || 0);
 
         const mem = tele.memoryUsage || 0;
-
-        setMemory(Math.round(mem / 1024 / 1024));
+        setMemory(Math.round(mem/1024/1024));
 
       }catch{}
 
@@ -72,9 +69,7 @@ export default function TradingLayout() {
 
   },[token]);
 
-  /* =========================================================
-  FORMAT TIME
-  ========================================================= */
+  /* ================= TIME FORMAT ================= */
 
   function formatUptime(seconds){
 
@@ -86,7 +81,7 @@ export default function TradingLayout() {
 
   }
 
-  const linkBase = {
+  const linkBase={
     padding:"8px 18px",
     textDecoration:"none",
     color:"#9ca3af",
@@ -96,36 +91,29 @@ export default function TradingLayout() {
     letterSpacing:".04em"
   };
 
-  const linkActive = {
+  const linkActive={
     background:"rgba(37,99,235,.15)",
     color:"#ffffff"
   };
 
-  /* =========================================================
-  UI
-  ========================================================= */
+  /* ================= UI ================= */
 
   return(
 
-    <div
-      style={{
-        display:"flex",
-        flexDirection:"column",
-        height:"100%",
-        minHeight:0
-      }}
-    >
+    <div style={{
+      display:"flex",
+      flexDirection:"column",
+      height:"100%",
+      minHeight:0
+    }}>
 
-      {/* ================= HEADER ================= */}
+      {/* HEADER */}
 
-      <div
-        style={{
-          padding:"18px 22px 14px",
-          borderBottom:"1px solid rgba(255,255,255,.06)",
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,.02), transparent)"
-        }}
-      >
+      <div style={{
+        padding:"18px 22px 14px",
+        borderBottom:"1px solid rgba(255,255,255,.06)",
+        background:"linear-gradient(180deg, rgba(255,255,255,.02), transparent)"
+      }}>
 
         <div style={{
           display:"flex",
@@ -153,7 +141,7 @@ export default function TradingLayout() {
 
           </div>
 
-          {/* ENGINE STATUS */}
+          {/* TELEMETRY */}
 
           <div style={{
             display:"flex",
@@ -211,80 +199,59 @@ export default function TradingLayout() {
 
       </div>
 
-      {/* ================= NAV ================= */}
+      {/* NAV */}
 
-      <div
-        style={{
-          display:"flex",
-          gap:10,
-          padding:"12px 22px",
-          borderBottom:"1px solid rgba(255,255,255,.05)",
-          background:"rgba(255,255,255,.01)"
-        }}
-      >
+      <div style={{
+        display:"flex",
+        gap:10,
+        padding:"12px 22px",
+        borderBottom:"1px solid rgba(255,255,255,.05)",
+        background:"rgba(255,255,255,.01)"
+      }}>
 
-        <NavLink
-          to="live"
-          style={({isActive}) =>
-            isActive ? {...linkBase,...linkActive} : linkBase
-          }
-        >
+        <NavLink to="live" style={({isActive})=>isActive?{...linkBase,...linkActive}:linkBase}>
           Live Trading
         </NavLink>
 
-        <NavLink
-          to="market"
-          style={({isActive}) =>
-            isActive ? {...linkBase,...linkActive} : linkBase
-          }
-        >
+        <NavLink to="market" style={({isActive})=>isActive?{...linkBase,...linkActive}:linkBase}>
           Market
         </NavLink>
 
-        <NavLink
-          to="control"
-          style={({isActive}) =>
-            isActive ? {...linkBase,...linkActive} : linkBase
-          }
-        >
+        <NavLink to="control" style={({isActive})=>isActive?{...linkBase,...linkActive}:linkBase}>
           AI Control
         </NavLink>
 
-        <NavLink
-          to="analytics"
-          style={({isActive}) =>
-            isActive ? {...linkBase,...linkActive} : linkBase
-          }
-        >
+        <NavLink to="analytics" style={({isActive})=>isActive?{...linkBase,...linkActive}:linkBase}>
           Analytics
         </NavLink>
 
       </div>
 
-      {/* ================= CONTENT ================= */}
+      {/* CONTENT — PERSISTENT PANELS */}
 
-      <div
-        style={{
-          flex:1,
-          minHeight:0,
-          position:"relative"
-        }}
-      >
+      <div style={{
+        flex:1,
+        minHeight:0,
+        position:"relative"
+      }}>
 
-        <div
-          style={{
-            display: page==="live" ? "block" : "none",
-            height:"100%"
-          }}
-        >
-          <TradingRoom />
+        <div style={{display: page==="live" ? "block":"none", height:"100%"}}>
+          <TradingRoom/>
         </div>
 
-        {page==="market" && <Market />}
-        {page==="control" && <AIControl />}
-        {page==="analytics" && <Analytics />}
+        <div style={{display: page==="market" ? "block":"none", height:"100%"}}>
+          <Market/>
+        </div>
 
-        {page==="" && <Navigate to="live" replace />}
+        <div style={{display: page==="control" ? "block":"none", height:"100%"}}>
+          <AIControl/>
+        </div>
+
+        <div style={{display: page==="analytics" ? "block":"none", height:"100%"}}>
+          <Analytics/>
+        </div>
+
+        {page==="" && <Navigate to="live" replace/>}
 
       </div>
 
