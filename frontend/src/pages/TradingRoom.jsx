@@ -5,6 +5,7 @@ import { getToken } from "../lib/api.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
 const SYMBOL = "BTCUSDT";
+
 const CANDLE_SECONDS = 60;
 const MAX_CANDLES = 500;
 const STORAGE_KEY = "trading_candles_BTC";
@@ -38,6 +39,11 @@ function savePersisted(candles) {
   } catch {}
 }
 
+function toNumber(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 export default function TradingRoom() {
 
   const marketWsRef = useRef(null);
@@ -64,6 +70,67 @@ export default function TradingRoom() {
   const [trades, setTrades] = useState([]);
   const [decisions, setDecisions] = useState([]);
 
+  /* ================= LOAD HISTORY (MATCH MARKET) ================= */
+
+  async function loadHistory() {
+
+    if (!API_BASE) return;
+
+    const token = getToken();
+    if (!token) return;
+
+    try {
+
+      const res = await fetch(
+        `${API_BASE}/api/market/candles/${SYMBOL}?limit=${MAX_CANDLES}`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
+      const data = await res.json();
+      if (!data?.ok || !Array.isArray(data.candles)) return;
+
+      const formatted = data.candles
+        .map(c => {
+
+          const time = toNumber(c?.time);
+          const open = toNumber(c?.open);
+          const high = toNumber(c?.high);
+          const low = toNumber(c?.low);
+          const close = toNumber(c?.close);
+
+          if (
+            time === null ||
+            open === null ||
+            high === null ||
+            low === null ||
+            close === null
+          ) return null;
+
+          return { time, open, high, low, close };
+
+        })
+        .filter(Boolean)
+        .sort((a,b)=>a.time-b.time)
+        .slice(-MAX_CANDLES);
+
+      if (!formatted.length) return;
+
+      const last = formatted[formatted.length - 1];
+
+      lastCandleRef.current = last;
+
+      window.__TRADING_CACHE__.candles = formatted;
+      window.__TRADING_CACHE__.lastCandle = last;
+
+      savePersisted(formatted);
+
+      setCandles(formatted);
+
+    } catch {}
+  }
+
   /* ================= CANDLE BUILDER ================= */
 
   function updateCandles(priceNow) {
@@ -71,18 +138,18 @@ export default function TradingRoom() {
     if (!Number.isFinite(priceNow)) return;
 
     const now = Math.floor(Date.now() / 1000);
-    const candleTime =
-      Math.floor(now / CANDLE_SECONDS) * CANDLE_SECONDS;
+    const candleTime = Math.floor(now / CANDLE_SECONDS) * CANDLE_SECONDS;
 
     const last = lastCandleRef.current;
 
     setCandles(prev => {
 
       let next;
+      let nextLast;
 
       if (!last || last.time !== candleTime) {
 
-        const newCandle = {
+        nextLast = {
           time: candleTime,
           open: priceNow,
           high: priceNow,
@@ -90,32 +157,37 @@ export default function TradingRoom() {
           close: priceNow
         };
 
-        lastCandleRef.current = newCandle;
-        next = [...prev.slice(-MAX_CANDLES), newCandle];
+        next = [...prev.slice(-MAX_CANDLES), nextLast];
 
       } else {
 
-        const updated = {
+        nextLast = {
           ...last,
           high: Math.max(last.high, priceNow),
           low: Math.min(last.low, priceNow),
           close: priceNow
         };
 
-        lastCandleRef.current = updated;
-
         next = [...prev];
-        next[next.length - 1] = updated;
+        next[next.length - 1] = nextLast;
       }
 
+      lastCandleRef.current = nextLast;
+
       window.__TRADING_CACHE__.candles = next;
-      window.__TRADING_CACHE__.lastCandle = lastCandleRef.current;
+      window.__TRADING_CACHE__.lastCandle = nextLast;
 
       savePersisted(next);
 
       return next;
     });
   }
+
+  /* ================= INITIAL HISTORY ================= */
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
 
   /* ================= MARKET WS ================= */
 
@@ -137,13 +209,15 @@ export default function TradingRoom() {
       marketWsRef.current = ws;
 
       ws.onmessage = (msg) => {
+
         try {
+
           const data = JSON.parse(msg.data);
           const market = data?.data?.[SYMBOL];
           if (!market) return;
 
-          const p = Number(market.price);
-          if (!Number.isFinite(p)) return;
+          const p = toNumber(market.price);
+          if (p === null) return;
 
           setPrice(p);
           updateCandles(p);
@@ -227,82 +301,87 @@ export default function TradingRoom() {
   /* ================= DERIVED ================= */
 
   const pnlSeries = useMemo(() => {
+
     let running = 0;
+
     return trades.map(t => {
+
       running += Number(t.profit || 0);
+
       return {
         time: Math.floor(Number(t.time) / 1000),
         value: running
       };
+
     });
+
   }, [trades]);
 
   const aiSignals = useMemo(() => {
+
     return trades.map(t => ({
       time: Math.floor(Number(t.time) / 1000)
     }));
+
   }, [trades]);
 
   const aiConfidence = useMemo(() => {
+
     if (!decisions.length) return 0;
+
     const total =
-      decisions.reduce((s, d) => s + Number(d.confidence || 0), 0);
+      decisions.reduce((s,d)=>s+Number(d.confidence||0),0);
+
     return total / decisions.length;
+
   }, [decisions]);
 
   /* ================= UI ================= */
 
   return (
-    <div style={{ display: "flex", flex: 1, background: "#0a0f1c", color: "#fff" }}>
 
-      <div style={{ flex: 1, padding: 20 }}>
-        <div style={{ fontWeight: 700 }}>{SYMBOL}</div>
+    <div style={{ display:"flex", flex:1, background:"#0a0f1c", color:"#fff" }}>
 
-        <div style={{ opacity: .7 }}>
-          Live Price: {price ? price.toLocaleString() : "Connecting..."}
+      <div style={{ flex:1, padding:20 }}>
+
+        <div style={{ fontWeight:700 }}>{SYMBOL}</div>
+
+        <div style={{ opacity:.7 }}>
+          Live Price: {price ? price.toLocaleString() : "Loading"}
         </div>
 
-        {/* DO NOT RENDER CHART UNTIL PRICE EXISTS */}
-
-        {price && candles.length > 0 ? (
-
-          <TerminalChart
-            candles={candles}
-            trades={trades}
-            aiSignals={aiSignals}
-            pnlSeries={pnlSeries}
-          />
-
-        ) : (
-
-          <div style={{ padding: 40, opacity: .6 }}>
-            Connecting to market feed...
-          </div>
-
-        )}
+        <TerminalChart
+          candles={candles}
+          trades={trades}
+          aiSignals={aiSignals}
+          pnlSeries={pnlSeries}
+        />
 
       </div>
 
-      <div style={{ width: 240 }}>
-        <OrderPanel symbol={SYMBOL} price={price} />
+      <div style={{ width:240 }}>
+        <OrderPanel symbol={SYMBOL} price={price}/>
       </div>
 
       <div style={{
-        width: 180,
-        padding: 16,
-        background: "#111827",
-        overflowY: "auto"
+        width:180,
+        padding:16,
+        background:"#111827",
+        overflowY:"auto"
       }}>
+
         <h3>AI Engine</h3>
 
         <div>Equity: ${equity.toFixed(2)}</div>
         <div>Cash: ${wallet.usd.toFixed(2)}</div>
 
-        <div style={{ marginTop: 10 }}>
-          AI Confidence: {(aiConfidence * 100).toFixed(0)}%
+        <div style={{ marginTop:10 }}>
+          AI Confidence: {(aiConfidence*100).toFixed(0)}%
         </div>
+
       </div>
 
     </div>
+
   );
 }
