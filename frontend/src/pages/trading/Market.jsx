@@ -25,7 +25,6 @@ export default function Market(){
   const [symbol,setSymbol] = useState(ALL_SYMBOLS[0]);
   const [price,setPrice] = useState(null);
   const [candles,setCandles] = useState([]);
-  const [ready,setReady] = useState(false);
 
   function toNumber(v){
     const n = Number(v);
@@ -49,49 +48,46 @@ export default function Market(){
       );
 
       const data = await res.json();
-      if(!data?.ok || !Array.isArray(data.candles)) return;
 
-      const formatted = data.candles
-        .map(c=>{
+      if(!data?.ok) return;
 
-          const time = toNumber(c.time);
-          const open = toNumber(c.open);
-          const high = toNumber(c.high);
-          const low  = toNumber(c.low);
-          const close= toNumber(c.close);
-
-          if(
-            time === null ||
-            open === null ||
-            high === null ||
-            low  === null ||
-            close=== null
-          ) return null;
-
-          if(high < low) return null;
-
-          return { time, open, high, low, close };
-
-        })
-        .filter(Boolean)
-        .sort((a,b)=>a.time - b.time);
+      const formatted = (data.candles || [])
+        .map(c => ({
+          time:Number(c.time),
+          open:Number(c.open),
+          high:Number(c.high),
+          low:Number(c.low),
+          close:Number(c.close)
+        }))
+        .filter(c =>
+          Number.isFinite(c.time) &&
+          Number.isFinite(c.open) &&
+          Number.isFinite(c.high) &&
+          Number.isFinite(c.low) &&
+          Number.isFinite(c.close)
+        );
 
       if(formatted.length){
+
         lastCandleRef.current =
           formatted[formatted.length-1];
+
+        setCandles(formatted.slice(-MAX_CANDLES));
+
       }
 
-      setCandles(formatted);
-      setReady(true);
+    }catch(err){
 
-    }catch{}
+      console.log("history load skipped",err);
+
+    }
+
   }
 
   /* ================= SYMBOL CHANGE ================= */
 
   useEffect(()=>{
 
-    setReady(false);
     setCandles([]);
     lastCandleRef.current = null;
 
@@ -103,7 +99,6 @@ export default function Market(){
 
   useEffect(()=>{
 
-    if(!ready) return;
     if(!API_BASE) return;
 
     const token = getToken();
@@ -131,6 +126,7 @@ export default function Market(){
 
           const data = JSON.parse(msg.data);
           const market = data?.data?.[symbol];
+
           if(!market) return;
 
           const priceNow = toNumber(market.price);
@@ -142,13 +138,11 @@ export default function Market(){
           const candleTime =
             Math.floor(now/CANDLE_SECONDS)*CANDLE_SECONDS;
 
+          const last = lastCandleRef.current;
+
           setCandles(prev=>{
 
-            const last = lastCandleRef.current;
-
             let next;
-
-            /* NEW CANDLE */
 
             if(!last || last.time !== candleTime){
 
@@ -162,12 +156,10 @@ export default function Market(){
 
               lastCandleRef.current=newCandle;
 
-              next=[...prev,newCandle].slice(-MAX_CANDLES);
+              next=[...prev,newCandle]
+                .slice(-MAX_CANDLES);
 
-            }
-            /* UPDATE CURRENT */
-
-            else{
+            }else{
 
               const updated={
                 ...last,
@@ -178,12 +170,8 @@ export default function Market(){
 
               lastCandleRef.current=updated;
 
-              if(prev.length === 0){
-                next=[updated];
-              }else{
-                next=[...prev];
-                next[next.length-1]=updated;
-              }
+              next=[...prev];
+              next[next.length-1]=updated;
 
             }
 
@@ -196,19 +184,23 @@ export default function Market(){
       };
 
       ws.onclose = ()=>{
+
         wsRef.current = null;
+
       };
 
     }catch{}
 
     return ()=>{
+
       if(wsRef.current){
         wsRef.current.close();
-        wsRef.current=null;
+        wsRef.current = null;
       }
+
     };
 
-  },[ready,symbol]);
+  },[symbol]);
 
   return(
 
