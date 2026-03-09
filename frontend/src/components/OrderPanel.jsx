@@ -14,10 +14,39 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
   const [takeProfit,setTakeProfit] = useState("");
   const [risk,setRisk] = useState("");
 
+  const [mode,setMode] = useState("paper");
+
   const [loading,setLoading] = useState(false);
   const [msg,setMsg] = useState("");
 
+  /* ================= LOAD TRADING MODE ================= */
+
+  useEffect(()=>{
+
+    async function loadMode(){
+
+      try{
+
+        const res = await fetch(
+          `${API_BASE}/api/ai/config`,
+          {headers:authHeader()}
+        );
+
+        const data = await res.json();
+
+        const cfg = data?.config || {};
+        setMode(cfg.tradingMode || "paper");
+
+      }catch{}
+
+    }
+
+    loadMode();
+
+  },[]);
+
   /* AUTO FILL LIMIT PRICE */
+
   useEffect(()=>{
     if(orderType==="LIMIT" && price && !limitPrice){
       setLimitPrice(price.toString());
@@ -34,6 +63,8 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
     return Number.isFinite(n) ? n : 0;
   }
 
+  /* ================= SUBMIT ORDER ================= */
+
   async function submitOrder(){
 
     if(!size){
@@ -42,6 +73,7 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
     }
 
     const qty = safeNumber(size);
+
     if(qty<=0){
       setMsg("Invalid size");
       return;
@@ -53,7 +85,7 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
     try{
 
       const res = await fetch(
-        `${API_BASE}/api/paper/order`,
+        `${API_BASE}/api/trading/order`,
         {
           method:"POST",
           headers:{
@@ -80,7 +112,9 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
               takeProfit ? safeNumber(takeProfit) : null,
 
             risk:
-              risk ? safeNumber(risk) : null
+              risk ? safeNumber(risk) : null,
+
+            mode
 
           })
         }
@@ -92,7 +126,7 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
         setMsg(data?.error || "Order rejected");
       }else{
 
-        setMsg("Order submitted");
+        setMsg(`Order executed (${mode})`);
 
         setSize("");
         setLimitPrice("");
@@ -123,16 +157,25 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
       gap:10
     }}>
 
-      {/* SYMBOL */}
-
       <div style={{fontWeight:700,fontSize:14}}>
         {symbol}
       </div>
 
-      {/* PRICE */}
-
       <div style={{fontSize:12,opacity:.7}}>
         Market Price: {price ? price.toLocaleString() : "Loading..."}
+      </div>
+
+      {/* MODE */}
+
+      <div style={{
+        fontSize:11,
+        padding:"4px 8px",
+        borderRadius:6,
+        background:mode==="paper"
+          ?"rgba(59,130,246,.15)"
+          :"rgba(16,185,129,.15)"
+      }}>
+        MODE: {mode.toUpperCase()}
       </div>
 
       {/* ORDER TYPE */}
@@ -203,56 +246,17 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
 
       </div>
 
-      {/* SIZE */}
-
-      <Input
-        label="Position Size"
-        value={size}
-        setValue={setSize}
-        placeholder="0.01"
-      />
-
-      {/* LIMIT PRICE */}
+      <Input label="Position Size" value={size} setValue={setSize} placeholder="0.01"/>
 
       {orderType==="LIMIT" && (
-
-        <Input
-          label="Limit Price"
-          value={limitPrice}
-          setValue={setLimitPrice}
-          placeholder="Enter price"
-        />
-
+        <Input label="Limit Price" value={limitPrice} setValue={setLimitPrice} placeholder="Enter price"/>
       )}
 
-      {/* STOP LOSS */}
+      <Input label="Stop Loss" value={stopLoss} setValue={setStopLoss} placeholder="Optional"/>
 
-      <Input
-        label="Stop Loss"
-        value={stopLoss}
-        setValue={setStopLoss}
-        placeholder="Optional"
-      />
+      <Input label="Take Profit" value={takeProfit} setValue={setTakeProfit} placeholder="Optional"/>
 
-      {/* TAKE PROFIT */}
-
-      <Input
-        label="Take Profit"
-        value={takeProfit}
-        setValue={setTakeProfit}
-        placeholder="Optional"
-      />
-
-      {/* RISK */}
-
-      <Input
-        label="Risk %"
-        value={risk}
-        setValue={setRisk}
-        placeholder="1"
-      />
-
-      {/* EXECUTE */}
+      <Input label="Risk %" value={risk} setValue={setRisk} placeholder="1"/>
 
       <button
         onClick={submitOrder}
@@ -270,14 +274,10 @@ export default function OrderPanel({ symbol="BTCUSDT", price=0 }) {
         {loading ? "Sending..." : `Execute ${side}`}
       </button>
 
-      {/* STATUS */}
-
       {msg && (
-
         <div style={{fontSize:12,opacity:.7}}>
           {msg}
         </div>
-
       )}
 
     </div>
