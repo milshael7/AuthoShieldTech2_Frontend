@@ -23,7 +23,7 @@ export default function TerminalChart({
 
   const candleData = useMemo(() => {
 
-    return candles
+    const cleaned = candles
       .map(c => {
 
         const time = Number(c?.time);
@@ -46,6 +46,12 @@ export default function TerminalChart({
 
       })
       .filter(Boolean);
+
+    /* enforce time ordering */
+
+    cleaned.sort((a,b)=>a.time-b.time);
+
+    return cleaned;
 
   }, [candles]);
 
@@ -147,23 +153,29 @@ export default function TerminalChart({
     chartRef.current = chart;
 
     const ro = new ResizeObserver(entries => {
+
       const rect = entries[0].contentRect;
+
       try {
         chart.resize(rect.width, height);
         chart.timeScale().fitContent();
       } catch {}
+
     });
 
     ro.observe(el);
 
     return () => {
+
       try { ro.disconnect(); } catch {}
       try { chart.remove(); } catch {}
+
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
       pnlSeriesRef.current = null;
       lastTimeRef.current = null;
+
     };
 
   }, [height]);
@@ -173,37 +185,45 @@ export default function TerminalChart({
   useEffect(() => {
 
     const series = candleSeriesRef.current;
-    if (!series) return;
-    if (!candleData.length) {
-      lastTimeRef.current = null;
-      return;
-    }
+    const chart = chartRef.current;
+
+    if (!series || !chart) return;
+
+    if (!candleData.length) return;
 
     const last = candleData[candleData.length - 1];
 
+    if (!Number.isFinite(last.time)) return;
+
     if (lastTimeRef.current === null) {
+
       series.setData(candleData);
+
       lastTimeRef.current = last.time;
-      chartRef.current?.timeScale().fitContent();
+
+      try { chart.timeScale().fitContent(); } catch {}
+
       return;
+
     }
 
-    if (last.time > lastTimeRef.current) {
+    if (last.time >= lastTimeRef.current) {
+
       series.update(last);
+
       lastTimeRef.current = last.time;
+
       return;
+
     }
 
-    if (last.time === lastTimeRef.current) {
-      series.update(last);
-      return;
-    }
+    /* fallback reset */
 
-    if (last.time < lastTimeRef.current) {
-      series.setData(candleData);
-      lastTimeRef.current = last.time;
-      chartRef.current?.timeScale().fitContent();
-    }
+    series.setData(candleData);
+
+    lastTimeRef.current = last.time;
+
+    try { chart.timeScale().fitContent(); } catch {}
 
   }, [candleData]);
 
@@ -221,6 +241,7 @@ export default function TerminalChart({
 
     const markers = [
       ...trades.map(t => {
+
         const time = Number(t?.time);
         if (!Number.isFinite(time)) return null;
 
@@ -231,9 +252,11 @@ export default function TerminalChart({
           shape: t.side === "BUY" ? "arrowUp" : "arrowDown",
           text: t.side
         };
+
       }).filter(Boolean),
 
       ...aiSignals.map(s => {
+
         const time = Number(s?.time);
         if (!Number.isFinite(time)) return null;
 
@@ -244,6 +267,7 @@ export default function TerminalChart({
           shape: "circle",
           text: "AI"
         };
+
       }).filter(Boolean)
     ];
 
@@ -254,7 +278,9 @@ export default function TerminalChart({
   }, [trades, aiSignals]);
 
   return (
+
     <div style={{ width: "100%" }}>
+
       <div
         ref={wrapRef}
         style={{
@@ -266,6 +292,9 @@ export default function TerminalChart({
           background: "#0b1220"
         }}
       />
+
     </div>
+
   );
+
 }
