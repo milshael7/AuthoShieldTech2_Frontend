@@ -28,7 +28,7 @@ export default function TradingRoom() {
   const [trades, setTrades] = useState([]);
   const [decisions, setDecisions] = useState([]);
 
-  /* ================= LOAD HISTORY (FIXED ENDPOINT) ================= */
+  /* ================= LOAD HISTORY ================= */
 
   async function loadHistory() {
 
@@ -79,7 +79,7 @@ export default function TradingRoom() {
 
   }
 
-  /* ================= SAFE CANDLE BUILDER ================= */
+  /* ================= CANDLE BUILDER ================= */
 
   function updateCandles(priceNow) {
 
@@ -222,7 +222,19 @@ export default function TradingRoom() {
 
   }, []);
 
-  /* ================= DERIVED ================= */
+  /* ================= AI ANALYTICS ================= */
+
+  const aiConfidence = useMemo(() => {
+    if (!decisions.length) return 0;
+    const total = decisions.reduce((s,d)=>s+Number(d.confidence||0),0);
+    return total / decisions.length;
+  }, [decisions]);
+
+  const lastDecision = decisions.length
+    ? decisions[decisions.length - 1]
+    : null;
+
+  /* ================= CHART DATA ================= */
 
   const pnlSeries = useMemo(() => {
     let running = 0;
@@ -241,17 +253,13 @@ export default function TradingRoom() {
     }));
   }, [trades]);
 
-  const aiConfidence = useMemo(() => {
-    if (!decisions.length) return 0;
-    const total = decisions.reduce((s,d)=>s+Number(d.confidence||0),0);
-    return total / decisions.length;
-  }, [decisions]);
-
   /* ================= UI ================= */
 
   return (
 
     <div style={{ display:"flex", flex:1, background:"#0a0f1c", color:"#fff" }}>
+
+      {/* CHART */}
 
       <div style={{ flex:1, padding:20 }}>
 
@@ -270,12 +278,16 @@ export default function TradingRoom() {
 
       </div>
 
+      {/* ORDER PANEL */}
+
       <div style={{ width:240 }}>
         <OrderPanel symbol={SYMBOL} price={price}/>
       </div>
 
+      {/* AI PANEL */}
+
       <div style={{
-        width:180,
+        width:200,
         padding:16,
         background:"#111827",
         overflowY:"auto"
@@ -289,6 +301,36 @@ export default function TradingRoom() {
         <div style={{ marginTop:10 }}>
           AI Confidence: {(aiConfidence*100).toFixed(0)}%
         </div>
+
+        {lastDecision && (
+
+          <div style={{ marginTop:14, fontSize:12, opacity:.8 }}>
+
+            <div>
+              Last Action: {lastDecision.action}
+            </div>
+
+            <div>
+              Decision Confidence:
+              {(lastDecision.confidence*100).toFixed(0)}%
+            </div>
+
+            <div>
+              Decision Price:
+              {lastDecision.price?.toLocaleString?.()}
+            </div>
+
+            {lastDecision.reason && (
+
+              <div style={{ marginTop:6, color:"#facc15" }}>
+                Reason: {lastDecision.reason}
+              </div>
+
+            )}
+
+          </div>
+
+        )}
 
       </div>
 
