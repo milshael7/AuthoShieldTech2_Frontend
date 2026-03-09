@@ -248,21 +248,10 @@ export default function TradingRoom() {
   /* ================= UI ================= */
 
   return (
-    <div style={{
-      display: "flex",
-      flex: 1,
-      background: "#0a0f1c",
-      color: "#fff"
-    }}>
+    <div style={{ display: "flex", flex: 1, background: "#0a0f1c", color: "#fff" }}>
 
-      {/* CHART AREA */}
-
-      <div style={{
-        flex: 1,
-        padding: 20,
-        minWidth: 0
-      }}>
-
+      {/* CHART */}
+      <div style={{ flex: 1, padding: 20 }}>
         <div style={{ fontWeight: 700 }}>{SYMBOL}</div>
 
         <div style={{ opacity: .7 }}>
@@ -275,30 +264,25 @@ export default function TradingRoom() {
           aiSignals={aiSignals}
           pnlSeries={pnlSeries}
         />
-
       </div>
 
       {/* ORDER PANEL */}
-
-      <div style={{
-        width: 260,
-        borderLeft: "1px solid rgba(255,255,255,.06)"
-      }}>
+      <div style={{ width: 240 }}>
         <OrderPanel symbol={SYMBOL} price={price} />
       </div>
 
       {/* AI PANEL */}
-
       <div style={{
-        width: 220,
+        width: 180,
         padding: 16,
         background: "#111827",
-        borderLeft: "1px solid rgba(255,255,255,.06)",
         overflowY: "auto"
       }}>
         <h3>AI Engine</h3>
+
         <div>Equity: ${equity.toFixed(2)}</div>
         <div>Cash: ${wallet.usd.toFixed(2)}</div>
+
         <div style={{ marginTop: 10 }}>
           AI Confidence: {(aiConfidence * 100).toFixed(0)}%
         </div>
