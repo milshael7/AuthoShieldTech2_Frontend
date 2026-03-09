@@ -82,8 +82,8 @@ export default function TerminalChart({
         borderColor: "rgba(148,163,184,.15)",
         autoScale: true,
         scaleMargins: {
-          top: 0.3,
-          bottom: 0.3
+          top: 0.25,
+          bottom: 0.25
         }
       },
 
@@ -92,15 +92,19 @@ export default function TerminalChart({
       },
 
       timeScale: {
+
         borderColor: "rgba(148,163,184,.15)",
         timeVisible: true,
 
-        /* institutional spacing */
-        barSpacing: 6,
-        minBarSpacing: 4,
+        barSpacing: 8,
+        minBarSpacing: 5,
+
+        rightBarOffset: 10,
+        shiftVisibleRangeOnNewBar: true,
 
         rightBarStaysOnScroll: true,
-        fixLeftEdge: true
+        fixLeftEdge: false
+
       }
 
     });
@@ -178,10 +182,13 @@ export default function TerminalChart({
 
       lastTimeRef.current = last.time;
 
-      /* prevent giant candle zoom */
       if (!initializedRef.current && candleData.length > 20) {
 
         chart.timeScale().fitContent();
+
+        /* move viewport to newest candles */
+        chart.timeScale().scrollToRealTime();
+
         initializedRef.current = true;
 
       }
@@ -194,6 +201,10 @@ export default function TerminalChart({
 
       series.update(last);
       lastTimeRef.current = last.time;
+
+      /* keep chart pinned to newest candle */
+      chart.timeScale().scrollToRealTime();
+
       return;
 
     }
@@ -210,6 +221,7 @@ export default function TerminalChart({
     if (!candleSeriesRef.current) return;
 
     const markers = [
+
       ...trades.map(t => {
 
         const time = Number(t?.time);
@@ -239,6 +251,7 @@ export default function TerminalChart({
         };
 
       }).filter(Boolean)
+
     ];
 
     try {
