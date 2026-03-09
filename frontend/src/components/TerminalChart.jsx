@@ -54,48 +54,6 @@ export default function TerminalChart({
 
   }, [candles]);
 
-  const volumeData = useMemo(() => {
-
-    return volume
-      .map(v => {
-
-        const time = Number(v?.time);
-        const value = Number(v?.value);
-
-        if (!Number.isFinite(time) || !Number.isFinite(value)) {
-          return null;
-        }
-
-        return {
-          time,
-          value,
-          color: v?.color || "rgba(100,116,139,.45)"
-        };
-
-      })
-      .filter(Boolean);
-
-  }, [volume]);
-
-  const pnlData = useMemo(() => {
-
-    return pnlSeries
-      .map(p => {
-
-        const time = Number(p?.time);
-        const value = Number(p?.value);
-
-        if (!Number.isFinite(time) || !Number.isFinite(value)) {
-          return null;
-        }
-
-        return { time, value };
-
-      })
-      .filter(Boolean);
-
-  }, [pnlSeries]);
-
   /* ================= CHART INIT ================= */
 
   useEffect(() => {
@@ -122,9 +80,10 @@ export default function TerminalChart({
 
       rightPriceScale: {
         borderColor: "rgba(148,163,184,.15)",
+        autoScale: true,
         scaleMargins: {
-          top: 0.2,
-          bottom: 0.2
+          top: 0.3,
+          bottom: 0.3
         }
       },
 
@@ -135,20 +94,28 @@ export default function TerminalChart({
       timeScale: {
         borderColor: "rgba(148,163,184,.15)",
         timeVisible: true,
+
+        /* institutional spacing */
+        barSpacing: 6,
+        minBarSpacing: 4,
+
         rightBarStaysOnScroll: true,
-        fixLeftEdge: true,
-        barSpacing: 8
+        fixLeftEdge: true
       }
 
     });
 
     candleSeriesRef.current = chart.addCandlestickSeries({
+
       upColor: "#22c55e",
       downColor: "#ef4444",
+
       borderUpColor: "#22c55e",
       borderDownColor: "#ef4444",
+
       wickUpColor: "#22c55e",
       wickDownColor: "#ef4444"
+
     });
 
     volumeSeriesRef.current = chart.addHistogramSeries({
@@ -211,7 +178,8 @@ export default function TerminalChart({
 
       lastTimeRef.current = last.time;
 
-      if (!initializedRef.current) {
+      /* prevent giant candle zoom */
+      if (!initializedRef.current && candleData.length > 20) {
 
         chart.timeScale().fitContent();
         initializedRef.current = true;
@@ -234,14 +202,6 @@ export default function TerminalChart({
     lastTimeRef.current = last.time;
 
   }, [candleData]);
-
-  useEffect(() => {
-    volumeSeriesRef.current?.setData(volumeData);
-  }, [volumeData]);
-
-  useEffect(() => {
-    pnlSeriesRef.current?.setData(pnlData);
-  }, [pnlData]);
 
   /* ================= MARKERS ================= */
 
