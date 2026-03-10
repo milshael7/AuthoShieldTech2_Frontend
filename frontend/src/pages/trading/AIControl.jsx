@@ -6,7 +6,8 @@
 import React, { useEffect, useState } from "react";
 import { getToken } from "../../lib/api.js";
 
-const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
+const API_BASE =
+  (import.meta.env.VITE_API_BASE || "").replace(/\/+$/, "");
 
 export default function AIControl(){
 
@@ -41,21 +42,28 @@ export default function AIControl(){
         {headers:authHeader()}
       );
 
+      if(!res.ok) throw new Error("API error");
+
       const data = await res.json();
+
       if(!data?.ok) return;
 
       const cfg = data.config || {};
 
       setEnabled(Boolean(cfg.enabled));
       setTradingMode(cfg.tradingMode || "paper");
-      setMaxTrades(Number(cfg.maxTrades || 5));
-      setRiskPercent(Number(cfg.riskPercent || 1.5));
-      setPositionMultiplier(Number(cfg.positionMultiplier || 1));
+      setMaxTrades(Number(cfg.maxTrades ?? 5));
+      setRiskPercent(Number(cfg.riskPercent ?? 1.5));
+      setPositionMultiplier(Number(cfg.positionMultiplier ?? 1));
       setAggressiveness(cfg.strategyMode || "Balanced");
 
-      setEngineHealth(data.engine || "RUNNING");
+      setEngineHealth(data.engine ?? "UNKNOWN");
 
-    }catch{}
+    }catch(err){
+
+      setStatusMsg("Unable to load config");
+
+    }
 
   }
 
@@ -95,9 +103,9 @@ export default function AIControl(){
 
       const data = await res.json();
 
-      if(data?.ok === false){
+      if(!res.ok || data?.ok === false){
 
-        setStatusMsg("Configuration rejected by server");
+        setStatusMsg(data?.error || "Configuration rejected");
 
       }
       else{
@@ -107,9 +115,9 @@ export default function AIControl(){
       }
 
     }
-    catch{
+    catch(err){
 
-      setStatusMsg("Connection error");
+      setStatusMsg("Server connection error");
 
     }
 
@@ -147,7 +155,7 @@ export default function AIControl(){
   /* ================= RISK PREVIEW ================= */
 
   const estimatedRisk =
-    (riskPercent * positionMultiplier).toFixed(2);
+    (Number(riskPercent) * Number(positionMultiplier)).toFixed(2);
 
   /* ================= UI ================= */
 
@@ -252,8 +260,6 @@ export default function AIControl(){
 
         </div>
 
-        {/* CONTROLS */}
-
         <Control
           label="Max Trades Per Day"
           value={maxTrades}
@@ -292,16 +298,12 @@ export default function AIControl(){
 
         </div>
 
-        {/* RISK PREVIEW */}
-
         <div style={{
           marginBottom:20,
           opacity:.7
         }}>
           Estimated Position Risk: {estimatedRisk}%
         </div>
-
-        {/* SAVE */}
 
         <button
           onClick={saveConfig}
@@ -352,7 +354,7 @@ function Control({label,value,onChange,step=1}){
         type="number"
         value={value}
         step={step}
-        onChange={e=>onChange(e.target.value)}
+        onChange={e=>onChange(Number(e.target.value))}
         style={{
           marginLeft:15,
           padding:6,
