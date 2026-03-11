@@ -18,21 +18,49 @@ export default function TradingRoom(){
 
   const marketWsRef = useRef(null);
   const paperWsRef = useRef(null);
+
   const lastCandleRef = useRef(null);
+  const engineStartRef = useRef(null);
 
   const [candles,setCandles] = useState([]);
   const [price,setPrice] = useState(null);
+
   const [equity,setEquity] = useState(0);
   const [wallet,setWallet] = useState({usd:0,btc:0});
   const [position,setPosition] = useState(null);
+
   const [trades,setTrades] = useState([]);
   const [decisions,setDecisions] = useState([]);
+
+  const [engineUptime,setEngineUptime] = useState("0s");
 
   const [aiControl,setAiControl] = useState({
     enabled:true,
     tradingMode:"paper",
     strategyMode:"Balanced"
   });
+
+  /* ================= ENGINE UPTIME ================= */
+
+  useEffect(()=>{
+
+    const timer = setInterval(()=>{
+
+      if(!engineStartRef.current) return;
+
+      const diff = Date.now() - engineStartRef.current;
+
+      const sec = Math.floor(diff/1000)%60;
+      const min = Math.floor(diff/60000)%60;
+      const hr  = Math.floor(diff/3600000);
+
+      setEngineUptime(`${hr}h ${min}m ${sec}s`);
+
+    },1000);
+
+    return ()=>clearInterval(timer);
+
+  },[]);
 
   /* ================= LOAD HISTORY ================= */
 
@@ -116,6 +144,7 @@ export default function TradingRoom(){
 
         next=[...prev];
         next[next.length-1]=nextLast;
+
       }
 
       lastCandleRef.current=nextLast;
@@ -133,40 +162,44 @@ export default function TradingRoom(){
 
   useEffect(()=>{
 
+    if(marketWsRef.current) return;
+
     const token = getToken();
     if(!token) return;
 
-    try{
+    const url = new URL(API_BASE);
+    const protocol = url.protocol==="https:"?"wss:":"ws:";
 
-      const url = new URL(API_BASE);
-      const protocol = url.protocol==="https:"?"wss:":"ws:";
+    const ws = new WebSocket(
+      `${protocol}//${url.host}/ws?channel=market&token=${encodeURIComponent(token)}`
+    );
 
-      const ws = new WebSocket(
-        `${protocol}//${url.host}/ws?channel=market&token=${encodeURIComponent(token)}`
-      );
+    marketWsRef.current = ws;
 
-      marketWsRef.current=ws;
+    ws.onmessage = (msg)=>{
 
-      ws.onmessage=(msg)=>{
+      try{
 
-        try{
+        const packet = JSON.parse(msg.data);
 
-          const data = JSON.parse(msg.data);
-          const market = data?.data?.[SYMBOL];
-          if(!market) return;
+        if(packet.channel!=="market") return;
 
-          const p = toNumber(market.price);
-          if(p===null || p<=0) return;
+        const market = packet?.data?.[SYMBOL];
+        if(!market) return;
 
-          setPrice(p);
-          updateCandles(p);
+        const p = toNumber(market.price);
+        if(p===null || p<=0) return;
 
-        }catch{}
-      };
+        setPrice(p);
+        updateCandles(p);
 
-      return ()=>ws.close();
+      }catch{}
 
-    }catch{}
+    };
+
+    ws.onclose = ()=>{ marketWsRef.current=null };
+
+    return ()=>ws.close();
 
   },[]);
 
@@ -174,60 +207,68 @@ export default function TradingRoom(){
 
   useEffect(()=>{
 
+    if(paperWsRef.current) return;
+
     const token = getToken();
     if(!token) return;
 
-    try{
+    const url = new URL(API_BASE);
+    const protocol = url.protocol==="https:"?"wss:":"ws:";
 
-      const url = new URL(API_BASE);
-      const protocol = url.protocol==="https:"?"wss:":"ws:";
+    const ws = new WebSocket(
+      `${protocol}//${url.host}/ws?channel=paper&token=${encodeURIComponent(token)}`
+    );
 
-      const ws = new WebSocket(
-        `${protocol}//${url.host}/ws?channel=paper&token=${encodeURIComponent(token)}`
-      );
+    paperWsRef.current = ws;
 
-      paperWsRef.current=ws;
+    ws.onmessage = (msg)=>{
 
-      ws.onmessage=(msg)=>{
+      try{
 
-        try{
+        const data = JSON.parse(msg.data);
 
-          const data = JSON.parse(msg.data);
-          if(data?.channel!=="paper") return;
+        if(data.channel!=="paper") return;
 
-          const snap = data.snapshot || {};
-          const dec = data.decisions || [];
+        if(!engineStartRef.current){
+          engineStartRef.current = data.ts || Date.now();
+        }
 
-          setEquity(Number(snap.equity||0));
+        const snap = data.snapshot || {};
+        const dec = data.decisions || [];
 
-          setWallet({
-            usd:Number(snap.cashBalance||0),
-            btc:Number(snap.position?.qty||0)
-          });
+        setEquity(Number(snap.equity||0));
 
-          setPosition(snap.position||null);
-          setTrades(snap.trades||[]);
-          setDecisions(dec);
+        setWallet({
+          usd:Number(snap.cashBalance||0),
+          btc:Number(snap.position?.qty||0)
+        });
 
-          if(snap.aiControl){
-            setAiControl(snap.aiControl);
-          }
+        setPosition(snap.position||null);
+        setTrades(snap.trades||[]);
+        setDecisions(dec);
 
-        }catch{}
-      };
+      }catch{}
 
-      return ()=>ws.close();
+    };
 
-    }catch{}
+    ws.onclose = ()=>{ paperWsRef.current=null };
+
+    return ()=>ws.close();
 
   },[]);
 
   /* ================= AI ANALYTICS ================= */
 
   const aiConfidence = useMemo(()=>{
+
     if(!decisions.length) return 0;
-    const total = decisions.reduce((s,d)=>s+Number(d.confidence||0),0);
+
+    const total = decisions.reduce(
+      (s,d)=>s+Number(d.confidence||0),0
+    );
+
     return total/decisions.length;
+
   },[decisions]);
 
   const lastDecision = decisions.length
@@ -280,7 +321,7 @@ export default function TradingRoom(){
         <h3>AI Engine</h3>
 
         <div>Status: {aiStatus}</div>
-        <div>Mode: {aiControl?.strategyMode || "Unknown"}</div>
+        <div>Engine Uptime: {engineUptime}</div>
 
         <div style={{marginTop:10}}>
           Equity: ${equity.toFixed(2)}
@@ -312,4 +353,5 @@ export default function TradingRoom(){
     </div>
 
   );
+
 }
