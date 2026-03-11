@@ -117,7 +117,6 @@ export async function req(
     data = await res.json();
   } catch {}
 
-  // 🔇 QUIET AUTH HANDLING
   if (res.status === 401 && auth) {
     clearToken();
     clearUser();
@@ -146,6 +145,7 @@ export async function req(
 ========================================================= */
 
 export const api = {
+
   /* ================= AUTH ================= */
 
   login: async (email, password) => {
@@ -236,19 +236,17 @@ export const api = {
     req(`/api/market/price?symbol=${encodeURIComponent(symbol)}`),
 
   marketCandles: (symbol, limit = 200) =>
-    req(
-      `/api/market/candles?symbol=${encodeURIComponent(
-        symbol
-      )}&limit=${limit}`
-    ),
+    req(`/api/market/candles?symbol=${encodeURIComponent(symbol)}&limit=${limit}`),
 
   /* ================= PAPER TRADING ================= */
 
   paperAccount: () => req("/api/paper/account"),
   paperPositions: () => req("/api/paper/positions"),
   paperOrders: () => req("/api/paper/orders"),
+
+  /* FIXED ROUTE */
   placePaperOrder: (payload) =>
-    req("/api/paper/orders", { method: "POST", body: payload }),
+    req("/api/paper/order", { method: "POST", body: payload }),
 
   /* ================= SOC ================= */
 
