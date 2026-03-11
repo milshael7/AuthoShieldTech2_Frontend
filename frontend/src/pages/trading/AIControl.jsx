@@ -42,7 +42,10 @@ export default function AIControl(){
         {headers:authHeader()}
       );
 
-      if(!res.ok) throw new Error("API error");
+      if(!res.ok){
+        setStatusMsg("API unavailable");
+        return;
+      }
 
       const data = await res.json();
 
@@ -101,11 +104,23 @@ export default function AIControl(){
         }
       );
 
-      const data = await res.json();
+      let data=null;
 
-      if(!res.ok || data?.ok === false){
+      try{
+        data = await res.json();
+      }catch{}
 
-        setStatusMsg(data?.error || "Configuration rejected");
+      if(!res.ok){
+
+        setStatusMsg(
+          data?.error ||
+          `Server error (${res.status})`
+        );
+
+      }
+      else if(data?.ok===false){
+
+        setStatusMsg(data.error || "Configuration rejected");
 
       }
       else{
@@ -117,7 +132,7 @@ export default function AIControl(){
     }
     catch(err){
 
-      setStatusMsg("Server connection error");
+      setStatusMsg("Server unreachable");
 
     }
 
@@ -175,8 +190,6 @@ export default function AIControl(){
         maxWidth:800
       }}>
 
-        {/* ENGINE STATUS */}
-
         <div style={{marginBottom:20}}>
 
           <strong>Engine Health:</strong>
@@ -192,8 +205,6 @@ export default function AIControl(){
           </span>
 
         </div>
-
-        {/* AI STATUS */}
 
         <div style={{marginBottom:20}}>
 
@@ -215,8 +226,6 @@ export default function AIControl(){
           </button>
 
         </div>
-
-        {/* TRADING MODE */}
 
         <div style={{marginBottom:20}}>
 
@@ -280,8 +289,6 @@ export default function AIControl(){
           onChange={setPositionMultiplier}
         />
 
-        {/* STRATEGY */}
-
         <div style={{marginBottom:20}}>
 
           <label>Strategy Mode:</label>
@@ -298,10 +305,7 @@ export default function AIControl(){
 
         </div>
 
-        <div style={{
-          marginBottom:20,
-          opacity:.7
-        }}>
+        <div style={{marginBottom:20,opacity:.7}}>
           Estimated Position Risk: {estimatedRisk}%
         </div>
 
@@ -322,14 +326,9 @@ export default function AIControl(){
         </button>
 
         {statusMsg && (
-
-          <div style={{
-            marginTop:15,
-            opacity:.7
-          }}>
+          <div style={{marginTop:15,opacity:.7}}>
             {statusMsg}
           </div>
-
         )}
 
       </div>
