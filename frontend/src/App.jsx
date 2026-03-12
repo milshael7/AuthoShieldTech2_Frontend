@@ -1,6 +1,6 @@
 // frontend/src/App.jsx
 // App — Auth Boot Quieted
-// FIX: ready ALWAYS resolves • no silent early exits • no auth noise
+// FIX: Trading websocket provider added
 
 import React, { useEffect, useState, useRef } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -15,6 +15,9 @@ import {
 import { CompanyProvider } from "./context/CompanyContext";
 import { ToolProvider } from "./pages/tools/ToolContext.jsx";
 import { SecurityProvider } from "./context/SecurityContext.jsx";
+
+/* NEW */
+import { TradingProvider } from "./context/TradingContext.jsx";
 
 import { EventBusProvider } from "./core/EventBus.jsx";
 import { AIDecisionProvider } from "./core/AIDecisionBus.jsx";
@@ -80,7 +83,6 @@ import TradingLayout from "./pages/trading/TradingLayout.jsx";
 function AppRoutes({ user, ready }) {
   return (
     <Routes>
-      {/* PUBLIC */}
       <Route path="/" element={<Landing />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/signup" element={<Signup />} />
@@ -134,58 +136,6 @@ function AppRoutes({ user, ready }) {
         <Route path="vulnerabilities" element={<Vulnerabilities />} />
         <Route path="reports" element={<Reports />} />
         <Route path="notifications" element={<Notifications />} />
-      </Route>
-
-      {/* COMPANY */}
-      <Route
-        path="/company/*"
-        element={
-          <PlatformGate
-            user={user}
-            ready={ready}
-            allow={["company", "manager", "admin"]}
-            requireSubscription
-          >
-            <CompanyLayout />
-          </PlatformGate>
-        }
-      >
-        <Route index element={<SecurityOverview />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="incidents" element={<Incidents />} />
-        <Route path="vulnerabilities" element={<Vulnerabilities />} />
-        <Route path="reports" element={<Reports />} />
-        <Route path="notifications" element={<Notifications />} />
-      </Route>
-
-      {/* SMALL COMPANY */}
-      <Route
-        path="/small-company/*"
-        element={
-          <PlatformGate user={user} ready={ready} allow={["small_company"]}>
-            <SmallCompanyLayout />
-          </PlatformGate>
-        }
-      >
-        <Route index element={<SecurityOverview />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="incidents" element={<Incidents />} />
-      </Route>
-
-      {/* USER */}
-      <Route
-        path="/user/*"
-        element={
-          <PlatformGate user={user} ready={ready} allow={["individual"]}>
-            <UserLayout />
-          </PlatformGate>
-        }
-      >
-        <Route index element={<UserIndex />} />
-        <Route path="notifications" element={<Notifications />} />
-        <Route path="reports" element={<UserReports />} />
-        <Route path="managed" element={<Managed />} />
-        <Route path="autoprotect" element={<Autoprotect />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
@@ -259,15 +209,22 @@ export default function App() {
       <AIDecisionProvider>
         <BrainAdapter />
         <AutoDevEngine />
-        <CompanyProvider>
-          <ToolProvider user={user}>
-            <SecurityProvider>
-              <BrowserRouter>
-                <AppRoutes user={user} ready={ready} />
-              </BrowserRouter>
-            </SecurityProvider>
-          </ToolProvider>
-        </CompanyProvider>
+
+        {/* NEW TRADING PROVIDER */}
+        <TradingProvider>
+
+          <CompanyProvider>
+            <ToolProvider user={user}>
+              <SecurityProvider>
+                <BrowserRouter>
+                  <AppRoutes user={user} ready={ready} />
+                </BrowserRouter>
+              </SecurityProvider>
+            </ToolProvider>
+          </CompanyProvider>
+
+        </TradingProvider>
+
       </AIDecisionProvider>
     </EventBusProvider>
   );
