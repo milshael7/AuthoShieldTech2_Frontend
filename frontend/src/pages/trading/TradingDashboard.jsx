@@ -1,127 +1,74 @@
 import React, { useEffect, useState } from "react";
 
-const API = process.env.REACT_APP_API || "http://localhost:5000";
+const WS_BASE =
+  (process.env.REACT_APP_WS || "ws://localhost:5000") + "/ws";
 
 export default function TradingDashboard(){
 
   const [snapshot,setSnapshot] = useState({});
   const [decisions,setDecisions] = useState([]);
   const [price,setPrice] = useState(null);
-  const [loading,setLoading] = useState(true);
+  const [connected,setConnected] = useState(false);
 
-  const tenantId = "default";
-
-/* =========================================================
-FETCH SNAPSHOT
-========================================================= */
-
-  async function fetchSnapshot(){
-
-    try{
-
-      const res = await fetch(
-        `${API}/api/trading/snapshot?tenantId=${tenantId}`
-      );
-
-      const data = await res.json();
-
-      if(data?.snapshot){
-        setSnapshot(data.snapshot);
-      }
-
-    }catch(err){
-      console.log("snapshot error",err);
-    }
-
-  }
-
-/* =========================================================
-FETCH DECISIONS
-========================================================= */
-
-  async function fetchDecisions(){
-
-    try{
-
-      const res = await fetch(
-        `${API}/api/trading/decisions?tenantId=${tenantId}`
-      );
-
-      const data = await res.json();
-
-      if(Array.isArray(data)){
-        setDecisions(data.reverse());
-      }
-
-    }catch(err){
-      console.log("decisions error",err);
-    }
-
-  }
-
-/* =========================================================
-FETCH PRICE
-========================================================= */
-
-  async function fetchPrice(){
-
-    try{
-
-      const res = await fetch(
-        `${API}/api/trading/price?tenantId=${tenantId}`
-      );
-
-      const data = await res.json();
-
-      if(data?.price !== undefined){
-        setPrice(data.price);
-      }
-
-    }catch(err){
-      console.log("price error",err);
-    }
-
-  }
-
-/* =========================================================
-AUTO REFRESH
-========================================================= */
+  /* ================= WS CONNECT ================= */
 
   useEffect(()=>{
 
-    async function load(){
+    const token = localStorage.getItem("as_token");
 
-      await Promise.all([
-        fetchSnapshot(),
-        fetchDecisions(),
-        fetchPrice()
-      ]);
+    if(!token) return;
 
-      setLoading(false);
+    const ws = new WebSocket(
+      `${WS_BASE}?token=${token}&channel=paper`
+    );
 
-    }
+    ws.onopen = ()=>{
+      setConnected(true);
+    };
 
-    load();
+    ws.onclose = ()=>{
+      setConnected(false);
+    };
 
-    const interval = setInterval(load,2000);
+    ws.onmessage = (event)=>{
 
-    return ()=>clearInterval(interval);
+      try{
+
+        const msg = JSON.parse(event.data);
+
+        if(msg.type !== "engine") return;
+
+        const snap = msg.snapshot || {};
+
+        setSnapshot(snap);
+
+        if(Array.isArray(msg.decisions)){
+          setDecisions(msg.decisions.slice().reverse());
+        }
+
+        if(snap?.lastPrice){
+          setPrice(snap.lastPrice);
+        }
+
+      }catch{}
+
+    };
+
+    return ()=>ws.close();
 
   },[]);
 
-/* =========================================================
-RENDER
-========================================================= */
-
-  if(loading){
-    return <div style={{padding:40}}>Loading trading dashboard...</div>;
-  }
+  /* ================= RENDER ================= */
 
   return(
 
     <div style={{padding:40,fontFamily:"Arial"}}>
 
       <h1>AI Trading Dashboard</h1>
+
+      <div style={{marginBottom:20}}>
+        Status: {connected ? "CONNECTED" : "DISCONNECTED"}
+      </div>
 
 {/* =========================================================
 ACCOUNT
@@ -172,7 +119,7 @@ MARKET
         <h2>Market</h2>
 
         <div>
-          Last Price: {price ? price : "waiting for price feed..."}
+          Last Price: {price ? price.toLocaleString() : "waiting for price feed..."}
         </div>
 
       </div>
