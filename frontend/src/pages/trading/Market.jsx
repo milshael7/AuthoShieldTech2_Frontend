@@ -60,6 +60,8 @@ export default function Market(){
 
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
+  const lastMessage = useRef(Date.now());
+
   const symbolRef = useRef(ALL_SYMBOLS[0]);
 
   const [symbol,setSymbol] = useState(ALL_SYMBOLS[0]);
@@ -134,6 +136,22 @@ export default function Market(){
 
   }
 
+  /* ================= MERGE HISTORY ================= */
+
+  function mergeHistory(existing, incoming){
+
+    if(!existing.length) return incoming;
+
+    const map = new Map();
+
+    existing.forEach(c => map.set(c.time,c));
+    incoming.forEach(c => map.set(c.time,c));
+
+    return Array.from(map.values())
+      .sort((a,b)=>a.time-b.time)
+      .slice(-MAX_CANDLES);
+  }
+
   /* ================= HISTORY LOAD ================= */
 
   async function loadHistory(sym){
@@ -169,11 +187,19 @@ export default function Market(){
 
       if(!formatted.length) return;
 
-      const last=formatted[formatted.length-1];
+      setCandles(prev => {
 
-      lastCandleRef.current=last;
-      syncCache(sym,formatted,last);
-      setCandles(formatted);
+        const merged = mergeHistory(prev, formatted);
+
+        const last = merged[merged.length-1];
+
+        lastCandleRef.current = last;
+
+        syncCache(sym,merged,last);
+
+        return merged;
+
+      });
 
     }catch{}
 
@@ -195,7 +221,9 @@ export default function Market(){
     lastCandleRef.current=last;
     setCandles(next);
 
-    loadHistory(symbol);
+    if(next.length < 50){
+      loadHistory(symbol);
+    }
 
   },[symbol]);
 
@@ -222,6 +250,8 @@ export default function Market(){
       wsRef.current=ws;
 
       ws.onmessage=(msg)=>{
+
+        lastMessage.current = Date.now();
 
         try{
 
@@ -254,6 +284,26 @@ export default function Market(){
     }catch{}
 
   }
+
+  /* ================= HEARTBEAT ================= */
+
+  useEffect(()=>{
+
+    const timer=setInterval(()=>{
+
+      if(Date.now()-lastMessage.current > 10000){
+
+        if(wsRef.current){
+          wsRef.current.close();
+        }
+
+      }
+
+    },5000);
+
+    return ()=>clearInterval(timer);
+
+  },[]);
 
   useEffect(()=>{
 
