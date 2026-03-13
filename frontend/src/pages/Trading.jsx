@@ -8,10 +8,12 @@ const API = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 export default function Trading(){
 
   const [tab,setTab] = useState("market");
-
   const [mode,setMode] = useState("paper");
 
   const [snapshot,setSnapshot] = useState(null);
+  const [brain,setBrain] = useState(null);
+  const [memory,setMemory] = useState(null);
+  const [status,setStatus] = useState(null);
 
   const [loading,setLoading] = useState(true);
 
@@ -24,20 +26,36 @@ export default function Trading(){
       const token =
         localStorage.getItem("as_token");
 
-      const res =
-        await fetch(`${API}/api/trading/snapshot`,{
-          headers:{
-            Authorization:`Bearer ${token}`
-          }
-        });
+      const headers = {
+        Authorization:`Bearer ${token}`
+      };
 
-      const data = await res.json();
+      const [
+        snapRes,
+        brainRes,
+        memRes,
+        statusRes
+      ] = await Promise.all([
 
-      if(data?.snapshot){
-        setSnapshot(data.snapshot);
-      }
+        fetch(`${API}/api/trading/snapshot`,{headers}),
+        fetch(`${API}/api/ai/brain`,{headers}),
+        fetch(`${API}/api/ai/learning`,{headers}),
+        fetch(`${API}/api/ai/status`,{headers})
 
-    }catch(err){
+      ]);
+
+      const snap = await snapRes.json();
+      const brainData = await brainRes.json();
+      const memData = await memRes.json();
+      const statusData = await statusRes.json();
+
+      if(snap?.snapshot) setSnapshot(snap.snapshot);
+      if(brainData?.brain) setBrain(brainData.brain);
+      if(memData?.memory) setMemory(memData.memory);
+      if(statusData?.telemetry) setStatus(statusData);
+
+    }
+    catch(err){
 
       console.log("engine error",err);
 
@@ -63,7 +81,6 @@ export default function Trading(){
   const tradingAllowed = useMemo(()=>{
 
     const now = new Date();
-
     const day = now.getDay();
     const hour = now.getHours();
 
@@ -84,8 +101,6 @@ export default function Trading(){
 
   }),[snapshot]);
 
-  /* ================= UI ================= */
-
   if(loading){
 
     return (
@@ -99,25 +114,39 @@ export default function Trading(){
   const tradesUsed =
     snapshot?.executionStats?.trades || 0;
 
-  const dailyLimit = 5;
-
   const decisions =
     snapshot?.executionStats?.decisions || 0;
 
   const uptime =
-    snapshot?.telemetry?.uptime || 0;
+    status?.telemetry?.uptime || 0;
 
   const aiPerMin =
-    snapshot?.telemetry?.decisionsPerMinute || 0;
+    status?.telemetry?.decisionsPerMinute || 0;
 
-  const mem =
-    snapshot?.telemetry?.memoryUsage || 0;
+  const memUsage =
+    status?.telemetry?.memoryUsage || 0;
+
+  const signals =
+    brain?.signalMemory || 0;
+
+  const learnedTrades =
+    brain?.tradeMemory || 0;
+
+  const winRate =
+    brain?.stats?.winRate || 0;
+
+  const expectancy =
+    brain?.stats?.expectancy || 0;
+
+  const storedSignals =
+    memory?.signalsStored || 0;
+
+  const storedTrades =
+    memory?.tradesStored || 0;
 
   return (
 
     <div className="postureWrap">
-
-      {/* HEADER */}
 
       <section className="postureCard" style={{marginBottom:20}}>
 
@@ -152,7 +181,7 @@ export default function Trading(){
           }}
         >
 
-          {/* AI ENGINE */}
+          {/* ENGINE */}
 
           <div>
 
@@ -167,7 +196,7 @@ export default function Trading(){
             </div>
 
             <div style={{marginTop:8}}>
-              Trades: {tradesUsed} / {dailyLimit}
+              Trades: {tradesUsed} / 5
             </div>
 
             <small>
@@ -176,7 +205,7 @@ export default function Trading(){
 
           </div>
 
-          {/* ENGINE TELEMETRY */}
+          {/* TELEMETRY */}
 
           <div>
 
@@ -191,7 +220,47 @@ export default function Trading(){
             </div>
 
             <div>
-              Memory: {(mem/1024/1024).toFixed(1)} MB
+              Memory: {(memUsage/1024/1024).toFixed(1)} MB
+            </div>
+
+          </div>
+
+          {/* AI LEARNING */}
+
+          <div>
+
+            <b>AI Learning</b>
+
+            <div style={{marginTop:8}}>
+              Signals Learned: {signals}
+            </div>
+
+            <div>
+              Trades Learned: {learnedTrades}
+            </div>
+
+            <div>
+              Win Rate: {(winRate*100).toFixed(1)}%
+            </div>
+
+            <div>
+              Expectancy: {expectancy.toFixed(4)}
+            </div>
+
+          </div>
+
+          {/* MEMORY CORE */}
+
+          <div>
+
+            <b>Memory Core</b>
+
+            <div style={{marginTop:8}}>
+              Signals Stored: {storedSignals}
+            </div>
+
+            <div>
+              Trades Stored: {storedTrades}
             </div>
 
           </div>
@@ -270,8 +339,6 @@ export default function Trading(){
         </button>
 
       </div>
-
-      {/* CONTENT */}
 
       {tab==="market" && (
         <section className="postureCard">
