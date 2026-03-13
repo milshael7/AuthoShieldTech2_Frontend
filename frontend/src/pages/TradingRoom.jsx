@@ -1,3 +1,24 @@
+// ==========================================================
+// FILE: frontend/src/pages/TradingRoom.jsx
+// MODULE: Trading Room
+// PURPOSE: Live market dashboard + AI paper trading interface
+//
+// FEATURES:
+// - Live market WebSocket feed
+// - AI paper trading engine telemetry
+// - Terminal-style trading chart
+// - AI behavior monitoring panel
+// - Order execution interface
+//
+// WEBSOCKET CHANNELS:
+// - market : live market prices
+// - paper  : AI paper trading engine state
+//
+// MAINTENANCE NOTE:
+// Stabilized AI engine status detection and WebSocket recovery.
+// Layout intentionally preserved to maintain user familiarity.
+// ==========================================================
+
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import TerminalChart from "../components/TerminalChart";
 import OrderPanel from "../components/OrderPanel";
