@@ -40,6 +40,37 @@ export default function TradingRoom(){
     strategyMode:"Balanced"
   });
 
+  /* ================= LOAD AI CONFIG ================= */
+
+  useEffect(()=>{
+
+    async function loadConfig(){
+
+      if(!API_BASE) return;
+      const token = getToken();
+      if(!token) return;
+
+      try{
+
+        const res = await fetch(
+          `${API_BASE}/api/ai/config`,
+          {headers:{Authorization:`Bearer ${token}`}}
+        );
+
+        const data = await res.json();
+
+        if(data?.config){
+          setAiControl(data.config);
+        }
+
+      }catch{}
+
+    }
+
+    loadConfig();
+
+  },[]);
+
   /* ================= ENGINE UPTIME ================= */
 
   useEffect(()=>{
@@ -73,7 +104,7 @@ export default function TradingRoom(){
     try{
 
       const res = await fetch(
-        `${API_BASE}/api/market/candles?symbol=${SYMBOL}&limit=${MAX_CANDLES}`,
+        `${API_BASE}/api/market/candles/${SYMBOL}?limit=${MAX_CANDLES}`,
         {headers:{Authorization:`Bearer ${token}`}}
       );
 
@@ -81,20 +112,14 @@ export default function TradingRoom(){
       if(!data?.ok || !Array.isArray(data.candles)) return;
 
       const formatted = data.candles
-        .map(c=>{
-          const time = toNumber(c?.time);
-          const open = toNumber(c?.open);
-          const high = toNumber(c?.high);
-          const low = toNumber(c?.low);
-          const close = toNumber(c?.close);
-
-          if(time===null||open===null||high===null||low===null||close===null)
-            return null;
-
-          return {time,open,high,low,close};
-        })
-        .filter(Boolean)
-        .sort((a,b)=>a.time-b.time)
+        .map(c=>({
+          time:Number(c.time),
+          open:Number(c.open),
+          high:Number(c.high),
+          low:Number(c.low),
+          close:Number(c.close)
+        }))
+        .filter(c=>Number.isFinite(c.time))
         .slice(-MAX_CANDLES);
 
       if(!formatted.length) return;
@@ -228,7 +253,7 @@ export default function TradingRoom(){
         if(data.channel!=="paper") return;
 
         if(!engineStartRef.current){
-          engineStartRef.current = data.ts || Date.now();
+          engineStartRef.current = data.engineStart || Date.now();
         }
 
         const snap = data.snapshot || {};
@@ -254,9 +279,11 @@ export default function TradingRoom(){
 
   },[]);
 
+  /* ================= AI METRICS ================= */
+
   const aiConfidence = useMemo(()=>{
 
-    if(!decisions.length) return 0;
+    if(!decisions.length) return 0.15;
 
     const total = decisions.reduce(
       (s,d)=>s+Number(d.confidence||0),0
@@ -274,7 +301,7 @@ export default function TradingRoom(){
 
     if(!aiControl?.enabled) return "DISABLED";
     if(aiControl?.tradingMode==="manual") return "HUMAN OVERRIDE";
-    return "ACTIVE";
+    return "RUNNING";
 
   },[aiControl]);
 
