@@ -1,7 +1,7 @@
 // frontend/src/components/AIBehaviorPanel.jsx
 // ============================================================
-// AI BEHAVIOR PANEL — AI PERFORMANCE INTELLIGENCE v2
-// FIXED: trade accuracy + WAIT detection + learning metrics
+// AI BEHAVIOR PANEL — AI PERFORMANCE INTELLIGENCE v3
+// IMPROVED: win/loss tracking + total pnl + accurate analytics
 // ============================================================
 
 import React, { useMemo } from "react";
@@ -11,6 +11,66 @@ export default function AIBehaviorPanel({
   decisions = [],
   memory = null
 }) {
+
+  /* ================= CLOSED TRADES ================= */
+
+  const closedTrades = useMemo(() => {
+    return trades.filter(t => t.side === "CLOSE");
+  }, [trades]);
+
+  /* ================= WIN / LOSS ================= */
+
+  const tradeStats = useMemo(() => {
+
+    let wins = 0;
+    let losses = 0;
+    let pnl = 0;
+
+    closedTrades.forEach(t => {
+
+      const p = Number(t.pnl || 0);
+
+      pnl += p;
+
+      if (p > 0) wins++;
+      else if (p < 0) losses++;
+
+    });
+
+    return {
+      wins,
+      losses,
+      pnl,
+      total: closedTrades.length
+    };
+
+  }, [closedTrades]);
+
+  /* ================= ACCURACY ================= */
+
+  const accuracy = useMemo(() => {
+
+    if (!tradeStats.total) return 0;
+
+    return (tradeStats.wins / tradeStats.total) * 100;
+
+  }, [tradeStats]);
+
+  /* ================= AI CONFIDENCE ================= */
+
+  const avgConfidence = useMemo(() => {
+
+    if (!decisions.length) return 0;
+
+    const total =
+      decisions.reduce(
+        (sum, d) => sum + (d.confidence || 0),
+        0
+      );
+
+    return (total / decisions.length) * 100;
+
+  }, [decisions]);
 
   /* ================= DECISION DISTRIBUTION ================= */
 
@@ -29,35 +89,6 @@ export default function AIBehaviorPanel({
     });
 
     return { buy, sell, wait };
-
-  }, [decisions]);
-
-  /* ================= AI ACCURACY ================= */
-
-  const accuracy = useMemo(() => {
-
-    if (!trades.length) return 0;
-
-    const wins =
-      trades.filter(t => t.pnl > 0).length;
-
-    return (wins / trades.length) * 100;
-
-  }, [trades]);
-
-  /* ================= AI CONFIDENCE ================= */
-
-  const avgConfidence = useMemo(() => {
-
-    if (!decisions.length) return 0;
-
-    const total =
-      decisions.reduce(
-        (sum, d) => sum + (d.confidence || 0),
-        0
-      );
-
-    return (total / decisions.length) * 100;
 
   }, [decisions]);
 
@@ -82,6 +113,8 @@ export default function AIBehaviorPanel({
     };
 
   }, [memory, trades]);
+
+  /* ================= UI ================= */
 
   return (
 
@@ -110,9 +143,46 @@ export default function AIBehaviorPanel({
         {accuracy.toFixed(1)}%
       </div>
 
+      {/* ================= TRADE STATS ================= */}
+
+      <div style={{marginTop:12}}>
+
+        <strong>Trade Performance</strong>
+
+        <div style={{
+          display:"grid",
+          gridTemplateColumns:"1fr 1fr",
+          marginTop:8,
+          gap:6
+        }}>
+
+          <span>Trades Closed:</span>
+          <span>{tradeStats.total}</span>
+
+          <span>Wins:</span>
+          <span style={{color:"#22c55e"}}>
+            {tradeStats.wins}
+          </span>
+
+          <span>Losses:</span>
+          <span style={{color:"#ef4444"}}>
+            {tradeStats.losses}
+          </span>
+
+          <span>Total PnL:</span>
+          <span style={{
+            color: tradeStats.pnl >= 0 ? "#22c55e" : "#ef4444"
+          }}>
+            ${tradeStats.pnl.toFixed(2)}
+          </span>
+
+        </div>
+
+      </div>
+
       {/* ================= LEARNING ================= */}
 
-      <div style={{marginTop:15}}>
+      <div style={{marginTop:18}}>
 
         <strong>AI Learning Memory</strong>
 
