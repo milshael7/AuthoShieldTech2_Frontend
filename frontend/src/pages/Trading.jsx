@@ -70,7 +70,7 @@ export default function Trading(){
     loadEngine();
 
     const interval =
-      setInterval(loadEngine,2000);
+      setInterval(loadEngine,4000);
 
     return ()=>clearInterval(interval);
 
@@ -143,6 +143,20 @@ export default function Trading(){
 
   const storedTrades =
     memory?.tradesStored || 0;
+
+  /* ================= LEARNING PROGRESS ================= */
+
+  const learningProgress = useMemo(()=>{
+
+    const total =
+      storedSignals + storedTrades;
+
+    const progress =
+      Math.min(100, Math.log10(total+1)*20);
+
+    return progress;
+
+  },[storedSignals,storedTrades]);
 
   return (
 
@@ -263,6 +277,31 @@ export default function Trading(){
               Trades Stored: {storedTrades}
             </div>
 
+            <div style={{marginTop:8}}>
+
+              <div
+                style={{
+                  background:"#1f2937",
+                  height:8,
+                  borderRadius:6,
+                  overflow:"hidden"
+                }}
+              >
+                <div
+                  style={{
+                    width:`${learningProgress}%`,
+                    height:8,
+                    background:"#22c55e"
+                  }}
+                />
+              </div>
+
+              <small>
+                AI Learning Progress {learningProgress.toFixed(0)}%
+              </small>
+
+            </div>
+
           </div>
 
           {/* CAPITAL */}
@@ -348,7 +387,11 @@ export default function Trading(){
 
       {tab==="room" && (
         <section className="postureCard">
-          <TradingRoom snapshot={snapshot}/>
+          <TradingRoom
+            snapshot={snapshot}
+            brain={brain}
+            memory={memory}
+          />
         </section>
       )}
 
