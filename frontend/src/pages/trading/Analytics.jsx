@@ -1,16 +1,14 @@
 // ============================================================
 // FILE: frontend/src/pages/trading/Analytics.jsx
-// ANALYTICS ROOM — INSTITUTIONAL AI PERFORMANCE DASHBOARD v3
-// FIXED: pnl field alignment + correct equity curve
+// ANALYTICS ROOM — INSTITUTIONAL AI PERFORMANCE DASHBOARD v4
+//
+// FIXES:
+// - Correct EquityCurve prop (equityHistory)
+// - Safer equity curve generation
+// - Added NaN safety
 //
 // PURPOSE:
-// - Shows AI trading analytics
-// - Displays engine state, brain intelligence, equity curve
-// - Tracks recent trades and portfolio allocation
-//
-// MAINTENANCE NOTE:
-// Uses trade.pnl from the backend execution engine.
-// Layout intentionally preserved.
+// Shows AI trading analytics and performance metrics.
 // ============================================================
 
 import React, { useEffect, useState } from "react";
@@ -67,26 +65,44 @@ export default function Analytics(){
 
       /* ================= PERFORMANCE ================= */
 
-      const wins = trades.filter(t=>Number(t.pnl)>0);
-      const losses = trades.filter(t=>Number(t.pnl)<=0);
+      const wins = trades.filter(t => Number(t.pnl) > 0);
 
       const winRate =
-        trades.length ? (wins.length/trades.length)*100 : 0;
+        trades.length
+          ? (wins.length / trades.length) * 100
+          : 0;
 
       const pnl =
-        trades.reduce((s,t)=>s+(Number(t.pnl)||0),0);
+        trades.reduce(
+          (s,t)=>s+(Number(t.pnl)||0),0
+        );
 
-      let equity = Number(snap.cashBalance || 0);
+      /* ================= EQUITY CURVE ================= */
+
+      let equity =
+        Number(snap.cashBalance || 0);
+
       let peak = equity;
       let maxDD = 0;
       const curve = [];
 
-      trades.forEach(t=>{
-        equity += Number(t.pnl)||0;
-        peak = Math.max(peak,equity);
-        const dd = peak > 0 ? (peak-equity)/peak : 0;
-        maxDD = Math.max(maxDD,dd);
+      trades.forEach(t => {
+
+        const tradePnl = Number(t.pnl) || 0;
+
+        equity += tradePnl;
+
+        peak = Math.max(peak, equity);
+
+        const dd =
+          peak > 0
+            ? (peak - equity) / peak
+            : 0;
+
+        maxDD = Math.max(maxDD, dd);
+
         curve.push(equity);
+
       });
 
       setEquityHistory(curve);
@@ -143,7 +159,8 @@ export default function Analytics(){
         mode:config.tradingMode
       });
 
-    }catch(e){
+    }
+    catch(e){
       console.error("Analytics load failed",e);
     }
 
@@ -196,7 +213,9 @@ export default function Analytics(){
 
       <Panel title="Equity Curve" style={{marginTop:30}}>
 
-        <EquityCurve scalpHistory={equityHistory} />
+        {/* FIXED PROP NAME */}
+
+        <EquityCurve equityHistory={equityHistory} />
 
       </Panel>
 
