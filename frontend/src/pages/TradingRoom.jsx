@@ -19,6 +19,8 @@ export default function TradingRoom(){
   const marketWsRef = useRef(null);
   const paperWsRef = useRef(null);
 
+  const reconnectTimerRef = useRef(null);
+
   const lastCandleRef = useRef(null);
   const engineStartRef = useRef(null);
 
@@ -40,24 +42,23 @@ export default function TradingRoom(){
     strategyMode:"Balanced"
   });
 
-  /* ================= LOAD AI CONFIG ================= */
+/* ================= LOAD AI CONFIG ================= */
 
   useEffect(()=>{
 
     async function loadConfig(){
 
-      if(!API_BASE) return;
-      const token = getToken();
-      if(!token) return;
+      const token=getToken();
+      if(!token || !API_BASE) return;
 
       try{
 
-        const res = await fetch(
+        const res=await fetch(
           `${API_BASE}/api/ai/config`,
           {headers:{Authorization:`Bearer ${token}`}}
         );
 
-        const data = await res.json();
+        const data=await res.json();
 
         if(data?.config){
           setAiControl(data.config);
@@ -71,19 +72,19 @@ export default function TradingRoom(){
 
   },[]);
 
-  /* ================= ENGINE UPTIME ================= */
+/* ================= ENGINE UPTIME ================= */
 
   useEffect(()=>{
 
-    const timer = setInterval(()=>{
+    const timer=setInterval(()=>{
 
       if(!engineStartRef.current) return;
 
-      const diff = Date.now() - engineStartRef.current;
+      const diff=Date.now()-engineStartRef.current;
 
-      const sec = Math.floor(diff/1000)%60;
-      const min = Math.floor(diff/60000)%60;
-      const hr  = Math.floor(diff/3600000);
+      const sec=Math.floor(diff/1000)%60;
+      const min=Math.floor(diff/60000)%60;
+      const hr=Math.floor(diff/3600000);
 
       setEngineUptime(`${hr}h ${min}m ${sec}s`);
 
@@ -93,25 +94,25 @@ export default function TradingRoom(){
 
   },[]);
 
-  /* ================= LOAD HISTORY ================= */
+/* ================= LOAD HISTORY ================= */
 
   async function loadHistory(){
 
-    if(!API_BASE) return;
-    const token = getToken();
-    if(!token) return;
+    const token=getToken();
+    if(!token || !API_BASE) return;
 
     try{
 
-      const res = await fetch(
+      const res=await fetch(
         `${API_BASE}/api/market/candles/${SYMBOL}?limit=${MAX_CANDLES}`,
         {headers:{Authorization:`Bearer ${token}`}}
       );
 
-      const data = await res.json();
+      const data=await res.json();
+
       if(!data?.ok || !Array.isArray(data.candles)) return;
 
-      const formatted = data.candles
+      const formatted=data.candles
         .map(c=>({
           time:Number(c.time),
           open:Number(c.open),
@@ -124,22 +125,31 @@ export default function TradingRoom(){
 
       if(!formatted.length) return;
 
-      lastCandleRef.current = formatted[formatted.length-1];
-      setCandles(formatted);
+      setCandles(prev=>{
+
+        if(prev.length>0) return prev;
+
+        lastCandleRef.current=
+          formatted[formatted.length-1];
+
+        return formatted;
+
+      });
 
     }catch{}
+
   }
 
-  /* ================= CANDLE BUILDER ================= */
+/* ================= CANDLE BUILDER ================= */
 
   function updateCandles(priceNow){
 
     if(!Number.isFinite(priceNow)) return;
 
-    const now = Math.floor(Date.now()/1000);
-    const candleTime = Math.floor(now/CANDLE_SECONDS)*CANDLE_SECONDS;
+    const now=Math.floor(Date.now()/1000);
+    const candleTime=Math.floor(now/CANDLE_SECONDS)*CANDLE_SECONDS;
 
-    const last = lastCandleRef.current;
+    const last=lastCandleRef.current;
 
     setCandles(prev=>{
 
@@ -148,7 +158,7 @@ export default function TradingRoom(){
 
       if(!last || last.time!==candleTime){
 
-        nextLast = {
+        nextLast={
           time:candleTime,
           open:priceNow,
           high:priceNow,
@@ -156,11 +166,11 @@ export default function TradingRoom(){
           close:priceNow
         };
 
-        next = [...prev.slice(-MAX_CANDLES),nextLast];
+        next=[...prev.slice(-MAX_CANDLES),nextLast];
 
       }else{
 
-        nextLast = {
+        nextLast={
           ...last,
           high:Math.max(last.high,priceNow),
           low:Math.min(last.low,priceNow),
@@ -173,6 +183,7 @@ export default function TradingRoom(){
       }
 
       lastCandleRef.current=nextLast;
+
       return next;
 
     });
@@ -181,82 +192,96 @@ export default function TradingRoom(){
 
   useEffect(()=>{loadHistory()},[]);
 
-  /* ================= MARKET WS ================= */
+/* ================= MARKET WS ================= */
 
-  useEffect(()=>{
+  function connectMarket(){
 
-    if(marketWsRef.current) return;
+    const token=getToken();
+    if(!token || !API_BASE) return;
 
-    const token = getToken();
-    if(!token) return;
+    const url=new URL(API_BASE);
+    const protocol=url.protocol==="https:"?"wss:":"ws:";
 
-    const url = new URL(API_BASE);
-    const protocol = url.protocol==="https:"?"wss:":"ws:";
-
-    const ws = new WebSocket(
+    const ws=new WebSocket(
       `${protocol}//${url.host}/ws?channel=market&token=${encodeURIComponent(token)}`
     );
 
-    marketWsRef.current = ws;
+    marketWsRef.current=ws;
 
-    ws.onmessage = (msg)=>{
+    ws.onmessage=(msg)=>{
 
       try{
 
-        const packet = JSON.parse(msg.data);
+        const packet=JSON.parse(msg.data);
 
         if(packet.channel!=="market") return;
 
-        const market = packet?.data?.[SYMBOL];
+        const market=packet?.data?.[SYMBOL];
         if(!market) return;
 
-        const p = toNumber(market.price);
-        if(p===null || p<=0) return;
+        const p=toNumber(market.price);
+        if(p===null) return;
 
         setPrice(p);
+
         updateCandles(p);
 
       }catch{}
 
     };
 
-    ws.onclose = ()=>{ marketWsRef.current=null };
+    ws.onclose=()=>{
 
-    return ()=>ws.close();
+      marketWsRef.current=null;
 
-  },[]);
+      reconnectTimerRef.current=setTimeout(()=>{
+        connectMarket();
+      },3000);
 
-  /* ================= PAPER WS ================= */
+    };
+
+  }
 
   useEffect(()=>{
 
-    if(paperWsRef.current) return;
+    connectMarket();
 
-    const token = getToken();
-    if(!token) return;
+    return ()=>{
+      if(marketWsRef.current)
+        marketWsRef.current.close();
+    }
 
-    const url = new URL(API_BASE);
-    const protocol = url.protocol==="https:"?"wss:":"ws:";
+  },[]);
 
-    const ws = new WebSocket(
+/* ================= PAPER WS ================= */
+
+  function connectPaper(){
+
+    const token=getToken();
+    if(!token || !API_BASE) return;
+
+    const url=new URL(API_BASE);
+    const protocol=url.protocol==="https:"?"wss:":"ws:";
+
+    const ws=new WebSocket(
       `${protocol}//${url.host}/ws?channel=paper&token=${encodeURIComponent(token)}`
     );
 
-    paperWsRef.current = ws;
+    paperWsRef.current=ws;
 
-    ws.onmessage = (msg)=>{
+    ws.onmessage=(msg)=>{
 
       try{
 
-        const data = JSON.parse(msg.data);
+        const data=JSON.parse(msg.data);
 
         if(data.channel!=="paper") return;
 
         if(!engineStartRef.current){
-          engineStartRef.current = data.engineStart || Date.now();
+          engineStartRef.current=data.engineStart||Date.now();
         }
 
-        const snap = data.snapshot || {};
+        const snap=data.snapshot||{};
 
         setEquity(Number(snap.equity||0));
 
@@ -273,19 +298,36 @@ export default function TradingRoom(){
 
     };
 
-    ws.onclose = ()=>{ paperWsRef.current=null };
+    ws.onclose=()=>{
 
-    return ()=>ws.close();
+      paperWsRef.current=null;
+
+      reconnectTimerRef.current=setTimeout(()=>{
+        connectPaper();
+      },3000);
+
+    };
+
+  }
+
+  useEffect(()=>{
+
+    connectPaper();
+
+    return ()=>{
+      if(paperWsRef.current)
+        paperWsRef.current.close();
+    }
 
   },[]);
 
-  /* ================= AI METRICS ================= */
+/* ================= AI METRICS ================= */
 
-  const aiConfidence = useMemo(()=>{
+  const aiConfidence=useMemo(()=>{
 
-    if(!decisions.length) return 0.15;
+    if(!decisions.length) return 0.2;
 
-    const total = decisions.reduce(
+    const total=decisions.reduce(
       (s,d)=>s+Number(d.confidence||0),0
     );
 
@@ -293,17 +335,19 @@ export default function TradingRoom(){
 
   },[decisions]);
 
-  const lastDecision = decisions.length
+  const lastDecision=decisions.length
     ? decisions[decisions.length-1]
     : null;
 
-  const aiStatus = useMemo(()=>{
+  const aiStatus=useMemo(()=>{
 
     if(!aiControl?.enabled) return "DISABLED";
     if(aiControl?.tradingMode==="manual") return "HUMAN OVERRIDE";
     return "RUNNING";
 
   },[aiControl]);
+
+/* ================= RENDER ================= */
 
   return(
 
@@ -330,7 +374,7 @@ export default function TradingRoom(){
       </div>
 
       <div style={{
-        width:220,
+        width:240,
         padding:16,
         background:"#111827",
         overflowY:"auto"
@@ -348,6 +392,10 @@ export default function TradingRoom(){
         <div>Cash: ${wallet.usd.toFixed(2)}</div>
 
         <div style={{marginTop:10}}>
+          Trades: {trades.length}
+        </div>
+
+        <div>
           AI Confidence: {(aiConfidence*100).toFixed(0)}%
         </div>
 
