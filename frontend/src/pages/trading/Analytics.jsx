@@ -1,6 +1,16 @@
 // ============================================================
-// ANALYTICS ROOM — INSTITUTIONAL AI PERFORMANCE DASHBOARD v2
-// FULL ENGINE INTELLIGENCE CONNECTED
+// FILE: frontend/src/pages/trading/Analytics.jsx
+// ANALYTICS ROOM — INSTITUTIONAL AI PERFORMANCE DASHBOARD v3
+// FIXED: pnl field alignment + correct equity curve
+//
+// PURPOSE:
+// - Shows AI trading analytics
+// - Displays engine state, brain intelligence, equity curve
+// - Tracks recent trades and portfolio allocation
+//
+// MAINTENANCE NOTE:
+// Uses trade.pnl from the backend execution engine.
+// Layout intentionally preserved.
 // ============================================================
 
 import React, { useEffect, useState } from "react";
@@ -37,7 +47,6 @@ export default function Analytics(){
 
       const headers = {Authorization:`Bearer ${token}`};
 
-      // 1️⃣ Paper Snapshot
       const paperRes = await fetch(
         `${API_BASE}/api/paper/status`,
         {headers}
@@ -49,7 +58,6 @@ export default function Analytics(){
       const snap = paperData.snapshot || {};
       const trades = snap.trades || [];
 
-      // 2️⃣ AI Analytics (Brain + Config + Engine)
       const aiRes = await fetch(
         `${API_BASE}/api/ai/analytics`,
         {headers}
@@ -59,14 +67,14 @@ export default function Analytics(){
 
       /* ================= PERFORMANCE ================= */
 
-      const wins = trades.filter(t=>t.profit>0);
-      const losses = trades.filter(t=>t.profit<=0);
+      const wins = trades.filter(t=>Number(t.pnl)>0);
+      const losses = trades.filter(t=>Number(t.pnl)<=0);
 
       const winRate =
         trades.length ? (wins.length/trades.length)*100 : 0;
 
       const pnl =
-        trades.reduce((s,t)=>s+(Number(t.profit)||0),0);
+        trades.reduce((s,t)=>s+(Number(t.pnl)||0),0);
 
       let equity = Number(snap.cashBalance || 0);
       let peak = equity;
@@ -74,9 +82,9 @@ export default function Analytics(){
       const curve = [];
 
       trades.forEach(t=>{
-        equity += Number(t.profit)||0;
+        equity += Number(t.pnl)||0;
         peak = Math.max(peak,equity);
-        const dd = (peak-equity)/peak;
+        const dd = peak > 0 ? (peak-equity)/peak : 0;
         maxDD = Math.max(maxDD,dd);
         curve.push(equity);
       });
@@ -149,8 +157,6 @@ export default function Analytics(){
         AI Trading Analytics
       </h2>
 
-      {/* PERFORMANCE METRICS */}
-
       <div style={{
         display:"flex",
         gap:20,
@@ -166,8 +172,6 @@ export default function Analytics(){
 
       </div>
 
-      {/* ENGINE STATE */}
-
       <Panel title="AI Engine State">
 
         <div>Mode: {risk.mode}</div>
@@ -178,8 +182,6 @@ export default function Analytics(){
         <div>Total Executions: {engine.trades}</div>
 
       </Panel>
-
-      {/* BRAIN INTELLIGENCE */}
 
       <Panel title="AI Brain Intelligence" style={{marginTop:30}}>
 
@@ -192,15 +194,11 @@ export default function Analytics(){
 
       </Panel>
 
-      {/* EQUITY CURVE */}
-
       <Panel title="Equity Curve" style={{marginTop:30}}>
 
         <EquityCurve scalpHistory={equityHistory} />
 
       </Panel>
-
-      {/* BEHAVIOR */}
 
       <Panel title="AI Behavior Intelligence" style={{marginTop:30}}>
 
@@ -210,15 +208,11 @@ export default function Analytics(){
 
       </Panel>
 
-      {/* PORTFOLIO */}
-
       <Panel title="Portfolio Allocation" style={{marginTop:30}}>
 
         <PortfolioAllocation trades={tradeLog} />
 
       </Panel>
-
-      {/* RECENT TRADES */}
 
       <Panel title="Recent Trades" style={{marginTop:30}}>
 
@@ -236,9 +230,9 @@ export default function Analytics(){
             <span>{t.qty}</span>
             <span>@ {t.price}</span>
             <span style={{
-              color:t.profit>0?"#22c55e":"#ef4444"
+              color:Number(t.pnl)>0?"#22c55e":"#ef4444"
             }}>
-              {Number(t.profit||0).toFixed(2)}
+              {Number(t.pnl||0).toFixed(2)}
             </span>
           </div>
 
