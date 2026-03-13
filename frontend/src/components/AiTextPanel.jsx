@@ -1,220 +1,324 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { readAloud } from "./ReadAloud";
 
 /**
- * AuthoDev 6.5 — Professional AI Text Panel
- * Enterprise-grade, long-form, shareable responses
- *
- * Features:
- * - Long professional answers (email-quality)
- * - Unified read-aloud engine (platform-wide)
- * - Copy / Share / Rate controls
- * - Clean, non-bubble layout
+ * AuthoDev 6.6 — Professional AI Text Panel
+ * Enterprise-grade, persistent, shareable responses
  */
 
 export default function AiTextPanel({
-  title = "AuthoDev 6.5",
+  title = "AuthoDev 6.6",
   endpoint = "/api/ai/chat",
   getContext,
 }) {
+
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function sendMessage() {
-    if (!input.trim() || loading) return;
+  const chatRef = useRef(null);
+
+  /* ================= LOAD HISTORY ================= */
+
+  useEffect(()=>{
+
+    try{
+      const stored = localStorage.getItem("ai_chat_history");
+
+      if(stored){
+        setMessages(JSON.parse(stored));
+      }
+    }catch{}
+
+  },[]);
+
+  /* ================= SAVE HISTORY ================= */
+
+  useEffect(()=>{
+
+    try{
+      localStorage.setItem(
+        "ai_chat_history",
+        JSON.stringify(messages.slice(-50))
+      );
+    }catch{}
+
+  },[messages]);
+
+  /* ================= AUTO SCROLL ================= */
+
+  useEffect(()=>{
+
+    if(chatRef.current){
+      chatRef.current.scrollTop =
+        chatRef.current.scrollHeight;
+    }
+
+  },[messages]);
+
+  /* ================= SEND MESSAGE ================= */
+
+  async function sendMessage(){
+
+    if(!input.trim() || loading) return;
 
     const userMsg = {
-      role: "user",
-      text: input.trim(),
-      ts: Date.now(),
+      role:"user",
+      text:input.trim(),
+      ts:Date.now()
     };
 
-    setMessages((m) => [...m, userMsg]);
+    setMessages(m=>[...m,userMsg]);
     setInput("");
     setLoading(true);
 
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          message: userMsg.text,
-          context: typeof getContext === "function" ? getContext() : {},
-        }),
+    try{
+
+      const res = await fetch(endpoint,{
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json"
+        },
+        credentials:"include",
+        body:JSON.stringify({
+          message:userMsg.text,
+          context:
+            typeof getContext==="function"
+              ? getContext()
+              : {}
+        })
       });
 
       const data = await res.json();
 
-      setMessages((m) => [
+      setMessages(m=>[
         ...m,
         {
-          role: "ai",
-          text: data.reply || "No response available.",
-          speakText: data.speakText || data.reply,
-          ts: Date.now(),
-        },
+          role:"ai",
+          text:data.reply || "No response available.",
+          speakText:data.speakText || data.reply,
+          ts:Date.now()
+        }
       ]);
-    } catch {
-      setMessages((m) => [
+
+    }catch{
+
+      setMessages(m=>[
         ...m,
         {
-          role: "ai",
-          text:
-            "There was a connection issue while generating the response. Please try again.",
-          ts: Date.now(),
-        },
+          role:"ai",
+          text:"Connection issue while generating the response.",
+          ts:Date.now()
+        }
       ]);
-    } finally {
+
+    }finally{
+
       setLoading(false);
+
     }
+
   }
 
-  function copy(text) {
+  /* ================= ENTER TO SEND ================= */
+
+  function handleKey(e){
+
+    if(e.key==="Enter" && !e.shiftKey){
+
+      e.preventDefault();
+      sendMessage();
+
+    }
+
+  }
+
+  /* ================= UTIL ================= */
+
+  function copy(text){
     navigator.clipboard?.writeText(text);
   }
 
-  function share(text) {
-    if (navigator.share) navigator.share({ text });
-    else copy(text);
+  function share(text){
+
+    try{
+
+      if(navigator.share)
+        navigator.share({text});
+      else
+        copy(text);
+
+    }catch{}
+
   }
 
   return (
+
     <div style={panel}>
+
       <div style={header}>{title}</div>
 
-      <div style={chatArea}>
-        {messages.map((m, i) => (
-          <div key={i} style={m.role === "ai" ? aiBlock : userBlock}>
+      <div ref={chatRef} style={chatArea}>
+
+        {messages.map((m,i)=>(
+
+          <div key={i} style={m.role==="ai" ? aiBlock : userBlock}>
+
             <div style={text}>{m.text}</div>
 
-            {m.role === "ai" && (
+            {m.role==="ai" && (
+
               <div style={tools}>
-                <button style={toolBtn} onClick={() => readAloud(m.speakText)}>
+
+                <button
+                  style={toolBtn}
+                  onClick={()=>readAloud(m.speakText)}
+                >
                   🔊
                 </button>
-                <button style={toolBtn} onClick={() => copy(m.text)}>
+
+                <button
+                  style={toolBtn}
+                  onClick={()=>copy(m.text)}
+                >
                   📋
                 </button>
-                <button style={toolBtn} title="Helpful">
-                  👍
-                </button>
-                <button style={toolBtn} title="Not helpful">
-                  👎
-                </button>
-                <button style={toolBtn} onClick={() => share(m.text)}>
+
+                <button style={toolBtn}>👍</button>
+
+                <button style={toolBtn}>👎</button>
+
+                <button
+                  style={toolBtn}
+                  onClick={()=>share(m.text)}
+                >
                   🔗
                 </button>
+
               </div>
+
             )}
+
           </div>
+
         ))}
+
       </div>
 
       <div style={inputRow}>
+
         <textarea
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e)=>setInput(e.target.value)}
+          onKeyDown={handleKey}
           placeholder="Ask AuthoDev about security activity, incidents, or analysis…"
           style={inputBox}
           rows={3}
         />
-        <button onClick={sendMessage} disabled={loading} style={sendBtn}>
+
+        <button
+          onClick={sendMessage}
+          disabled={loading}
+          style={sendBtn}
+        >
           {loading ? "Thinking…" : "Send"}
         </button>
+
       </div>
+
     </div>
+
   );
+
 }
 
 /* ================= STYLES ================= */
 
-const panel = {
-  display: "flex",
-  flexDirection: "column",
-  height: "100%",
-  background: "rgba(0,0,0,0.35)",
-  border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 16,
+const panel={
+  display:"flex",
+  flexDirection:"column",
+  height:"100%",
+  background:"rgba(0,0,0,0.35)",
+  border:"1px solid rgba(255,255,255,0.12)",
+  borderRadius:16
 };
 
-const header = {
-  padding: 14,
-  fontWeight: 800,
-  fontSize: 15,
-  borderBottom: "1px solid rgba(255,255,255,0.1)",
+const header={
+  padding:14,
+  fontWeight:800,
+  fontSize:15,
+  borderBottom:"1px solid rgba(255,255,255,0.1)"
 };
 
-const chatArea = {
-  flex: 1,
-  padding: 16,
-  overflowY: "auto",
-  display: "flex",
-  flexDirection: "column",
-  gap: 18,
+const chatArea={
+  flex:1,
+  padding:16,
+  overflowY:"auto",
+  display:"flex",
+  flexDirection:"column",
+  gap:18
 };
 
-const userBlock = {
-  alignSelf: "flex-end",
-  maxWidth: "75%",
-  background: "rgba(122,162,255,0.15)",
-  borderRadius: 12,
-  padding: 12,
-  fontSize: 13,
+const userBlock={
+  alignSelf:"flex-end",
+  maxWidth:"75%",
+  background:"rgba(122,162,255,0.15)",
+  borderRadius:12,
+  padding:12,
+  fontSize:13
 };
 
-const aiBlock = {
-  alignSelf: "flex-start",
-  maxWidth: "85%",
-  background: "rgba(255,255,255,0.06)",
-  borderRadius: 12,
-  padding: 16,
+const aiBlock={
+  alignSelf:"flex-start",
+  maxWidth:"85%",
+  background:"rgba(255,255,255,0.06)",
+  borderRadius:12,
+  padding:16
 };
 
-const text = {
-  fontSize: 13,
-  lineHeight: 1.6,
-  whiteSpace: "pre-wrap",
+const text={
+  fontSize:13,
+  lineHeight:1.6,
+  whiteSpace:"pre-wrap"
 };
 
-const tools = {
-  display: "flex",
-  gap: 10,
-  marginTop: 10,
-  fontSize: 12,
-  opacity: 0.8,
+const tools={
+  display:"flex",
+  gap:10,
+  marginTop:10,
+  fontSize:12,
+  opacity:0.8
 };
 
-const toolBtn = {
-  background: "transparent",
-  border: "none",
-  cursor: "pointer",
-  fontSize: 14,
+const toolBtn={
+  background:"transparent",
+  border:"none",
+  cursor:"pointer",
+  fontSize:14
 };
 
-const inputRow = {
-  display: "flex",
-  gap: 10,
-  padding: 14,
-  borderTop: "1px solid rgba(255,255,255,0.1)",
+const inputRow={
+  display:"flex",
+  gap:10,
+  padding:14,
+  borderTop:"1px solid rgba(255,255,255,0.1)"
 };
 
-const inputBox = {
-  flex: 1,
-  resize: "none",
-  borderRadius: 10,
-  padding: 12,
-  background: "rgba(0,0,0,0.4)",
-  color: "#fff",
-  border: "1px solid rgba(255,255,255,0.15)",
-  fontSize: 13,
+const inputBox={
+  flex:1,
+  resize:"none",
+  borderRadius:10,
+  padding:12,
+  background:"rgba(0,0,0,0.4)",
+  color:"#fff",
+  border:"1px solid rgba(255,255,255,0.15)",
+  fontSize:13
 };
 
-const sendBtn = {
-  padding: "0 20px",
-  borderRadius: 10,
-  fontWeight: 700,
-  background: "#7aa2ff",
-  color: "#000",
+const sendBtn={
+  padding:"0 20px",
+  borderRadius:10,
+  fontWeight:700,
+  background:"#7aa2ff",
+  color:"#000"
 };
