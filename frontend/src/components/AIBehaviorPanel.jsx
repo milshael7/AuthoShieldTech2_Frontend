@@ -6,14 +6,19 @@
 // Provide the platform owner with AI performance intelligence.
 //
 // PANELS
-// 1. AI Analytics (confidence, accuracy, learning)
-// 2. Active Trade Monitor
-// 3. Hourly Trade Journal
-// 4. DAILY PERFORMANCE HISTORY (NEW)
+// 1. AI Analytics (fixed)
+// 2. Trade Performance (fixed)
+// 3. Daily Performance (fixed)
+// 4. Active Trade Monitor (fixed)
 //
-// SAFETY
-// - Handles missing trade fields
-// - Prevents UI crashes from null values
+// 5. TRADE JOURNAL
+//    Split into two scroll panels:
+//      LEFT  -> Winning / Running trades
+//      RIGHT -> Losing trades
+//
+// MAINTENANCE NOTES
+// The top analytics section must remain fixed.
+// Only the trade journal area should scroll.
 //
 // ============================================================
 
@@ -26,436 +31,306 @@ export default function AIBehaviorPanel({
   position = null
 }) {
 
-  /* ================= ACTIVE TRADE TIMER ================= */
+const [duration,setDuration] = useState(0);
 
-  const [duration,setDuration] = useState(0);
+useEffect(()=>{
 
-  useEffect(()=>{
+  if(!position?.time) return;
 
-    if(!position?.time) return;
+  const timer=setInterval(()=>{
+    setDuration(Date.now() - position.time);
+  },1000);
 
-    const timer=setInterval(()=>{
-      setDuration(Date.now() - position.time);
-    },1000);
+  return ()=>clearInterval(timer);
 
-    return ()=>clearInterval(timer);
+},[position]);
 
-  },[position]);
+function formatDuration(ms){
 
-  function formatDuration(ms){
+  const s=Math.floor(ms/1000);
+  const m=Math.floor(s/60);
+  const sec=s%60;
 
-    const s=Math.floor(ms/1000);
-    const m=Math.floor(s/60);
-    const sec=s%60;
+  return `${m}m ${sec}s`;
+}
 
-    return `${m}m ${sec}s`;
+/* ================= CLOSED TRADES ================= */
 
-  }
+const closedTrades = useMemo(()=>{
+  return trades.filter(t=>t.side==="CLOSE");
+},[trades]);
 
-  function tradeDuration(open, close){
+/* ================= WIN / LOSS SPLIT ================= */
 
-    if(!open || !close) return "-";
+const winningTrades = useMemo(()=>{
+  return closedTrades.filter(t=>Number(t.pnl)>=0);
+},[closedTrades]);
 
-    const ms = close - open;
+const losingTrades = useMemo(()=>{
+  return closedTrades.filter(t=>Number(t.pnl)<0);
+},[closedTrades]);
 
-    const s = Math.floor(ms/1000);
-    const m = Math.floor(s/60);
-    const sec = s % 60;
+/* ================= TRADE STATS ================= */
 
-    return `${m}m ${sec}s`;
+const tradeStats = useMemo(()=>{
 
-  }
+  let wins=0;
+  let losses=0;
+  let pnl=0;
 
-  function formatTime(ts){
-    try{
-      return new Date(ts).toLocaleTimeString();
-    }catch{
-      return "-";
-    }
-  }
+  closedTrades.forEach(t=>{
 
-  function formatDate(ts){
-    try{
-      return new Date(ts).toDateString();
-    }catch{
-      return "-";
-    }
-  }
+    const p=Number(t.pnl||0);
 
-  /* ================= CLOSED TRADES ================= */
+    pnl+=p;
 
-  const closedTrades = useMemo(()=>{
-    return trades.filter(t=>t.side==="CLOSE");
-  },[trades]);
+    if(p>0) wins++;
+    else if(p<0) losses++;
 
-  /* ================= TRADE STATS ================= */
+  });
 
-  const tradeStats = useMemo(()=>{
+  return{
+    wins,
+    losses,
+    pnl,
+    total:closedTrades.length
+  };
 
-    let wins=0;
-    let losses=0;
-    let pnl=0;
+},[closedTrades]);
 
-    closedTrades.forEach(t=>{
+/* ================= DAILY STATS ================= */
 
-      const p=Number(t.pnl||0);
+const dailyStats = useMemo(()=>{
 
-      pnl+=p;
+  const today=new Date().toDateString();
 
-      if(p>0) wins++;
-      else if(p<0) losses++;
+  const todayTrades=closedTrades.filter(t=>{
+    if(!t.time) return false;
+    return new Date(t.time).toDateString()===today;
+  });
 
-    });
+  let wins=0;
+  let losses=0;
+  let pnl=0;
 
-    return{
-      wins,
-      losses,
-      pnl,
-      total:closedTrades.length
-    };
+  todayTrades.forEach(t=>{
 
-  },[closedTrades]);
+    const p=Number(t.pnl||0);
 
-  /* ================= DAILY PERFORMANCE ================= */
+    pnl+=p;
 
-  const dailyStats = useMemo(()=>{
+    if(p>0) wins++;
+    else if(p<0) losses++;
 
-    const today=new Date().toDateString();
+  });
 
-    const todayTrades=closedTrades.filter(t=>{
-      if(!t.time) return false;
-      return new Date(t.time).toDateString()===today;
-    });
+  return{
+    trades:todayTrades.length,
+    wins,
+    losses,
+    pnl
+  };
 
-    let wins=0;
-    let losses=0;
-    let pnl=0;
+},[closedTrades]);
 
-    todayTrades.forEach(t=>{
+/* ================= AI CONFIDENCE ================= */
 
-      const p=Number(t.pnl||0);
+const avgConfidence = useMemo(()=>{
 
-      pnl+=p;
+  if(!decisions.length) return 0;
 
-      if(p>0) wins++;
-      else if(p<0) losses++;
+  const total =
+    decisions.reduce((s,d)=>s+(d.confidence||0),0);
 
-    });
+  return (total/decisions.length)*100;
 
-    return{
-      trades:todayTrades.length,
-      wins,
-      losses,
-      pnl
-    };
+},[decisions]);
 
-  },[closedTrades]);
+/* ================= ACCURACY ================= */
 
-  /* ================= HOURLY TRADE JOURNAL ================= */
+const accuracy = useMemo(()=>{
 
-  const tradesByHour = useMemo(()=>{
+  if(!tradeStats.total) return 0;
 
-    const grouped={};
+  return (tradeStats.wins/tradeStats.total)*100;
 
-    closedTrades.forEach(t=>{
+},[tradeStats]);
 
-      if(!t.time) return;
+/* ================= UI ================= */
 
-      const d = new Date(t.time);
+return(
 
-      const key =
-        d.toDateString() +
-        " " +
-        d.getHours() +
-        ":00";
+<div style={{
+  background:"#111827",
+  padding:20,
+  borderRadius:12,
+  border:"1px solid rgba(255,255,255,.08)"
+}}>
 
-      if(!grouped[key]){
-        grouped[key]={
-          wins:[],
-          losses:[]
-        };
-      }
+<h3>AI Behavior Intelligence</h3>
 
-      if(Number(t.pnl)>=0){
-        grouped[key].wins.push(t);
-      }else{
-        grouped[key].losses.push(t);
-      }
+{/* ================= ANALYTICS ================= */}
 
-    });
+<div style={{marginTop:10}}>
+<strong>Average AI Confidence:</strong> {avgConfidence.toFixed(1)}%
+</div>
 
-    return grouped;
+<div>
+<strong>AI Accuracy:</strong> {accuracy.toFixed(1)}%
+</div>
 
-  },[closedTrades]);
+{/* ================= TRADE PERFORMANCE ================= */}
 
-  /* ================= DAILY HISTORY (NEW) ================= */
+<div style={{marginTop:12}}>
 
-  const tradesByDay = useMemo(()=>{
+<strong>Trade Performance</strong>
 
-    const grouped={};
+<div>Trades Closed: {tradeStats.total}</div>
 
-    closedTrades.forEach(t=>{
+<div style={{color:"#22c55e"}}>
+Wins: {tradeStats.wins}
+</div>
 
-      if(!t.time) return;
+<div style={{color:"#ef4444"}}>
+Losses: {tradeStats.losses}
+</div>
 
-      const day = new Date(t.time).toDateString();
+<div>
+Total PnL:
+<span style={{
+color:tradeStats.pnl>=0?"#22c55e":"#ef4444"
+}}>
+ {" "} ${tradeStats.pnl.toFixed(2)}
+</span>
+</div>
 
-      if(!grouped[day]){
-        grouped[day]={
-          pnl:0,
-          wins:0,
-          losses:0,
-          trades:[]
-        };
-      }
+</div>
 
-      grouped[day].trades.push(t);
+{/* ================= DAILY PERFORMANCE ================= */}
 
-      const pnl = Number(t.pnl||0);
+<div style={{marginTop:14}}>
 
-      grouped[day].pnl += pnl;
+<strong>Daily Performance</strong>
 
-      if(pnl>0) grouped[day].wins++;
-      if(pnl<0) grouped[day].losses++;
+<div>Trades Today: {dailyStats.trades}</div>
 
-    });
+<div style={{color:"#22c55e"}}>
+Wins Today: {dailyStats.wins}
+</div>
 
-    return grouped;
+<div style={{color:"#ef4444"}}>
+Losses Today: {dailyStats.losses}
+</div>
 
-  },[closedTrades]);
+<div>
+Daily PnL:
+<span style={{
+color:dailyStats.pnl>=0?"#22c55e":"#ef4444"
+}}>
+ {" "} ${dailyStats.pnl.toFixed(2)}
+</span>
+</div>
 
-  /* ================= AI CONFIDENCE ================= */
+</div>
 
-  const avgConfidence = useMemo(()=>{
+{/* ================= ACTIVE TRADE ================= */}
 
-    if(!decisions.length) return 0;
+{position && (
 
-    const total=
-      decisions.reduce((s,d)=>s+(d.confidence||0),0);
+<div style={{
+marginTop:20,
+padding:12,
+background:"#1f2937",
+borderRadius:8
+}}>
 
-    return (total/decisions.length)*100;
+<strong>Active Trade Monitor</strong>
 
-  },[decisions]);
+<div>Market: {position.symbol || "UNKNOWN"}</div>
+<div>Entry Price: {position.entry}</div>
+<div>Position Size: {position.qty}</div>
+<div>Time Open: {formatDuration(duration)}</div>
 
-  /* ================= ACCURACY ================= */
+</div>
 
-  const accuracy = useMemo(()=>{
+)}
 
-    if(!tradeStats.total) return 0;
+{/* ================= TRADE JOURNAL ================= */}
 
-    return (tradeStats.wins/tradeStats.total)*100;
+<div style={{
+display:"flex",
+gap:20,
+marginTop:25
+}}>
 
-  },[tradeStats]);
+{/* WINNING TRADES */}
 
-  /* ================= AI LEARNING ================= */
+<div style={{flex:1}}>
 
-  const learning = useMemo(()=>{
+<h4 style={{color:"#22c55e"}}>Winning Trades</h4>
 
-    if(!memory){
-      return{
-        signals:0,
-        trades:trades.length,
-        market:0
-      };
-    }
+<div style={{
+maxHeight:300,
+overflowY:"auto"
+}}>
 
-    return{
-      signals:memory.signalsStored||0,
-      trades:memory.tradesStored||trades.length,
-      market:memory.marketStatesStored||0
-    };
+{winningTrades.map((t,i)=>(
 
-  },[memory,trades]);
+<div key={i} style={{
+background:"rgba(34,197,94,.08)",
+padding:8,
+marginBottom:8,
+borderRadius:6
+}}>
 
-  /* ================= UI ================= */
+<div>{new Date(t.time).toLocaleString()}</div>
+<div>Market: {t.symbol}</div>
+<div>PnL: +{Number(t.pnl).toFixed(2)}</div>
 
-  return(
+</div>
 
-    <div style={{
-      background:"#111827",
-      padding:20,
-      borderRadius:12,
-      border:"1px solid rgba(255,255,255,.08)",
-      maxHeight:700,
-      overflowY:"auto"
-    }}>
+))}
 
-      <h3>AI Behavior Intelligence</h3>
+</div>
 
-      {/* ================= ANALYTICS ================= */}
+</div>
 
-      <div style={{marginTop:10}}>
-        <strong>Average AI Confidence:</strong>{" "}
-        {avgConfidence.toFixed(1)}%
-      </div>
+{/* LOSING TRADES */}
 
-      <div>
-        <strong>AI Accuracy:</strong>{" "}
-        {accuracy.toFixed(1)}%
-      </div>
+<div style={{flex:1}}>
 
-      {/* ================= TRADE PERFORMANCE ================= */}
+<h4 style={{color:"#ef4444"}}>Losing Trades</h4>
 
-      <div style={{marginTop:12}}>
+<div style={{
+maxHeight:300,
+overflowY:"auto"
+}}>
 
-        <strong>Trade Performance</strong>
+{losingTrades.map((t,i)=>(
 
-        <div style={{marginTop:6}}>
-          Trades Closed: {tradeStats.total}
-        </div>
+<div key={i} style={{
+background:"rgba(239,68,68,.08)",
+padding:8,
+marginBottom:8,
+borderRadius:6
+}}>
 
-        <div style={{color:"#22c55e"}}>
-          Wins: {tradeStats.wins}
-        </div>
+<div>{new Date(t.time).toLocaleString()}</div>
+<div>Market: {t.symbol}</div>
+<div>PnL: {Number(t.pnl).toFixed(2)}</div>
 
-        <div style={{color:"#ef4444"}}>
-          Losses: {tradeStats.losses}
-        </div>
+</div>
 
-        <div>
-          Total PnL:
-          <span style={{
-            color:tradeStats.pnl>=0?"#22c55e":"#ef4444"
-          }}>
-            {" "} ${tradeStats.pnl.toFixed(2)}
-          </span>
-        </div>
+))}
 
-      </div>
+</div>
 
-      {/* ================= DAILY PERFORMANCE ================= */}
+</div>
 
-      <div style={{marginTop:14}}>
+</div>
 
-        <strong>Daily Performance</strong>
+</div>
 
-        <div>Trades Today: {dailyStats.trades}</div>
-
-        <div style={{color:"#22c55e"}}>
-          Wins Today: {dailyStats.wins}
-        </div>
-
-        <div style={{color:"#ef4444"}}>
-          Losses Today: {dailyStats.losses}
-        </div>
-
-        <div>
-          Daily PnL:
-          <span style={{
-            color:dailyStats.pnl>=0?"#22c55e":"#ef4444"
-          }}>
-            {" "} ${dailyStats.pnl.toFixed(2)}
-          </span>
-        </div>
-
-      </div>
-
-      {/* ================= ACTIVE TRADE ================= */}
-
-      {position && (
-
-        <div style={{marginTop:20}}>
-
-          <strong>Active Trade Monitor</strong>
-
-          <div>Market: {position.symbol || "UNKNOWN"}</div>
-          <div>Entry Price: {position.entry}</div>
-          <div>Position Size: {position.qty}</div>
-          <div>Time Open: {formatDuration(duration)}</div>
-
-        </div>
-
-      )}
-
-      {/* ================= HOURLY JOURNAL ================= */}
-
-      <div style={{marginTop:20}}>
-
-        <strong>AI Trade Journal (Hourly)</strong>
-
-        {Object.keys(tradesByHour).map(hour=>(
-
-          <div key={hour} style={{marginTop:14}}>
-
-            <div style={{opacity:.7}}>
-              {hour}
-            </div>
-
-            {tradesByHour[hour].wins.map((t,i)=>(
-
-              <div key={i} style={{color:"#22c55e"}}>
-                WIN {Number(t.pnl).toFixed(2)}
-              </div>
-
-            ))}
-
-            {tradesByHour[hour].losses.map((t,i)=>(
-
-              <div key={i} style={{color:"#ef4444"}}>
-                LOSS {Number(t.pnl).toFixed(2)}
-              </div>
-
-            ))}
-
-          </div>
-
-        ))}
-
-      </div>
-
-      {/* ================= DAILY HISTORY (NEW) ================= */}
-
-      <div style={{marginTop:25}}>
-
-        <strong>AI Trading History (Daily)</strong>
-
-        {Object.keys(tradesByDay).map(day=>{
-
-          const row = tradesByDay[day];
-
-          return(
-
-            <div key={day} style={{
-              marginTop:10,
-              padding:10,
-              borderRadius:6,
-              background:
-                row.pnl>=0
-                ?"rgba(34,197,94,.08)"
-                :"rgba(239,68,68,.08)"
-            }}>
-
-              <div>{day}</div>
-
-              <div>Trades: {row.trades.length}</div>
-
-              <div style={{color:"#22c55e"}}>
-                Wins: {row.wins}
-              </div>
-
-              <div style={{color:"#ef4444"}}>
-                Losses: {row.losses}
-              </div>
-
-              <div>
-                PnL:
-                <span style={{
-                  color:row.pnl>=0?"#22c55e":"#ef4444"
-                }}>
-                  {" "} ${row.pnl.toFixed(2)}
-                </span>
-              </div>
-
-            </div>
-
-          );
-
-        })}
-
-      </div>
-
-    </div>
-
-  );
+);
 
 }
