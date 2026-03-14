@@ -1,7 +1,10 @@
 // frontend/src/components/AIBehaviorPanel.jsx
 // ============================================================
-// AI BEHAVIOR PANEL — AI PERFORMANCE INTELLIGENCE v4
-// ADDED: Daily performance tracking + buy/sell trade tracking
+// AI BEHAVIOR PANEL — AI PERFORMANCE INTELLIGENCE v5
+// ADDED:
+// - Daily performance
+// - Trade journal
+// - AI progress tracking
 // ============================================================
 
 import React, { useMemo } from "react";
@@ -91,6 +94,30 @@ export default function AIBehaviorPanel({
 
   }, [trades]);
 
+  /* ================= TRADE JOURNAL ================= */
+
+  const tradesByDay = useMemo(() => {
+
+    const grouped = {};
+
+    closedTrades.forEach(t => {
+
+      if (!t.time) return;
+
+      const day =
+        new Date(t.time).toDateString();
+
+      if (!grouped[day])
+        grouped[day] = [];
+
+      grouped[day].push(t);
+
+    });
+
+    return grouped;
+
+  }, [closedTrades]);
+
   /* ================= ACCURACY ================= */
 
   const accuracy = useMemo(() => {
@@ -174,21 +201,17 @@ export default function AIBehaviorPanel({
         AI Behavior Intelligence
       </h3>
 
-      {/* ================= CONFIDENCE ================= */}
-
       <div style={{marginBottom:10}}>
         <strong>Average AI Confidence:</strong>{" "}
         {avgConfidence.toFixed(1)}%
       </div>
-
-      {/* ================= ACCURACY ================= */}
 
       <div style={{marginBottom:10}}>
         <strong>AI Accuracy:</strong>{" "}
         {accuracy.toFixed(1)}%
       </div>
 
-      {/* ================= TRADE STATS ================= */}
+      {/* ================= TRADE PERFORMANCE ================= */}
 
       <div style={{marginTop:12}}>
 
@@ -268,7 +291,7 @@ export default function AIBehaviorPanel({
 
       </div>
 
-      {/* ================= LEARNING ================= */}
+      {/* ================= AI LEARNING ================= */}
 
       <div style={{marginTop:18}}>
 
@@ -291,6 +314,53 @@ export default function AIBehaviorPanel({
           <span>{learning.market}</span>
 
         </div>
+
+      </div>
+
+      {/* ================= TRADE JOURNAL ================= */}
+
+      <div style={{marginTop:18}}>
+
+        <strong>AI Trade Journal</strong>
+
+        {Object.keys(tradesByDay).map(day => (
+
+          <div key={day} style={{marginTop:10}}>
+
+            <div style={{opacity:.7, marginBottom:6}}>
+              {day}
+            </div>
+
+            {tradesByDay[day].slice(-10).map((t,i)=>(
+
+              <div
+                key={i}
+                style={{
+                  display:"flex",
+                  justifyContent:"space-between",
+                  fontSize:13,
+                  borderBottom:"1px solid rgba(255,255,255,.05)",
+                  padding:"4px 0"
+                }}
+              >
+
+                <span>{t.side}</span>
+                <span>{t.qty}</span>
+                <span>@ {t.price}</span>
+
+                <span style={{
+                  color: t.pnl >= 0 ? "#22c55e" : "#ef4444"
+                }}>
+                  {Number(t.pnl).toFixed(2)}
+                </span>
+
+              </div>
+
+            ))}
+
+          </div>
+
+        ))}
 
       </div>
 
