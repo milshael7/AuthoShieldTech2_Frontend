@@ -1,19 +1,13 @@
 // frontend/src/components/AIBehaviorPanel.jsx
 // ============================================================
-// AI BEHAVIOR PANEL — AI PERFORMANCE INTELLIGENCE v6
+// AI BEHAVIOR PANEL — AI PERFORMANCE INTELLIGENCE v7
 //
-// FEATURES
-// - Live AI statistics
-// - Active trade display (current position)
-// - Daily performance metrics
-// - AI learning memory tracking
-// - Trade journal grouped by day
-//
-// IMPORTANT MAINTENANCE NOTES
-// - Top statistics must always match journal totals
-// - Active trade uses state.position from TradingRoom
-// - Closed trades use side === "CLOSE"
-// - Journal shows entry → exit format
+// NEW FEATURES
+// - Active trade monitor with live timer
+// - Professional trade journal format
+// - Wins / Losses separated
+// - Duration + timestamp display
+// - Daily grouped trade history
 // ============================================================
 
 import React, { useMemo, useEffect, useState } from "react";
@@ -24,8 +18,6 @@ export default function AIBehaviorPanel({
   memory = null,
   position = null
 }) {
-
-  /* ================= ACTIVE TRADE TIMER ================= */
 
   const [duration,setDuration] = useState(0);
 
@@ -54,10 +46,17 @@ export default function AIBehaviorPanel({
 
   }
 
+  function formatTime(ts){
+
+    const d = new Date(ts);
+    return d.toLocaleTimeString();
+
+  }
+
   /* ================= CLOSED TRADES ================= */
 
   const closedTrades = useMemo(()=>{
-    return trades.filter(t => t.side === "CLOSE");
+    return trades.filter(t=>t.side==="CLOSE");
   },[trades]);
 
   /* ================= TRADE STATS ================= */
@@ -70,7 +69,7 @@ export default function AIBehaviorPanel({
 
     closedTrades.forEach(t=>{
 
-      const p = Number(t.pnl||0);
+      const p=Number(t.pnl||0);
 
       pnl+=p;
 
@@ -88,45 +87,7 @@ export default function AIBehaviorPanel({
 
   },[closedTrades]);
 
-  /* ================= DAILY PERFORMANCE ================= */
-
-  const dailyStats = useMemo(()=>{
-
-    const today = new Date().toDateString();
-
-    const todayTrades = closedTrades.filter(t=>{
-
-      if(!t.time) return false;
-
-      return new Date(t.time).toDateString()===today;
-
-    });
-
-    let wins=0;
-    let losses=0;
-    let pnl=0;
-
-    todayTrades.forEach(t=>{
-
-      const p = Number(t.pnl||0);
-
-      pnl+=p;
-
-      if(p>0) wins++;
-      else if(p<0) losses++;
-
-    });
-
-    return{
-      trades:todayTrades.length,
-      wins,
-      losses,
-      pnl
-    };
-
-  },[closedTrades]);
-
-  /* ================= TRADE JOURNAL ================= */
+  /* ================= DAILY GROUPING ================= */
 
   const tradesByDay = useMemo(()=>{
 
@@ -136,12 +97,19 @@ export default function AIBehaviorPanel({
 
       if(!t.time) return;
 
-      const day=new Date(t.time).toDateString();
+      const day = new Date(t.time).toDateString();
 
-      if(!grouped[day])
-        grouped[day]=[];
+      if(!grouped[day]){
+        grouped[day] = {
+          wins:[],
+          losses:[]
+        };
+      }
 
-      grouped[day].push(t);
+      if(Number(t.pnl)>=0)
+        grouped[day].wins.push(t);
+      else
+        grouped[day].losses.push(t);
 
     });
 
@@ -192,6 +160,52 @@ export default function AIBehaviorPanel({
 
   },[memory,trades]);
 
+  /* ================= TRADE CARD ================= */
+
+  function TradeCard({t}){
+
+    const dur = t.exitTime && t.time
+      ? formatDuration(t.exitTime - t.time)
+      : "-";
+
+    const pnl = Number(t.pnl||0);
+
+    return(
+
+      <div style={{
+        marginBottom:10,
+        fontSize:13,
+        borderBottom:"1px solid rgba(255,255,255,.05)",
+        paddingBottom:8
+      }}>
+
+        <div>{formatTime(t.time)}</div>
+
+        <div>
+          {t.entry} → {t.price}
+        </div>
+
+        <div>
+          Size: {t.qty}
+        </div>
+
+        <div>
+          Duration: {dur}
+        </div>
+
+        <div style={{
+          color:pnl>=0?"#22c55e":"#ef4444",
+          fontWeight:600
+        }}>
+          {pnl>=0?"WIN":"LOSS"} {pnl.toFixed(2)}
+        </div>
+
+      </div>
+
+    );
+
+  }
+
   /* ================= UI ================= */
 
   return(
@@ -207,21 +221,19 @@ export default function AIBehaviorPanel({
         AI Behavior Intelligence
       </h3>
 
-      {/* ================= CONFIDENCE ================= */}
-
-      <div style={{marginBottom:10}}>
+      <div>
         <strong>Average AI Confidence:</strong>{" "}
         {avgConfidence.toFixed(1)}%
       </div>
 
-      <div style={{marginBottom:10}}>
+      <div>
         <strong>AI Accuracy:</strong>{" "}
         {accuracy.toFixed(1)}%
       </div>
 
       {/* ================= TRADE PERFORMANCE ================= */}
 
-      <div style={{marginTop:12}}>
+      <div style={{marginTop:15}}>
 
         <strong>Trade Performance</strong>
 
@@ -260,26 +272,18 @@ export default function AIBehaviorPanel({
 
       {position && (
 
-        <div style={{marginTop:18}}>
+        <div style={{marginTop:20}}>
 
           <strong>Active Trade</strong>
 
-          <div style={{
-            marginTop:8,
-            fontSize:13,
-            lineHeight:"18px"
-          }}>
+          <div style={{marginTop:8,fontSize:13}}>
+
+            <div>Entry: {position.entry}</div>
+
+            <div>Size: {position.qty}</div>
 
             <div>
-              Entry Price: {position.entry}
-            </div>
-
-            <div>
-              Size: {position.qty}
-            </div>
-
-            <div>
-              Duration: {formatDuration(duration)}
+              Time Open: {formatDuration(duration)}
             </div>
 
           </div>
@@ -288,46 +292,9 @@ export default function AIBehaviorPanel({
 
       )}
 
-      {/* ================= DAILY PERFORMANCE ================= */}
-
-      <div style={{marginTop:18}}>
-
-        <strong>Daily Performance</strong>
-
-        <div style={{
-          display:"grid",
-          gridTemplateColumns:"1fr 1fr",
-          marginTop:8,
-          gap:6
-        }}>
-
-          <span>Trades Today:</span>
-          <span>{dailyStats.trades}</span>
-
-          <span>Wins Today:</span>
-          <span style={{color:"#22c55e"}}>
-            {dailyStats.wins}
-          </span>
-
-          <span>Losses Today:</span>
-          <span style={{color:"#ef4444"}}>
-            {dailyStats.losses}
-          </span>
-
-          <span>Daily PnL:</span>
-          <span style={{
-            color:dailyStats.pnl>=0?"#22c55e":"#ef4444"
-          }}>
-            ${dailyStats.pnl.toFixed(2)}
-          </span>
-
-        </div>
-
-      </div>
-
       {/* ================= AI LEARNING ================= */}
 
-      <div style={{marginTop:18}}>
+      <div style={{marginTop:20}}>
 
         <strong>AI Learning Memory</strong>
 
@@ -353,48 +320,56 @@ export default function AIBehaviorPanel({
 
       {/* ================= TRADE JOURNAL ================= */}
 
-      <div style={{marginTop:18}}>
+      <div style={{marginTop:25}}>
 
         <strong>AI Trade Journal</strong>
 
         {Object.keys(tradesByDay).map(day=>(
 
-          <div key={day} style={{marginTop:10}}>
+          <div key={day} style={{marginTop:16}}>
 
-            <div style={{opacity:.7, marginBottom:6}}>
+            <div style={{
+              opacity:.7,
+              marginBottom:8
+            }}>
               {day}
             </div>
 
-            {tradesByDay[day].slice(-10).map((t,i)=>(
+            {/* WINS */}
 
-              <div
-                key={i}
-                style={{
-                  display:"flex",
-                  justifyContent:"space-between",
-                  fontSize:13,
-                  borderBottom:"1px solid rgba(255,255,255,.05)",
-                  padding:"4px 0"
-                }}
-              >
+            {tradesByDay[day].wins.length>0 && (
 
-                <span>
-                  {t.entry} → {t.price}
-                </span>
+              <div style={{marginBottom:10}}>
 
-                <span>
-                  {t.qty}
-                </span>
+                <div style={{color:"#22c55e"}}>
+                  WINNING TRADES
+                </div>
 
-                <span style={{
-                  color:t.pnl>=0?"#22c55e":"#ef4444"
-                }}>
-                  {t.pnl>0?"WIN":"LOSS"} {Number(t.pnl).toFixed(2)}
-                </span>
+                {tradesByDay[day].wins.map((t,i)=>(
+                  <TradeCard key={i} t={t}/>
+                ))}
 
               </div>
 
-            ))}
+            )}
+
+            {/* LOSSES */}
+
+            {tradesByDay[day].losses.length>0 && (
+
+              <div>
+
+                <div style={{color:"#ef4444"}}>
+                  LOSING TRADES
+                </div>
+
+                {tradesByDay[day].losses.map((t,i)=>(
+                  <TradeCard key={i} t={t}/>
+                ))}
+
+              </div>
+
+            )}
 
           </div>
 
