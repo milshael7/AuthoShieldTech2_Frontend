@@ -13,10 +13,15 @@
 // - decisions → AI confidence metrics
 // - position → active trade monitor
 //
-// DO NOT MODIFY:
-// - candle update logic
-// - websocket event structure
-// - chart rendering pipeline
+// ENGINE STATE FIX
+// ----------------------------------------------------------
+// When users reconnect or log back in, the UI now loads the
+// current backend paper engine snapshot before websocket
+// messages arrive. This prevents the dashboard from appearing
+// to reset or restart AI trading.
+//
+// Endpoint used:
+//   GET /api/paper/status
 //
 // ==========================================================
 
@@ -62,10 +67,8 @@ function loadPersisted(){
   try{
     const raw = localStorage.getItem(storageKey());
     if(!raw) return [];
-
     const parsed = JSON.parse(raw);
     if(!Array.isArray(parsed)) return [];
-
     return parsed.filter(isValidCandle);
   }catch{
     return [];
@@ -124,7 +127,6 @@ export default function TradingRoom(){
   const [decisions,setDecisions] = useState([]);
 
   const [memory,setMemory] = useState(null);
-
   const [engineUptime,setEngineUptime] = useState("0s");
 
   /* ================= RESTORE CANDLES ================= */
@@ -166,9 +168,44 @@ export default function TradingRoom(){
 
   }
 
-  useEffect(()=>{
-    loadMemory();
-  },[]);
+  useEffect(()=>{ loadMemory(); },[]);
+
+  /* ================= LOAD ENGINE SNAPSHOT ================= */
+
+  async function loadEngineSnapshot(){
+
+    const token=getToken();
+    if(!token || !API_BASE) return;
+
+    try{
+
+      const res = await fetch(
+        `${API_BASE}/api/paper/status`,
+        {headers:{Authorization:`Bearer ${token}`}}
+      );
+
+      if(!res.ok) return;
+
+      const data = await res.json();
+      const snap = data?.snapshot;
+
+      if(!snap) return;
+
+      setEquity(Number(snap.equity||0));
+
+      setWallet({
+        usd:Number(snap.cashBalance||0),
+        btc:Number(snap.position?.qty||0)
+      });
+
+      setPosition(snap.position||null);
+      setTrades(snap.trades||[]);
+      setDecisions(snap.decisions||[]);
+
+    }
+    catch{}
+
+  }
 
   /* ================= ENGINE UPTIME ================= */
 
@@ -226,7 +263,6 @@ export default function TradingRoom(){
       setCandles(prev => {
 
         const merged = mergeHistory(prev, formatted);
-
         const last = merged[merged.length-1];
 
         lastCandleRef.current = last;
@@ -249,9 +285,7 @@ export default function TradingRoom(){
 
   function updateCandles(priceNow){
 
-    if(!Number.isFinite(priceNow) || priceNow <= 0){
-      return;
-    }
+    if(!Number.isFinite(priceNow) || priceNow <= 0) return;
 
     const now=Math.floor(Date.now()/1000);
     const candleTime=Math.floor(now/CANDLE_SECONDS)*CANDLE_SECONDS;
@@ -335,7 +369,6 @@ export default function TradingRoom(){
         if(p===null) return;
 
         setPrice(p);
-
         updateCandles(p);
 
       }catch{}
@@ -393,24 +426,11 @@ export default function TradingRoom(){
 
   useEffect(()=>{
 
+    loadEngineSnapshot();
     connectMarket();
     connectPaper();
 
   },[]);
-
-  /* ================= AI METRICS ================= */
-
-  const aiConfidence=useMemo(()=>{
-
-    if(!decisions.length) return 0;
-
-    const total=decisions.reduce(
-      (s,d)=>s+Number(d.confidence||0),0
-    );
-
-    return total/decisions.length;
-
-  },[decisions]);
 
   /* ================= UI ================= */
 
@@ -432,8 +452,6 @@ export default function TradingRoom(){
           pnlSeries={trades}
         />
 
-        {/* ================= AI BEHAVIOR PANEL ================= */}
-
         <div style={{marginTop:20}}>
           <AIBehaviorPanel
             trades={trades}
@@ -443,12 +461,8 @@ export default function TradingRoom(){
           />
         </div>
 
-        {/* ================= LONG TERM AI PERFORMANCE ================= */}
-
         <div style={{marginTop:20}}>
-          <AIPerformanceHistoryPanel
-            trades={trades}
-          />
+          <AIPerformanceHistoryPanel trades={trades}/>
         </div>
 
       </div>
