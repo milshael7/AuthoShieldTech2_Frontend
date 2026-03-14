@@ -8,17 +8,25 @@
 // PURPOSE:
 // Controls AI trading configuration and monitors engine health.
 //
-// IMPORTANT FOR MAINTENANCE
+// BACKEND CONNECTIONS
 // ------------------------------------------------------------
-// - Engine health check reads backend paper trading snapshot.
-// - Endpoint used: /api/paper/snapshot
-// - This verifies the AI engine is alive without touching
-//   real trading systems.
+// Engine health endpoint:
+//    GET /api/paper/status
 //
-// - Configuration settings are stored through:
-//   POST /api/ai/config
+// Configuration endpoint:
+//    GET  /api/ai/config
+//    POST /api/ai/config
 //
-// - DO NOT change endpoint paths unless backend routes change.
+// IMPORTANT
+// ------------------------------------------------------------
+// The AI engine ALWAYS runs in the backend.
+// This panel only:
+//
+// 1. Reads engine telemetry
+// 2. Updates AI configuration
+// 3. Allows switching between PAPER and LIVE execution
+//
+// DO NOT CHANGE endpoint paths unless backend routes change.
 //
 // ============================================================
 
@@ -44,7 +52,9 @@ export default function AIControl(){
 
   const [engineHealth,setEngineHealth] = useState("STARTING");
 
-  /* ================= LOAD CONFIG ================= */
+  /* =========================================================
+     INITIAL LOAD
+  ========================================================= */
 
   useEffect(()=>{
 
@@ -62,15 +72,17 @@ export default function AIControl(){
 
   },[]);
 
-  /* ================= ENGINE HEALTH ================= */
+  /* =========================================================
+     ENGINE HEALTH CHECK
+  ========================================================= */
 
   async function checkEngine(){
 
     try{
 
       const res = await fetch(
-        `${API_BASE}/api/paper/snapshot`,
-        {headers:authHeader()}
+        `${API_BASE}/api/paper/status`,
+        { headers: authHeader() }
       );
 
       if(!res.ok){
@@ -80,11 +92,14 @@ export default function AIControl(){
 
       const data = await res.json();
 
-      if(data?.snapshot?.executionStats?.ticks > 0){
+      if(data?.engine === "RUNNING"){
         setEngineHealth("RUNNING");
       }
-      else{
+      else if(data?.engine === "IDLE"){
         setEngineHealth("STARTING");
+      }
+      else{
+        setEngineHealth("OFFLINE");
       }
 
     }
@@ -96,7 +111,9 @@ export default function AIControl(){
 
   }
 
-  /* ================= LOAD CONFIG ================= */
+  /* =========================================================
+     LOAD CONFIGURATION
+  ========================================================= */
 
   async function loadConfig(){
 
@@ -117,16 +134,20 @@ export default function AIControl(){
 
       setEnabled(Boolean(cfg.enabled));
       setTradingMode(cfg.tradingMode || "paper");
+
       setMaxTrades(Number(cfg.maxTrades ?? 5));
       setRiskPercent(Number(cfg.riskPercent ?? 1.5));
       setPositionMultiplier(Number(cfg.positionMultiplier ?? 1));
+
       setAggressiveness(cfg.strategyMode || "Balanced");
 
     }catch{}
 
   }
 
-  /* ================= SAVE CONFIG ================= */
+  /* =========================================================
+     SAVE CONFIGURATION
+  ========================================================= */
 
   async function saveConfig(){
 
@@ -138,25 +159,23 @@ export default function AIControl(){
       const res = await fetch(
         `${API_BASE}/api/ai/config`,
         {
-
           method:"POST",
-
           headers:{
             ...authHeader(),
             "Content-Type":"application/json"
           },
-
           body:JSON.stringify({
 
             enabled,
             tradingMode,
+
             maxTrades:Number(maxTrades),
             riskPercent:Number(riskPercent),
             positionMultiplier:Number(positionMultiplier),
+
             strategyMode:aggressiveness
 
           })
-
         }
       );
 
@@ -180,7 +199,9 @@ export default function AIControl(){
 
   }
 
-  /* ================= MODE SWITCH ================= */
+  /* =========================================================
+     MODE SWITCH
+  ========================================================= */
 
   function switchMode(mode){
 
@@ -207,12 +228,16 @@ export default function AIControl(){
 
   }
 
-  /* ================= RISK PREVIEW ================= */
+  /* =========================================================
+     RISK PREVIEW
+  ========================================================= */
 
   const estimatedRisk =
     (Number(riskPercent) * Number(positionMultiplier)).toFixed(2);
 
-  /* ================= UI ================= */
+  /* =========================================================
+     UI
+  ========================================================= */
 
   return(
 
@@ -343,7 +368,7 @@ export default function AIControl(){
           Estimated Position Risk: {estimatedRisk}%
         </div>
 
-        {/* SAVE */}
+        {/* SAVE BUTTON */}
 
         <button
           onClick={saveConfig}
@@ -374,7 +399,9 @@ export default function AIControl(){
 
 }
 
-/* ================= CONTROL FIELD ================= */
+/* =========================================================
+   CONTROL FIELD
+========================================================= */
 
 function Control({label,value,onChange,step=1}){
 
@@ -402,7 +429,9 @@ function Control({label,value,onChange,step=1}){
 
 }
 
-/* ================= AUTH HEADER ================= */
+/* =========================================================
+   AUTH HEADER
+========================================================= */
 
 function authHeader(){
 
