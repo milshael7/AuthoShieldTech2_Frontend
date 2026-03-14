@@ -1,5 +1,25 @@
 // ============================================================
-// AI CONTROL ROOM — ENGINE CONTROL PANEL (FIXED HEALTH CHECK)
+// FILE LOCATION:
+// frontend/src/pages/trading/AIControl.jsx
+//
+// MODULE:
+// AI Control Room — Engine Control Panel
+//
+// PURPOSE:
+// Controls AI trading configuration and monitors engine health.
+//
+// IMPORTANT FOR MAINTENANCE
+// ------------------------------------------------------------
+// - Engine health check reads backend paper trading snapshot.
+// - Endpoint used: /api/paper/snapshot
+// - This verifies the AI engine is alive without touching
+//   real trading systems.
+//
+// - Configuration settings are stored through:
+//   POST /api/ai/config
+//
+// - DO NOT change endpoint paths unless backend routes change.
+//
 // ============================================================
 
 import React, { useEffect, useState } from "react";
@@ -42,14 +62,14 @@ export default function AIControl(){
 
   },[]);
 
-  /* ================= ENGINE CHECK ================= */
+  /* ================= ENGINE HEALTH ================= */
 
   async function checkEngine(){
 
     try{
 
       const res = await fetch(
-        `${API_BASE}/api/trading/ai/snapshot`,
+        `${API_BASE}/api/paper/snapshot`,
         {headers:authHeader()}
       );
 
@@ -60,14 +80,15 @@ export default function AIControl(){
 
       const data = await res.json();
 
-      if(data?.snapshot){
+      if(data?.snapshot?.executionStats?.ticks > 0){
         setEngineHealth("RUNNING");
       }
       else{
         setEngineHealth("STARTING");
       }
 
-    }catch{
+    }
+    catch{
 
       setEngineHealth("OFFLINE");
 
@@ -209,6 +230,8 @@ export default function AIControl(){
         maxWidth:800
       }}>
 
+        {/* ENGINE HEALTH */}
+
         <div style={{marginBottom:20}}>
 
           <strong>Engine Health:</strong>
@@ -226,6 +249,8 @@ export default function AIControl(){
           </span>
 
         </div>
+
+        {/* AI ENABLE / DISABLE */}
 
         <div style={{marginBottom:20}}>
 
@@ -248,6 +273,8 @@ export default function AIControl(){
 
         </div>
 
+        {/* TRADING MODE */}
+
         <div style={{marginBottom:20}}>
 
           <label>Trading Mode:</label>
@@ -263,8 +290,7 @@ export default function AIControl(){
                   : "#374151",
               color:"#fff",
               border:"none",
-              borderRadius:6,
-              cursor:"pointer"
+              borderRadius:6
             }}
           >
             PAPER
@@ -281,8 +307,7 @@ export default function AIControl(){
                   : "#374151",
               color:"#fff",
               border:"none",
-              borderRadius:6,
-              cursor:"pointer"
+              borderRadius:6
             }}
           >
             LIVE
@@ -293,6 +318,8 @@ export default function AIControl(){
         <Control label="Max Trades Per Day" value={maxTrades} onChange={setMaxTrades}/>
         <Control label="Risk % Per Trade" value={riskPercent} step="0.1" onChange={setRiskPercent}/>
         <Control label="Position Multiplier" value={positionMultiplier} step="0.1" onChange={setPositionMultiplier}/>
+
+        {/* STRATEGY MODE */}
 
         <div style={{marginBottom:20}}>
 
@@ -310,9 +337,13 @@ export default function AIControl(){
 
         </div>
 
+        {/* RISK ESTIMATE */}
+
         <div style={{marginBottom:20,opacity:.7}}>
           Estimated Position Risk: {estimatedRisk}%
         </div>
+
+        {/* SAVE */}
 
         <button
           onClick={saveConfig}
@@ -323,7 +354,6 @@ export default function AIControl(){
             background:"#2563eb",
             border:"none",
             color:"#fff",
-            cursor:"pointer",
             borderRadius:6
           }}
         >
@@ -344,7 +374,7 @@ export default function AIControl(){
 
 }
 
-/* ================= CONTROL ================= */
+/* ================= CONTROL FIELD ================= */
 
 function Control({label,value,onChange,step=1}){
 
@@ -358,7 +388,7 @@ function Control({label,value,onChange,step=1}){
         type="number"
         value={value}
         step={step}
-        onChange={e=>onChange(Number(e.target.value))}
+        onChange={e=>onChange(Number(e.target.value) || 0)}
         style={{
           marginLeft:15,
           padding:6,
@@ -372,7 +402,7 @@ function Control({label,value,onChange,step=1}){
 
 }
 
-/* ================= AUTH ================= */
+/* ================= AUTH HEADER ================= */
 
 function authHeader(){
 
