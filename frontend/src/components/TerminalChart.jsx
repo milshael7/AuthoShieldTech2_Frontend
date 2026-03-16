@@ -1,12 +1,13 @@
 // ============================================================
 // FILE: frontend/src/components/TerminalChart.jsx
-// TERMINAL CHART — INSTITUTIONAL TRADING VERSION v8
+// TERMINAL CHART — INSTITUTIONAL TRADING VERSION v9
 //
 // NEW
-// ✔ BUY / SELL labels on candles
+// ✔ AI trade path visualization
+// ✔ BUY → SELL connection lines
+// ✔ stable markers
+// ✔ realtime websocket markers
 // ✔ TradingView-style scrolling
-// ✔ markers accumulate without resetting
-// ✔ stable real-time updates
 // ============================================================
 
 import React, { useEffect, useMemo, useRef } from "react";
@@ -22,7 +23,9 @@ export default function TerminalChart({
 
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
+
   const candleSeriesRef = useRef(null);
+  const tradeLineSeriesRef = useRef(null);
 
   const tpLineRef = useRef(null);
   const slLineRef = useRef(null);
@@ -34,6 +37,7 @@ export default function TerminalChart({
   const userScrollingRef = useRef(false);
 
   const liveMarkersRef = useRef([]);
+  const tradeLinesRef = useRef([]);
 
   /* =========================================================
      SAFE CANDLE SANITIZER
@@ -71,8 +75,7 @@ export default function TerminalChart({
 
     }
 
-    const cleaned =
-      Array.from(map.values());
+    const cleaned = Array.from(map.values());
 
     cleaned.sort((a,b)=>a.time-b.time);
 
@@ -105,9 +108,7 @@ export default function TerminalChart({
         horzLines:{ color:"rgba(148,163,184,.05)" }
       },
 
-      crosshair:{
-        mode: CrosshairMode.Normal
-      },
+      crosshair:{ mode: CrosshairMode.Normal },
 
       rightPriceScale:{
         borderColor:"rgba(148,163,184,.15)"
@@ -118,8 +119,7 @@ export default function TerminalChart({
         timeVisible:true,
         barSpacing:12,
         rightBarOffset:6,
-        rightBarStaysOnScroll:true,
-        lockVisibleTimeRangeOnResize:true
+        rightBarStaysOnScroll:true
       }
 
     });
@@ -138,9 +138,15 @@ export default function TerminalChart({
 
       });
 
-    chartRef.current = chart;
+    /* trade path line series */
 
-    /* ===== PROFESSIONAL SCROLL DETECTION ===== */
+    tradeLineSeriesRef.current =
+      chart.addLineSeries({
+        color:"#60a5fa",
+        lineWidth:2
+      });
+
+    chartRef.current = chart;
 
     chart.timeScale().subscribeVisibleLogicalRangeChange((range)=>{
 
@@ -152,22 +158,20 @@ export default function TerminalChart({
       if(!bars) return;
 
       if(bars.barsAfter < 1){
-        userScrollingRef.current = false;
+        userScrollingRef.current=false;
       }else{
-        userScrollingRef.current = true;
+        userScrollingRef.current=true;
       }
 
     });
 
-    const ro =
-      new ResizeObserver(entries=>{
+    const ro = new ResizeObserver(entries=>{
 
-        const rect =
-          entries[0].contentRect;
+      const rect = entries[0].contentRect;
 
-        chart.resize(rect.width,height);
+      chart.resize(rect.width,height);
 
-      });
+    });
 
     ro.observe(el);
 
@@ -198,7 +202,7 @@ export default function TerminalChart({
     const last =
       candleData[candleData.length-1];
 
-    if(lastTimeRef.current === null){
+    if(lastTimeRef.current===null){
 
       series.setData(candleData);
 
@@ -207,7 +211,7 @@ export default function TerminalChart({
       if(!initializedRef.current){
 
         chart.timeScale().fitContent();
-        initializedRef.current = true;
+        initializedRef.current=true;
 
       }
 
@@ -234,7 +238,7 @@ export default function TerminalChart({
   },[candleData]);
 
   /* =========================================================
-     INITIAL TRADE MARKERS
+     TRADE MARKERS
   ========================================================= */
 
   useEffect(()=>{
@@ -250,7 +254,6 @@ export default function TerminalChart({
       if(!Number.isFinite(time)) continue;
 
       if(t.side==="BUY"){
-
         markers.push({
           time,
           position:"belowBar",
@@ -258,11 +261,9 @@ export default function TerminalChart({
           shape:"arrowUp",
           text:"BUY"
         });
-
       }
 
       if(t.side==="SELL"){
-
         markers.push({
           time,
           position:"aboveBar",
@@ -270,7 +271,6 @@ export default function TerminalChart({
           shape:"arrowDown",
           text:"SELL"
         });
-
       }
 
     }
@@ -282,77 +282,47 @@ export default function TerminalChart({
   },[trades]);
 
   /* =========================================================
-     LIVE TRADE EVENTS (WEBSOCKET)
+     TRADE PATH LINES
   ========================================================= */
 
   useEffect(()=>{
 
-    if(!ws) return;
+    const lineSeries =
+      tradeLineSeriesRef.current;
 
-    const handler = (msg)=>{
+    if(!lineSeries) return;
 
-      try{
+    const lines=[];
 
-        const data =
-          JSON.parse(msg.data);
+    let entry=null;
 
-        if(data.type !== "trade") return;
+    for(const t of trades){
 
-        const trade = data.trade;
+      if(t.side==="BUY" || t.side==="SELL"){
+        entry=t;
+      }
 
-        const time =
-          Math.floor(data.ts / 1000);
+      if(t.side==="CLOSE" && entry){
 
-        const marker = {
+        lines.push({
+          time: entry.time,
+          value: entry.price
+        });
 
-          time,
+        lines.push({
+          time: t.time,
+          value: t.price
+        });
 
-          position:
-            trade.side === "BUY"
-              ? "belowBar"
-              : "aboveBar",
+        entry=null;
 
-          color:
-            trade.side === "BUY"
-              ? "#22c55e"
-              : "#ef4444",
+      }
 
-          shape:
-            trade.side === "BUY"
-              ? "arrowUp"
-              : "arrowDown",
+    }
 
-          text: trade.side
+    lineSeries.setData(lines);
 
-        };
-
-        liveMarkersRef.current.push(marker);
-
-        const series =
-          candleSeriesRef.current;
-
-        if(series){
-          series.setMarkers(
-            liveMarkersRef.current
-          );
-        }
-
-      }catch{}
-
-    };
-
-    ws.addEventListener("message",handler);
-
-    return ()=>{
-
-      ws.removeEventListener(
-        "message",
-        handler
-      );
-
-    };
-
-  },[ws]);
+  },[trades]);
 
   /* =========================================================
      ACTIVE TRADE LINES
