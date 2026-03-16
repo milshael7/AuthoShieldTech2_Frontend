@@ -77,19 +77,11 @@ const closedTrades = useMemo(()=>{
 /* ================= WIN / LOSS SPLIT ================= */
 
 const winningTrades = useMemo(()=>{
-
-  return closedTrades.filter(
-    t=>Number(t?.pnl||0)>=0
-  );
-
+  return closedTrades.filter(t=>Number(t?.pnl||0)>=0);
 },[closedTrades]);
 
 const losingTrades = useMemo(()=>{
-
-  return closedTrades.filter(
-    t=>Number(t?.pnl||0)<0
-  );
-
+  return closedTrades.filter(t=>Number(t?.pnl||0)<0);
 },[closedTrades]);
 
 /* ================= TRADE STATS ================= */
@@ -127,11 +119,8 @@ const dailyStats = useMemo(()=>{
   const today=new Date().toDateString();
 
   const todayTrades=closedTrades.filter(t=>{
-
     if(!t?.time) return false;
-
     return new Date(t.time).toDateString()===today;
-
   });
 
   let wins=0;
@@ -266,15 +255,42 @@ color:dailyStats.pnl>=0?"#22c55e":"#ef4444"
 marginTop:20,
 padding:12,
 background:"#1f2937",
-borderRadius:8
+borderRadius:8,
+border:"1px solid rgba(255,255,255,.05)"
 }}>
 
 <strong>Active Trade Monitor</strong>
 
-<div>Market: {position.symbol || "UNKNOWN"}</div>
-<div>Entry Price: {position.entry}</div>
-<div>Position Size: {position.qty}</div>
-<div>Time Open: {formatDuration(duration)}</div>
+<div>
+Status:
+<span style={{color:"#22c55e", marginLeft:6}}>
+LIVE
+</span>
+</div>
+
+<div>
+Market: {position.symbol || "UNKNOWN"}
+</div>
+
+<div>
+Entry Price: {Number(position.entry||0).toLocaleString()}
+</div>
+
+<div>
+Position Size: {position.qty}
+</div>
+
+<div>
+Capital Used: $
+{(
+  position.capitalUsed ||
+  (position.entry * position.qty)
+).toFixed(2)}
+</div>
+
+<div>
+Time Open: {formatDuration(duration)}
+</div>
 
 </div>
 
