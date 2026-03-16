@@ -1,14 +1,16 @@
 // ============================================================
 // FILE: frontend/src/components/TerminalChart.jsx
-// TERMINAL CHART — INSTITUTIONAL TRADING VERSION v5
+// TERMINAL CHART — INSTITUTIONAL TRADING VERSION v6
 //
 // FEATURES
 // ✔ AI BUY / SELL arrows
 // ✔ TP / SL exit markers
 // ✔ TP / SL price lines
 // ✔ active trade highlight
-// ✔ snap-to-live market
-// ✔ scrollable history
+// ✔ TradingView-style scrolling
+// ✔ candle density control
+// ✔ safe price-line updates
+// ✔ responsive resizing
 // ============================================================
 
 import React, { useEffect, useMemo, useRef } from "react";
@@ -19,7 +21,7 @@ export default function TerminalChart({
   trades = [],
   position = null,
   height = 520
-}) {
+}){
 
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
@@ -32,6 +34,8 @@ export default function TerminalChart({
   const lastTimeRef = useRef(null);
   const initializedRef = useRef(false);
 
+  const userScrollingRef = useRef(false);
+
   /* =========================================================
      SAFE CANDLE SANITIZER
   ========================================================= */
@@ -43,10 +47,10 @@ export default function TerminalChart({
     for(const c of candles){
 
       const time = Number(c?.time);
-      let open = Number(c?.open);
-      let high = Number(c?.high);
-      let low = Number(c?.low);
-      let close = Number(c?.close);
+      const open = Number(c?.open);
+      const high = Number(c?.high);
+      const low = Number(c?.low);
+      const close = Number(c?.close);
 
       if(
         !Number.isFinite(time) ||
@@ -58,20 +62,19 @@ export default function TerminalChart({
         continue;
       }
 
-      const max = Math.max(open,high,low,close);
-      const min = Math.min(open,high,low,close);
-
       map.set(time,{
         time,
         open,
-        high:max,
-        low:min,
+        high:Math.max(open,high,low,close),
+        low:Math.min(open,high,low,close),
         close
       });
 
     }
 
-    const cleaned = Array.from(map.values());
+    const cleaned =
+      Array.from(map.values());
+
     cleaned.sort((a,b)=>a.time-b.time);
 
     return cleaned;
@@ -89,6 +92,7 @@ export default function TerminalChart({
     if(chartRef.current) return;
 
     const chart = createChart(el,{
+
       height,
       width: el.clientWidth,
 
@@ -115,22 +119,57 @@ export default function TerminalChart({
         timeVisible:true,
         barSpacing:12,
         rightBarOffset:6,
-        rightBarStaysOnScroll:true
+        rightBarStaysOnScroll:true,
+        lockVisibleTimeRangeOnResize:true
       }
 
     });
 
     candleSeriesRef.current =
       chart.addCandlestickSeries({
+
         upColor:"#22c55e",
         downColor:"#ef4444",
+
         borderUpColor:"#22c55e",
         borderDownColor:"#ef4444",
+
         wickUpColor:"#22c55e",
         wickDownColor:"#ef4444"
+
       });
 
     chartRef.current = chart;
+
+    /* detect manual scrolling */
+
+    chart.timeScale().subscribeVisibleTimeRangeChange(()=>{
+      userScrollingRef.current = true;
+    });
+
+    /* resize observer */
+
+    const ro =
+      new ResizeObserver(entries=>{
+
+        const rect =
+          entries[0].contentRect;
+
+        chart.resize(rect.width,height);
+
+      });
+
+    ro.observe(el);
+
+    return ()=>{
+
+      ro.disconnect();
+      chart.remove();
+
+      chartRef.current=null;
+      candleSeriesRef.current=null;
+
+    };
 
   },[height]);
 
@@ -146,11 +185,13 @@ export default function TerminalChart({
     if(!chart || !series) return;
     if(!candleData.length) return;
 
-    const last = candleData[candleData.length-1];
+    const last =
+      candleData[candleData.length-1];
 
     if(lastTimeRef.current === null){
 
       series.setData(candleData);
+
       lastTimeRef.current = last.time;
 
       if(!initializedRef.current){
@@ -168,9 +209,13 @@ export default function TerminalChart({
 
       series.update(last);
 
-      try{
-        chart.timeScale().scrollToRealTime();
-      }catch{}
+      if(!userScrollingRef.current){
+
+        try{
+          chart.timeScale().scrollToRealTime();
+        }catch{}
+
+      }
 
       lastTimeRef.current = last.time;
 
@@ -194,40 +239,40 @@ export default function TerminalChart({
       const time = Number(t?.time);
       if(!Number.isFinite(time)) continue;
 
-      if(t.side === "BUY"){
+      if(t.side==="BUY"){
 
         markers.push({
           time,
           position:"belowBar",
           color:"#22c55e",
           shape:"arrowUp",
-          text:"AI BUY"
+          text:"BUY"
         });
 
       }
 
-      if(t.side === "SELL"){
+      if(t.side==="SELL"){
 
         markers.push({
           time,
           position:"aboveBar",
           color:"#ef4444",
           shape:"arrowDown",
-          text:"AI SELL"
+          text:"SELL"
         });
 
       }
 
-      if(t.side === "CLOSE"){
+      if(t.side==="CLOSE"){
 
-        const pnl = Number(t.pnl || 0);
+        const pnl = Number(t.pnl||0);
 
         markers.push({
           time,
-          position: pnl >= 0 ? "aboveBar":"belowBar",
-          color: pnl >= 0 ? "#22c55e":"#ef4444",
+          position:pnl>=0 ? "aboveBar":"belowBar",
+          color:pnl>=0 ? "#22c55e":"#ef4444",
           shape:"circle",
-          text: pnl >= 0 ? "TP":"SL"
+          text:pnl>=0 ? "TP":"SL"
         });
 
       }
@@ -247,30 +292,34 @@ export default function TerminalChart({
     const series = candleSeriesRef.current;
     if(!series) return;
 
-    if(!position){
+    /* remove previous */
 
-      if(tpLineRef.current)
-        series.removePriceLine(tpLineRef.current);
-
-      if(slLineRef.current)
-        series.removePriceLine(slLineRef.current);
-
-      if(entryLineRef.current)
-        series.removePriceLine(entryLineRef.current);
-
-      return;
-
+    if(entryLineRef.current){
+      series.removePriceLine(entryLineRef.current);
+      entryLineRef.current=null;
     }
+
+    if(tpLineRef.current){
+      series.removePriceLine(tpLineRef.current);
+      tpLineRef.current=null;
+    }
+
+    if(slLineRef.current){
+      series.removePriceLine(slLineRef.current);
+      slLineRef.current=null;
+    }
+
+    if(!position) return;
 
     const entry = position.entry;
 
     const tp =
-      position.side === "LONG"
+      position.side==="LONG"
         ? entry * 1.0035
         : entry * 0.9965;
 
     const sl =
-      position.side === "LONG"
+      position.side==="LONG"
         ? entry * 0.9975
         : entry * 1.0025;
 
