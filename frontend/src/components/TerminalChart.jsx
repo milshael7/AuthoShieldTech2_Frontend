@@ -1,11 +1,12 @@
 // ============================================================
 // FILE: frontend/src/components/TerminalChart.jsx
-// TERMINAL CHART — INSTITUTIONAL TRADING VERSION v7
+// TERMINAL CHART — INSTITUTIONAL TRADING VERSION v8
 //
 // NEW
-// ✔ live AI trade markers via WebSocket
-// ✔ stable marker accumulation
-// ✔ faster rendering
+// ✔ BUY / SELL labels on candles
+// ✔ TradingView-style scrolling
+// ✔ markers accumulate without resetting
+// ✔ stable real-time updates
 // ============================================================
 
 import React, { useEffect, useMemo, useRef } from "react";
@@ -139,8 +140,23 @@ export default function TerminalChart({
 
     chartRef.current = chart;
 
-    chart.timeScale().subscribeVisibleTimeRangeChange(()=>{
-      userScrollingRef.current = true;
+    /* ===== PROFESSIONAL SCROLL DETECTION ===== */
+
+    chart.timeScale().subscribeVisibleLogicalRangeChange((range)=>{
+
+      if(!range) return;
+
+      const bars =
+        candleSeriesRef.current?.barsInLogicalRange?.(range);
+
+      if(!bars) return;
+
+      if(bars.barsAfter < 1){
+        userScrollingRef.current = false;
+      }else{
+        userScrollingRef.current = true;
+      }
+
     });
 
     const ro =
@@ -206,7 +222,7 @@ export default function TerminalChart({
       if(!userScrollingRef.current){
 
         try{
-          chart.timeScale().scrollToRealTime();
+          chart.timeScale().scrollToPosition(0,true);
         }catch{}
 
       }
@@ -234,6 +250,7 @@ export default function TerminalChart({
       if(!Number.isFinite(time)) continue;
 
       if(t.side==="BUY"){
+
         markers.push({
           time,
           position:"belowBar",
@@ -241,9 +258,11 @@ export default function TerminalChart({
           shape:"arrowUp",
           text:"BUY"
         });
+
       }
 
       if(t.side==="SELL"){
+
         markers.push({
           time,
           position:"aboveBar",
@@ -251,6 +270,7 @@ export default function TerminalChart({
           shape:"arrowDown",
           text:"SELL"
         });
+
       }
 
     }
