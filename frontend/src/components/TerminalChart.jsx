@@ -1,29 +1,14 @@
 // ============================================================
 // FILE: frontend/src/components/TerminalChart.jsx
-// TERMINAL CHART — INSTITUTIONAL SAFE VERSION v3
+// TERMINAL CHART — INSTITUTIONAL TRADING VERSION v4
 //
-// PURPOSE
-// Protect Lightweight Charts from invalid market data.
-//
-// SAFETY LAYERS
-// 1. Candle sanitation
-// 2. Duplicate timestamp removal
-// 3. NaN / null filtering
-// 4. Marker validation
-// 5. Chart update fallback
-//
-// MAINTENANCE NOTES
-// - Candle shape MUST remain:
-//   { time, open, high, low, close }
-//
-// - If GLOBAL JS ERROR appears again:
-//   1. Clear localStorage
-//   2. Inspect websocket packets
-//   3. Verify candle timestamps
-//
-// - NEVER pass raw API candles directly to chart.
-//   Always sanitize through candleData.
-//
+// NEW FEATURES
+// ✔ AI BUY / SELL arrows
+// ✔ TP / SL exit markers
+// ✔ snap-to-live market
+// ✔ smooth candle scrolling
+// ✔ readable candle spacing
+// ✔ scrollable history
 // ============================================================
 
 import React, { useEffect, useMemo, useRef } from "react";
@@ -31,16 +16,13 @@ import { createChart, CrosshairMode } from "lightweight-charts";
 
 export default function TerminalChart({
   candles = [],
-  volume = [],
   trades = [],
   aiSignals = [],
-  pnlSeries = [],
   height = 520
 }) {
 
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
-
   const candleSeriesRef = useRef(null);
 
   const lastTimeRef = useRef(null);
@@ -50,7 +32,7 @@ export default function TerminalChart({
      SAFE CANDLE SANITIZER
   ========================================================= */
 
-  const candleData = useMemo(() => {
+  const candleData = useMemo(()=>{
 
     const map = new Map();
 
@@ -137,21 +119,34 @@ export default function TerminalChart({
 
       timeScale:{
         borderColor:"rgba(148,163,184,.15)",
+
+        /* IMPORTANT SETTINGS */
+
         timeVisible:true,
-        barSpacing:10,
-        rightBarOffset:8
+        secondsVisible:false,
+
+        barSpacing:12,
+        rightBarOffset:6,
+
+        rightBarStaysOnScroll:true,
+        lockVisibleTimeRangeOnResize:true
       }
 
     });
 
-    candleSeriesRef.current = chart.addCandlestickSeries({
-      upColor:"#22c55e",
-      downColor:"#ef4444",
-      borderUpColor:"#22c55e",
-      borderDownColor:"#ef4444",
-      wickUpColor:"#22c55e",
-      wickDownColor:"#ef4444"
-    });
+    candleSeriesRef.current =
+      chart.addCandlestickSeries({
+
+        upColor:"#22c55e",
+        downColor:"#ef4444",
+
+        borderUpColor:"#22c55e",
+        borderDownColor:"#ef4444",
+
+        wickUpColor:"#22c55e",
+        wickDownColor:"#ef4444"
+
+      });
 
     chartRef.current = chart;
 
@@ -229,6 +224,12 @@ export default function TerminalChart({
 
       }
 
+      /* SNAP BACK TO LIVE MARKET */
+
+      try{
+        chart.timeScale().scrollToRealTime();
+      }catch{}
+
       lastTimeRef.current = last.time;
       return;
 
@@ -243,7 +244,7 @@ export default function TerminalChart({
   },[candleData]);
 
   /* =========================================================
-     SAFE MARKERS
+     TRADE MARKERS
   ========================================================= */
 
   useEffect(()=>{
@@ -260,53 +261,48 @@ export default function TerminalChart({
 
       const side = t.side || t.action;
 
+      /* ENTRY BUY */
+
       if(side === "BUY"){
+
         markers.push({
           time,
           position:"belowBar",
           color:"#22c55e",
           shape:"arrowUp",
-          text:"BUY"
+          text:"AI BUY"
         });
+
       }
 
+      /* ENTRY SELL */
+
       if(side === "SELL"){
+
         markers.push({
           time,
           position:"aboveBar",
           color:"#ef4444",
           shape:"arrowDown",
-          text:"SELL"
-        });
-      }
-
-    }
-
-    for(const s of aiSignals){
-
-      const time = Number(s?.time);
-      if(!Number.isFinite(time)) continue;
-
-      const action = s.action;
-
-      if(action === "BUY"){
-        markers.push({
-          time,
-          position:"belowBar",
-          color:"#4ade80",
-          shape:"arrowUp",
-          text:"AI BUY"
-        });
-      }
-
-      if(action === "SELL"){
-        markers.push({
-          time,
-          position:"aboveBar",
-          color:"#f87171",
-          shape:"arrowDown",
           text:"AI SELL"
         });
+
+      }
+
+      /* EXIT */
+
+      if(side === "CLOSE"){
+
+        const pnl = Number(t.pnl || 0);
+
+        markers.push({
+          time,
+          position: pnl >= 0 ? "aboveBar":"belowBar",
+          color: pnl >= 0 ? "#22c55e":"#ef4444",
+          shape:"circle",
+          text: pnl >= 0 ? "TP":"SL"
+        });
+
       }
 
     }
@@ -315,7 +311,7 @@ export default function TerminalChart({
       series.setMarkers(markers);
     }catch{}
 
-  },[trades,aiSignals]);
+  },[trades]);
 
   return(
 
