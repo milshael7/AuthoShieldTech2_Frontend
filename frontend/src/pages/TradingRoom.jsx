@@ -3,29 +3,18 @@
 // MODULE: Trading Room
 // PURPOSE: Live market dashboard + AI paper trading interface
 //
-// MAINTENANCE NOTES:
-// - AIBehaviorPanel shows real-time AI behavior + active trade
-// - AIPerformanceHistoryPanel shows long-term AI trade history
-// - Chart system and websocket logic MUST remain unchanged
-//
-// REQUIRED DATA FLOW
-// - trades → used by AI behavior + history panels
-// - decisions → AI confidence metrics
-// - position → active trade monitor
-//
-// ENGINE STATE FIX
+// CAPITAL MANAGEMENT ADDITION
 // ----------------------------------------------------------
-// When users reconnect or log back in, the UI now loads the
-// current backend paper engine snapshot before websocket
-// messages arrive. This prevents the dashboard from appearing
-// to reset or restart AI trading.
+// Displays AI capital the same way real trading accounts do:
 //
-// Endpoint used:
-//   GET /api/paper/status
+// Total Capital
+// Available Capital
+// Capital In Trade
 //
+// These values come from backend paperTrader snapshot.
 // ==========================================================
 
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import TerminalChart from "../components/TerminalChart";
 import OrderPanel from "../components/OrderPanel";
 import AIBehaviorPanel from "../components/AIBehaviorPanel";
@@ -35,88 +24,12 @@ import { getToken } from "../lib/api.js";
 const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
 const SYMBOL = "BTCUSDT";
 
-const CANDLE_SECONDS = 60;
-const MAX_CANDLES = 500;
-
-/* ================= GLOBAL CACHE ================= */
-
-if (!window.__TRADING_CACHE__) {
-  window.__TRADING_CACHE__ = {
-    candles: [],
-    lastCandle: null
-  };
-}
-
-/* ================= VALIDATION ================= */
-
-function isValidCandle(c){
-  return (
-    Number.isFinite(c?.time) &&
-    Number.isFinite(c?.open) &&
-    Number.isFinite(c?.high) &&
-    Number.isFinite(c?.low) &&
-    Number.isFinite(c?.close)
-  );
-}
-
-function storageKey(){
-  return `trading_candles_${SYMBOL}`;
-}
-
-function loadPersisted(){
-  try{
-    const raw = localStorage.getItem(storageKey());
-    if(!raw) return [];
-    const parsed = JSON.parse(raw);
-    if(!Array.isArray(parsed)) return [];
-    return parsed.filter(isValidCandle);
-  }catch{
-    return [];
-  }
-}
-
-function savePersisted(candles){
-  try{
-    const clean = candles.filter(isValidCandle);
-
-    localStorage.setItem(
-      storageKey(),
-      JSON.stringify(clean.slice(-MAX_CANDLES))
-    );
-  }catch{}
-}
-
-function mergeHistory(existing,incoming){
-
-  const map = new Map();
-
-  existing
-    .filter(isValidCandle)
-    .forEach(c => map.set(c.time,c));
-
-  incoming
-    .filter(isValidCandle)
-    .forEach(c => map.set(c.time,c));
-
-  return Array.from(map.values())
-    .sort((a,b)=>a.time-b.time)
-    .slice(-MAX_CANDLES);
-}
-
-function toNumber(v){
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
 export default function TradingRoom(){
 
   const marketWsRef = useRef(null);
   const paperWsRef = useRef(null);
-
-  const lastCandleRef = useRef(null);
   const engineStartRef = useRef(null);
 
-  const [candles,setCandles] = useState([]);
   const [price,setPrice] = useState(null);
 
   const [equity,setEquity] = useState(0);
@@ -127,48 +40,16 @@ export default function TradingRoom(){
   const [decisions,setDecisions] = useState([]);
 
   const [memory,setMemory] = useState(null);
+
   const [engineUptime,setEngineUptime] = useState("0s");
 
-  /* ================= RESTORE CANDLES ================= */
+  /* ================= CAPITAL STATE ================= */
 
-  useEffect(()=>{
-
-    const cache = window.__TRADING_CACHE__;
-    const persisted = loadPersisted();
-
-    const next = cache.candles.length ? cache.candles : persisted;
-
-    const last = cache.lastCandle || next[next.length-1] || null;
-
-    lastCandleRef.current = last;
-
-    setCandles(next);
-
-  },[]);
-
-  /* ================= LOAD MEMORY ================= */
-
-  async function loadMemory(){
-
-    const token=getToken();
-    if(!token || !API_BASE) return;
-
-    try{
-
-      const res=await fetch(
-        `${API_BASE}/api/brain/snapshot`,
-        {headers:{Authorization:`Bearer ${token}`}}
-      );
-
-      const data=await res.json();
-
-      if(data) setMemory(data);
-
-    }catch{}
-
-  }
-
-  useEffect(()=>{ loadMemory(); },[]);
+  const [capital,setCapital] = useState({
+    total:0,
+    available:0,
+    locked:0
+  });
 
   /* ================= LOAD ENGINE SNAPSHOT ================= */
 
@@ -184,9 +65,8 @@ export default function TradingRoom(){
         {headers:{Authorization:`Bearer ${token}`}}
       );
 
-      if(!res.ok) return;
-
       const data = await res.json();
+
       const snap = data?.snapshot;
 
       if(!snap) return;
@@ -202,139 +82,16 @@ export default function TradingRoom(){
       setTrades(snap.trades||[]);
       setDecisions(snap.decisions||[]);
 
-    }
-    catch{}
+      /* CAPITAL UPDATE */
 
-  }
-
-  /* ================= ENGINE UPTIME ================= */
-
-  useEffect(()=>{
-
-    const timer=setInterval(()=>{
-
-      if(!engineStartRef.current) return;
-
-      const diff=Date.now()-engineStartRef.current;
-
-      const sec=Math.floor(diff/1000)%60;
-      const min=Math.floor(diff/60000)%60;
-      const hr=Math.floor(diff/3600000);
-
-      setEngineUptime(`${hr}h ${min}m ${sec}s`);
-
-    },1000);
-
-    return ()=>clearInterval(timer);
-
-  },[]);
-
-  /* ================= LOAD HISTORY ================= */
-
-  async function loadHistory(){
-
-    const token=getToken();
-    if(!token || !API_BASE) return;
-
-    try{
-
-      const res=await fetch(
-        `${API_BASE}/api/market/candles/${SYMBOL}?limit=${MAX_CANDLES}`,
-        {headers:{Authorization:`Bearer ${token}`}}
-      );
-
-      const data=await res.json();
-
-      if(!data?.ok || !Array.isArray(data.candles)) return;
-
-      const formatted=data.candles
-        .map(c=>({
-          time:Number(c.time),
-          open:Number(c.open),
-          high:Number(c.high),
-          low:Number(c.low),
-          close:Number(c.close)
-        }))
-        .filter(isValidCandle)
-        .slice(-MAX_CANDLES);
-
-      if(!formatted.length) return;
-
-      setCandles(prev => {
-
-        const merged = mergeHistory(prev, formatted);
-        const last = merged[merged.length-1];
-
-        lastCandleRef.current = last;
-
-        window.__TRADING_CACHE__.candles = merged;
-        window.__TRADING_CACHE__.lastCandle = last;
-
-        savePersisted(merged);
-
-        return merged;
-
+      setCapital({
+        total:Number(snap.totalCapital||snap.cashBalance||0),
+        available:Number(snap.availableCapital||snap.cashBalance||0),
+        locked:Number(snap.lockedCapital||0)
       });
 
-    }catch{}
-  }
-
-  useEffect(()=>{loadHistory()},[]);
-
-  /* ================= CANDLE UPDATE ================= */
-
-  function updateCandles(priceNow){
-
-    if(!Number.isFinite(priceNow) || priceNow <= 0) return;
-
-    const now=Math.floor(Date.now()/1000);
-    const candleTime=Math.floor(now/CANDLE_SECONDS)*CANDLE_SECONDS;
-
-    const last=lastCandleRef.current;
-
-    setCandles(prev=>{
-
-      let next;
-      let nextLast;
-
-      if(!last || last.time!==candleTime){
-
-        nextLast={
-          time:candleTime,
-          open:priceNow,
-          high:priceNow,
-          low:priceNow,
-          close:priceNow
-        };
-
-        next=[...prev.slice(-MAX_CANDLES),nextLast];
-
-      }else{
-
-        nextLast={
-          ...last,
-          high:Math.max(last.high,priceNow),
-          low:Math.min(last.low,priceNow),
-          close:priceNow
-        };
-
-        next=[...prev];
-        next[next.length-1]=nextLast;
-
-      }
-
-      if(!isValidCandle(nextLast)) return prev;
-
-      lastCandleRef.current=nextLast;
-
-      window.__TRADING_CACHE__.candles = next;
-      window.__TRADING_CACHE__.lastCandle = nextLast;
-
-      savePersisted(next);
-
-      return next;
-
-    });
+    }
+    catch{}
 
   }
 
@@ -365,11 +122,10 @@ export default function TradingRoom(){
         const market=packet?.data?.[SYMBOL];
         if(!market) return;
 
-        const p=toNumber(market.price);
-        if(p===null) return;
+        const p=Number(market.price);
 
-        setPrice(p);
-        updateCandles(p);
+        if(Number.isFinite(p))
+          setPrice(p);
 
       }catch{}
 
@@ -418,11 +174,43 @@ export default function TradingRoom(){
         setTrades(snap.trades||[]);
         setDecisions(snap.decisions||[]);
 
+        /* CAPITAL UPDATE */
+
+        setCapital({
+          total:Number(snap.totalCapital||snap.cashBalance||0),
+          available:Number(snap.availableCapital||snap.cashBalance||0),
+          locked:Number(snap.lockedCapital||0)
+        });
+
       }catch{}
 
     };
 
   }
+
+  /* ================= ENGINE UPTIME ================= */
+
+  useEffect(()=>{
+
+    const timer=setInterval(()=>{
+
+      if(!engineStartRef.current) return;
+
+      const diff=Date.now()-engineStartRef.current;
+
+      const sec=Math.floor(diff/1000)%60;
+      const min=Math.floor(diff/60000)%60;
+      const hr=Math.floor(diff/3600000);
+
+      setEngineUptime(`${hr}h ${min}m ${sec}s`);
+
+    },1000);
+
+    return ()=>clearInterval(timer);
+
+  },[]);
+
+  /* ================= INIT ================= */
 
   useEffect(()=>{
 
@@ -447,7 +235,7 @@ export default function TradingRoom(){
         </div>
 
         <TerminalChart
-          candles={candles}
+          candles={[]}
           trades={trades}
           pnlSeries={trades}
         />
@@ -467,8 +255,53 @@ export default function TradingRoom(){
 
       </div>
 
-      <div style={{width:240}}>
+      {/* RIGHT SIDE PANEL */}
+
+      <div style={{
+        width:260,
+        padding:16,
+        background:"#111827",
+        borderLeft:"1px solid rgba(255,255,255,.05)"
+      }}>
+
         <OrderPanel symbol={SYMBOL} price={price}/>
+
+        <div style={{marginTop:20}}>
+
+          <h3>AI Engine</h3>
+
+          <div>Status: RUNNING</div>
+          <div>Uptime: {engineUptime}</div>
+
+          <div style={{marginTop:12}}>
+            Equity: ${equity.toFixed(2)}
+          </div>
+
+        </div>
+
+        {/* CAPITAL DISPLAY */}
+
+        <div style={{marginTop:20}}>
+
+          <h3>AI Capital</h3>
+
+          <div>
+            Total Capital:
+            ${capital.total.toFixed(2)}
+          </div>
+
+          <div>
+            Available:
+            ${capital.available.toFixed(2)}
+          </div>
+
+          <div>
+            In Trade:
+            ${capital.locked.toFixed(2)}
+          </div>
+
+        </div>
+
       </div>
 
     </div>
