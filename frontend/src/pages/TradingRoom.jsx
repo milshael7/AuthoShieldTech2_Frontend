@@ -2,16 +2,10 @@
 // FILE: frontend/src/pages/TradingRoom.jsx
 // MODULE: Trading Room
 // PURPOSE: Live market dashboard + AI paper trading interface
-//
-// CAPITAL MANAGEMENT ADDITION
-// ----------------------------------------------------------
-// Displays AI capital the same way real trading accounts do:
-//
-// Total Capital
-// Available Capital
-// Capital In Trade
-//
-// These values come from backend paperTrader snapshot.
+// FIXES
+// ✔ Live candle generation
+// ✔ Chart feed restored
+// ✔ Capital tracking preserved
 // ==========================================================
 
 import React, { useEffect, useRef, useState } from "react";
@@ -24,12 +18,18 @@ import { getToken } from "../lib/api.js";
 const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
 const SYMBOL = "BTCUSDT";
 
+const CANDLE_SECONDS = 60;
+const MAX_CANDLES = 500;
+
 export default function TradingRoom(){
 
   const marketWsRef = useRef(null);
   const paperWsRef = useRef(null);
   const engineStartRef = useRef(null);
 
+  const lastCandleRef = useRef(null);
+
+  const [candles,setCandles] = useState([]);
   const [price,setPrice] = useState(null);
 
   const [equity,setEquity] = useState(0);
@@ -40,10 +40,7 @@ export default function TradingRoom(){
   const [decisions,setDecisions] = useState([]);
 
   const [memory,setMemory] = useState(null);
-
   const [engineUptime,setEngineUptime] = useState("0s");
-
-  /* ================= CAPITAL STATE ================= */
 
   const [capital,setCapital] = useState({
     total:0,
@@ -51,25 +48,175 @@ export default function TradingRoom(){
     locked:0
   });
 
-  /* ================= LOAD ENGINE SNAPSHOT ================= */
+/* =====================================================
+CANDLE GENERATOR
+===================================================== */
 
-  async function loadEngineSnapshot(){
+function updateCandles(priceNow){
 
-    const token=getToken();
-    if(!token || !API_BASE) return;
+  const now = Math.floor(Date.now()/1000);
+  const candleTime = Math.floor(now/CANDLE_SECONDS)*CANDLE_SECONDS;
+
+  const last = lastCandleRef.current;
+
+  setCandles(prev=>{
+
+    let next;
+
+    if(!last || last.time !== candleTime){
+
+      const newCandle = {
+        time:candleTime,
+        open:priceNow,
+        high:priceNow,
+        low:priceNow,
+        close:priceNow
+      };
+
+      lastCandleRef.current = newCandle;
+
+      next = [...prev.slice(-MAX_CANDLES),newCandle];
+
+    }else{
+
+      const updated = {
+        ...last,
+        high:Math.max(last.high,priceNow),
+        low:Math.min(last.low,priceNow),
+        close:priceNow
+      };
+
+      lastCandleRef.current = updated;
+
+      next = [...prev];
+      next[next.length-1] = updated;
+
+    }
+
+    return next;
+
+  });
+
+}
+
+/* =====================================================
+ENGINE SNAPSHOT
+===================================================== */
+
+async function loadEngineSnapshot(){
+
+  const token=getToken();
+  if(!token || !API_BASE) return;
+
+  try{
+
+    const res = await fetch(
+      `${API_BASE}/api/paper/status`,
+      {headers:{Authorization:`Bearer ${token}`}}
+    );
+
+    const data = await res.json();
+    const snap = data?.snapshot;
+
+    if(!snap) return;
+
+    setEquity(Number(snap.equity||0));
+
+    setWallet({
+      usd:Number(snap.cashBalance||0),
+      btc:Number(snap.position?.qty||0)
+    });
+
+    setPosition(snap.position||null);
+    setTrades(snap.trades||[]);
+    setDecisions(snap.decisions||[]);
+
+    setCapital({
+      total:Number(snap.totalCapital||snap.cashBalance||0),
+      available:Number(snap.availableCapital||snap.cashBalance||0),
+      locked:Number(snap.lockedCapital||0)
+    });
+
+  }
+  catch{}
+
+}
+
+/* =====================================================
+MARKET WEBSOCKET
+===================================================== */
+
+function connectMarket(){
+
+  const token=getToken();
+  if(!token || !API_BASE) return;
+
+  const url=new URL(API_BASE);
+  const protocol=url.protocol==="https:"?"wss:":"ws:";
+
+  const ws=new WebSocket(
+    `${protocol}//${url.host}/ws?channel=market&token=${encodeURIComponent(token)}`
+  );
+
+  marketWsRef.current=ws;
+
+  ws.onmessage=(msg)=>{
 
     try{
 
-      const res = await fetch(
-        `${API_BASE}/api/paper/status`,
-        {headers:{Authorization:`Bearer ${token}`}}
-      );
+      const packet=JSON.parse(msg.data);
 
-      const data = await res.json();
+      if(packet.channel!=="market") return;
 
-      const snap = data?.snapshot;
+      const market=packet?.data?.[SYMBOL];
+      if(!market) return;
 
-      if(!snap) return;
+      const p=Number(market.price);
+
+      if(Number.isFinite(p)){
+
+        setPrice(p);
+        updateCandles(p);
+
+      }
+
+    }catch{}
+
+  };
+
+}
+
+/* =====================================================
+PAPER WEBSOCKET
+===================================================== */
+
+function connectPaper(){
+
+  const token=getToken();
+  if(!token || !API_BASE) return;
+
+  const url=new URL(API_BASE);
+  const protocol=url.protocol==="https:"?"wss:":"ws:";
+
+  const ws=new WebSocket(
+    `${protocol}//${url.host}/ws?channel=paper&token=${encodeURIComponent(token)}`
+  );
+
+  paperWsRef.current=ws;
+
+  ws.onmessage=(msg)=>{
+
+    try{
+
+      const data=JSON.parse(msg.data);
+
+      if(data.channel!=="paper") return;
+
+      if(!engineStartRef.current){
+        engineStartRef.current=data.engineStart||Date.now();
+      }
+
+      const snap=data.snapshot||{};
 
       setEquity(Number(snap.equity||0));
 
@@ -82,230 +229,129 @@ export default function TradingRoom(){
       setTrades(snap.trades||[]);
       setDecisions(snap.decisions||[]);
 
-      /* CAPITAL UPDATE */
-
       setCapital({
         total:Number(snap.totalCapital||snap.cashBalance||0),
         available:Number(snap.availableCapital||snap.cashBalance||0),
         locked:Number(snap.lockedCapital||0)
       });
 
-    }
-    catch{}
+    }catch{}
 
-  }
+  };
 
-  /* ================= MARKET WS ================= */
+}
 
-  function connectMarket(){
+/* =====================================================
+ENGINE TIMER
+===================================================== */
 
-    const token=getToken();
-    if(!token || !API_BASE) return;
+useEffect(()=>{
 
-    const url=new URL(API_BASE);
-    const protocol=url.protocol==="https:"?"wss:":"ws:";
+  const timer=setInterval(()=>{
 
-    const ws=new WebSocket(
-      `${protocol}//${url.host}/ws?channel=market&token=${encodeURIComponent(token)}`
-    );
+    if(!engineStartRef.current) return;
 
-    marketWsRef.current=ws;
+    const diff=Date.now()-engineStartRef.current;
 
-    ws.onmessage=(msg)=>{
+    const sec=Math.floor(diff/1000)%60;
+    const min=Math.floor(diff/60000)%60;
+    const hr=Math.floor(diff/3600000);
 
-      try{
+    setEngineUptime(`${hr}h ${min}m ${sec}s`);
 
-        const packet=JSON.parse(msg.data);
+  },1000);
 
-        if(packet.channel!=="market") return;
+  return ()=>clearInterval(timer);
 
-        const market=packet?.data?.[SYMBOL];
-        if(!market) return;
+},[]);
 
-        const p=Number(market.price);
+/* =====================================================
+INIT
+===================================================== */
 
-        if(Number.isFinite(p))
-          setPrice(p);
+useEffect(()=>{
 
-      }catch{}
+  loadEngineSnapshot();
+  connectMarket();
+  connectPaper();
 
-    };
+},[]);
 
-  }
+/* =====================================================
+UI
+===================================================== */
 
-  /* ================= PAPER WS ================= */
+return(
 
-  function connectPaper(){
+<div style={{display:"flex",flex:1,background:"#0a0f1c",color:"#fff"}}>
 
-    const token=getToken();
-    if(!token || !API_BASE) return;
+<div style={{flex:1,padding:20}}>
 
-    const url=new URL(API_BASE);
-    const protocol=url.protocol==="https:"?"wss:":"ws:";
+<div style={{fontWeight:700}}>{SYMBOL}</div>
 
-    const ws=new WebSocket(
-      `${protocol}//${url.host}/ws?channel=paper&token=${encodeURIComponent(token)}`
-    );
+<div style={{opacity:.7}}>
+Live Price: {price ? price.toLocaleString() : "Loading"}
+</div>
 
-    paperWsRef.current=ws;
+<TerminalChart
+candles={candles}
+trades={trades}
+pnlSeries={trades}
+/>
 
-    ws.onmessage=(msg)=>{
+<div style={{marginTop:20}}>
+<AIBehaviorPanel
+trades={trades}
+decisions={decisions}
+memory={memory}
+position={position}
+/>
+</div>
 
-      try{
+<div style={{marginTop:20}}>
+<AIPerformanceHistoryPanel trades={trades}/>
+</div>
 
-        const data=JSON.parse(msg.data);
+</div>
 
-        if(data.channel!=="paper") return;
+{/* RIGHT PANEL */}
 
-        if(!engineStartRef.current){
-          engineStartRef.current=data.engineStart||Date.now();
-        }
+<div style={{
+width:260,
+padding:16,
+background:"#111827",
+borderLeft:"1px solid rgba(255,255,255,.05)"
+}}>
 
-        const snap=data.snapshot||{};
+<OrderPanel symbol={SYMBOL} price={price}/>
 
-        setEquity(Number(snap.equity||0));
+<div style={{marginTop:20}}>
 
-        setWallet({
-          usd:Number(snap.cashBalance||0),
-          btc:Number(snap.position?.qty||0)
-        });
+<h3>AI Engine</h3>
 
-        setPosition(snap.position||null);
-        setTrades(snap.trades||[]);
-        setDecisions(snap.decisions||[]);
+<div>Status: RUNNING</div>
+<div>Uptime: {engineUptime}</div>
 
-        /* CAPITAL UPDATE */
+<div style={{marginTop:12}}>
+Equity: ${equity.toFixed(2)}
+</div>
 
-        setCapital({
-          total:Number(snap.totalCapital||snap.cashBalance||0),
-          available:Number(snap.availableCapital||snap.cashBalance||0),
-          locked:Number(snap.lockedCapital||0)
-        });
+</div>
 
-      }catch{}
+<div style={{marginTop:20}}>
 
-    };
+<h3>AI Capital</h3>
 
-  }
+<div>Total Capital: ${capital.total.toFixed(2)}</div>
+<div>Available: ${capital.available.toFixed(2)}</div>
+<div>In Trade: ${capital.locked.toFixed(2)}</div>
 
-  /* ================= ENGINE UPTIME ================= */
+</div>
 
-  useEffect(()=>{
+</div>
 
-    const timer=setInterval(()=>{
+</div>
 
-      if(!engineStartRef.current) return;
-
-      const diff=Date.now()-engineStartRef.current;
-
-      const sec=Math.floor(diff/1000)%60;
-      const min=Math.floor(diff/60000)%60;
-      const hr=Math.floor(diff/3600000);
-
-      setEngineUptime(`${hr}h ${min}m ${sec}s`);
-
-    },1000);
-
-    return ()=>clearInterval(timer);
-
-  },[]);
-
-  /* ================= INIT ================= */
-
-  useEffect(()=>{
-
-    loadEngineSnapshot();
-    connectMarket();
-    connectPaper();
-
-  },[]);
-
-  /* ================= UI ================= */
-
-  return(
-
-    <div style={{display:"flex",flex:1,background:"#0a0f1c",color:"#fff"}}>
-
-      <div style={{flex:1,padding:20}}>
-
-        <div style={{fontWeight:700}}>{SYMBOL}</div>
-
-        <div style={{opacity:.7}}>
-          Live Price: {price ? price.toLocaleString() : "Loading"}
-        </div>
-
-        <TerminalChart
-          candles={[]}
-          trades={trades}
-          pnlSeries={trades}
-        />
-
-        <div style={{marginTop:20}}>
-          <AIBehaviorPanel
-            trades={trades}
-            decisions={decisions}
-            memory={memory}
-            position={position}
-          />
-        </div>
-
-        <div style={{marginTop:20}}>
-          <AIPerformanceHistoryPanel trades={trades}/>
-        </div>
-
-      </div>
-
-      {/* RIGHT SIDE PANEL */}
-
-      <div style={{
-        width:260,
-        padding:16,
-        background:"#111827",
-        borderLeft:"1px solid rgba(255,255,255,.05)"
-      }}>
-
-        <OrderPanel symbol={SYMBOL} price={price}/>
-
-        <div style={{marginTop:20}}>
-
-          <h3>AI Engine</h3>
-
-          <div>Status: RUNNING</div>
-          <div>Uptime: {engineUptime}</div>
-
-          <div style={{marginTop:12}}>
-            Equity: ${equity.toFixed(2)}
-          </div>
-
-        </div>
-
-        {/* CAPITAL DISPLAY */}
-
-        <div style={{marginTop:20}}>
-
-          <h3>AI Capital</h3>
-
-          <div>
-            Total Capital:
-            ${capital.total.toFixed(2)}
-          </div>
-
-          <div>
-            Available:
-            ${capital.available.toFixed(2)}
-          </div>
-
-          <div>
-            In Trade:
-            ${capital.locked.toFixed(2)}
-          </div>
-
-        </div>
-
-      </div>
-
-    </div>
-
-  );
+);
 
 }
