@@ -1,13 +1,13 @@
 // ============================================================
 // FILE: frontend/src/components/TerminalChart.jsx
-// TERMINAL CHART — INSTITUTIONAL TRADING VERSION v4
+// TERMINAL CHART — INSTITUTIONAL TRADING VERSION v5
 //
-// NEW FEATURES
+// FEATURES
 // ✔ AI BUY / SELL arrows
 // ✔ TP / SL exit markers
+// ✔ TP / SL price lines
+// ✔ active trade highlight
 // ✔ snap-to-live market
-// ✔ smooth candle scrolling
-// ✔ readable candle spacing
 // ✔ scrollable history
 // ============================================================
 
@@ -17,13 +17,17 @@ import { createChart, CrosshairMode } from "lightweight-charts";
 export default function TerminalChart({
   candles = [],
   trades = [],
-  aiSignals = [],
+  position = null,
   height = 520
 }) {
 
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
   const candleSeriesRef = useRef(null);
+
+  const tpLineRef = useRef(null);
+  const slLineRef = useRef(null);
+  const entryLineRef = useRef(null);
 
   const lastTimeRef = useRef(null);
   const initializedRef = useRef(false);
@@ -57,27 +61,17 @@ export default function TerminalChart({
       const max = Math.max(open,high,low,close);
       const min = Math.min(open,high,low,close);
 
-      high = max;
-      low = min;
-
-      if(open > high) open = high;
-      if(open < low) open = low;
-
-      if(close > high) close = high;
-      if(close < low) close = low;
-
       map.set(time,{
         time,
         open,
-        high,
-        low,
+        high:max,
+        low:min,
         close
       });
 
     }
 
     const cleaned = Array.from(map.values());
-
     cleaned.sort((a,b)=>a.time-b.time);
 
     return cleaned;
@@ -85,7 +79,7 @@ export default function TerminalChart({
   },[candles]);
 
   /* =========================================================
-     CHART INITIALIZATION
+     CHART INIT
   ========================================================= */
 
   useEffect(()=>{
@@ -113,72 +107,35 @@ export default function TerminalChart({
       },
 
       rightPriceScale:{
-        borderColor:"rgba(148,163,184,.15)",
-        autoScale:true
+        borderColor:"rgba(148,163,184,.15)"
       },
 
       timeScale:{
         borderColor:"rgba(148,163,184,.15)",
-
-        /* IMPORTANT SETTINGS */
-
         timeVisible:true,
-        secondsVisible:false,
-
         barSpacing:12,
         rightBarOffset:6,
-
-        rightBarStaysOnScroll:true,
-        lockVisibleTimeRangeOnResize:true
+        rightBarStaysOnScroll:true
       }
 
     });
 
     candleSeriesRef.current =
       chart.addCandlestickSeries({
-
         upColor:"#22c55e",
         downColor:"#ef4444",
-
         borderUpColor:"#22c55e",
         borderDownColor:"#ef4444",
-
         wickUpColor:"#22c55e",
         wickDownColor:"#ef4444"
-
       });
 
     chartRef.current = chart;
 
-    const ro = new ResizeObserver(entries =>{
-
-      const rect = entries[0].contentRect;
-
-      try{
-        chart.resize(rect.width,height);
-      }catch{}
-
-    });
-
-    ro.observe(el);
-
-    return ()=>{
-
-      try{ro.disconnect()}catch{}
-      try{chart.remove()}catch{}
-
-      chartRef.current = null;
-      candleSeriesRef.current = null;
-
-      lastTimeRef.current = null;
-      initializedRef.current = false;
-
-    }
-
   },[height]);
 
   /* =========================================================
-     SAFE DATA UPDATE
+     UPDATE CANDLES
   ========================================================= */
 
   useEffect(()=>{
@@ -193,15 +150,10 @@ export default function TerminalChart({
 
     if(lastTimeRef.current === null){
 
-      try{
-        series.setData(candleData);
-      }catch{
-        return;
-      }
-
+      series.setData(candleData);
       lastTimeRef.current = last.time;
 
-      if(!initializedRef.current && candleData.length > 20){
+      if(!initializedRef.current){
 
         chart.timeScale().fitContent();
         initializedRef.current = true;
@@ -214,32 +166,15 @@ export default function TerminalChart({
 
     if(last.time >= lastTimeRef.current){
 
-      try{
-        series.update(last);
-      }catch{
-
-        try{
-          series.setData(candleData);
-        }catch{}
-
-      }
-
-      /* SNAP BACK TO LIVE MARKET */
+      series.update(last);
 
       try{
         chart.timeScale().scrollToRealTime();
       }catch{}
 
       lastTimeRef.current = last.time;
-      return;
 
     }
-
-    try{
-      series.setData(candleData);
-    }catch{}
-
-    lastTimeRef.current = last.time;
 
   },[candleData]);
 
@@ -259,11 +194,7 @@ export default function TerminalChart({
       const time = Number(t?.time);
       if(!Number.isFinite(time)) continue;
 
-      const side = t.side || t.action;
-
-      /* ENTRY BUY */
-
-      if(side === "BUY"){
+      if(t.side === "BUY"){
 
         markers.push({
           time,
@@ -275,9 +206,7 @@ export default function TerminalChart({
 
       }
 
-      /* ENTRY SELL */
-
-      if(side === "SELL"){
+      if(t.side === "SELL"){
 
         markers.push({
           time,
@@ -289,9 +218,7 @@ export default function TerminalChart({
 
       }
 
-      /* EXIT */
-
-      if(side === "CLOSE"){
+      if(t.side === "CLOSE"){
 
         const pnl = Number(t.pnl || 0);
 
@@ -307,11 +234,71 @@ export default function TerminalChart({
 
     }
 
-    try{
-      series.setMarkers(markers);
-    }catch{}
+    series.setMarkers(markers);
 
   },[trades]);
+
+  /* =========================================================
+     ACTIVE TRADE LINES
+  ========================================================= */
+
+  useEffect(()=>{
+
+    const series = candleSeriesRef.current;
+    if(!series) return;
+
+    if(!position){
+
+      if(tpLineRef.current)
+        series.removePriceLine(tpLineRef.current);
+
+      if(slLineRef.current)
+        series.removePriceLine(slLineRef.current);
+
+      if(entryLineRef.current)
+        series.removePriceLine(entryLineRef.current);
+
+      return;
+
+    }
+
+    const entry = position.entry;
+
+    const tp =
+      position.side === "LONG"
+        ? entry * 1.0035
+        : entry * 0.9965;
+
+    const sl =
+      position.side === "LONG"
+        ? entry * 0.9975
+        : entry * 1.0025;
+
+    entryLineRef.current =
+      series.createPriceLine({
+        price:entry,
+        color:"#38bdf8",
+        lineWidth:2,
+        title:"ENTRY"
+      });
+
+    tpLineRef.current =
+      series.createPriceLine({
+        price:tp,
+        color:"#22c55e",
+        lineWidth:2,
+        title:"TP"
+      });
+
+    slLineRef.current =
+      series.createPriceLine({
+        price:sl,
+        color:"#ef4444",
+        lineWidth:2,
+        title:"SL"
+      });
+
+  },[position]);
 
   return(
 
@@ -324,7 +311,6 @@ export default function TerminalChart({
           height,
           borderRadius:14,
           border:"1px solid rgba(148,163,184,.15)",
-          overflow:"hidden",
           background:"#0b1220"
         }}
       />
