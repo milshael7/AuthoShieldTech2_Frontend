@@ -2,10 +2,14 @@
 // FILE: frontend/src/pages/TradingRoom.jsx
 // MODULE: Trading Room
 // PURPOSE: Live market dashboard + AI paper trading interface
+//
 // FIXES
 // ✔ Live candle generation
 // ✔ Chart feed restored
 // ✔ Capital tracking preserved
+// ✔ WebSocket auto-reconnect
+// ✔ Memory protection for candles
+// ✔ Safe cleanup on exit
 // ==========================================================
 
 import React, { useEffect, useRef, useState } from "react";
@@ -23,30 +27,29 @@ const MAX_CANDLES = 500;
 
 export default function TradingRoom(){
 
-  const marketWsRef = useRef(null);
-  const paperWsRef = useRef(null);
-  const engineStartRef = useRef(null);
+const marketWsRef = useRef(null);
+const paperWsRef = useRef(null);
+const engineStartRef = useRef(null);
+const lastCandleRef = useRef(null);
 
-  const lastCandleRef = useRef(null);
+const [candles,setCandles] = useState([]);
+const [price,setPrice] = useState(null);
 
-  const [candles,setCandles] = useState([]);
-  const [price,setPrice] = useState(null);
+const [equity,setEquity] = useState(0);
+const [wallet,setWallet] = useState({usd:0,btc:0});
+const [position,setPosition] = useState(null);
 
-  const [equity,setEquity] = useState(0);
-  const [wallet,setWallet] = useState({usd:0,btc:0});
-  const [position,setPosition] = useState(null);
+const [trades,setTrades] = useState([]);
+const [decisions,setDecisions] = useState([]);
 
-  const [trades,setTrades] = useState([]);
-  const [decisions,setDecisions] = useState([]);
+const [memory,setMemory] = useState(null);
+const [engineUptime,setEngineUptime] = useState("0s");
 
-  const [memory,setMemory] = useState(null);
-  const [engineUptime,setEngineUptime] = useState("0s");
-
-  const [capital,setCapital] = useState({
-    total:0,
-    available:0,
-    locked:0
-  });
+const [capital,setCapital] = useState({
+total:0,
+available:0,
+locked:0
+});
 
 /* =====================================================
 CANDLE GENERATOR
@@ -54,48 +57,50 @@ CANDLE GENERATOR
 
 function updateCandles(priceNow){
 
-  const now = Math.floor(Date.now()/1000);
-  const candleTime = Math.floor(now/CANDLE_SECONDS)*CANDLE_SECONDS;
+if(!Number.isFinite(priceNow)) return;
 
-  const last = lastCandleRef.current;
+const now = Math.floor(Date.now()/1000);
+const candleTime = Math.floor(now/CANDLE_SECONDS)*CANDLE_SECONDS;
 
-  setCandles(prev=>{
+const last = lastCandleRef.current;
 
-    let next;
+setCandles(prev=>{
 
-    if(!last || last.time !== candleTime){
+let next;
 
-      const newCandle = {
-        time:candleTime,
-        open:priceNow,
-        high:priceNow,
-        low:priceNow,
-        close:priceNow
-      };
+if(!last || last.time !== candleTime){
 
-      lastCandleRef.current = newCandle;
+const newCandle = {
+time:candleTime,
+open:priceNow,
+high:priceNow,
+low:priceNow,
+close:priceNow
+};
 
-      next = [...prev.slice(-MAX_CANDLES),newCandle];
+lastCandleRef.current = newCandle;
 
-    }else{
+next = [...prev.slice(-MAX_CANDLES+1),newCandle];
 
-      const updated = {
-        ...last,
-        high:Math.max(last.high,priceNow),
-        low:Math.min(last.low,priceNow),
-        close:priceNow
-      };
+}else{
 
-      lastCandleRef.current = updated;
+const updated = {
+...last,
+high:Math.max(last.high,priceNow),
+low:Math.min(last.low,priceNow),
+close:priceNow
+};
 
-      next = [...prev];
-      next[next.length-1] = updated;
+lastCandleRef.current = updated;
 
-    }
+next = [...prev];
+next[next.length-1] = updated;
 
-    return next;
+}
 
-  });
+return next;
+
+});
 
 }
 
@@ -105,40 +110,40 @@ ENGINE SNAPSHOT
 
 async function loadEngineSnapshot(){
 
-  const token=getToken();
-  if(!token || !API_BASE) return;
+const token=getToken();
+if(!token || !API_BASE) return;
 
-  try{
+try{
 
-    const res = await fetch(
-      `${API_BASE}/api/paper/status`,
-      {headers:{Authorization:`Bearer ${token}`}}
-    );
+const res = await fetch(
+`${API_BASE}/api/paper/status`,
+{headers:{Authorization:`Bearer ${token}`}}
+);
 
-    const data = await res.json();
-    const snap = data?.snapshot;
+const data = await res.json();
+const snap = data?.snapshot;
 
-    if(!snap) return;
+if(!snap) return;
 
-    setEquity(Number(snap.equity||0));
+setEquity(Number(snap.equity||0));
 
-    setWallet({
-      usd:Number(snap.cashBalance||0),
-      btc:Number(snap.position?.qty||0)
-    });
+setWallet({
+usd:Number(snap.cashBalance||0),
+btc:Number(snap.position?.qty||0)
+});
 
-    setPosition(snap.position||null);
-    setTrades(snap.trades||[]);
-    setDecisions(snap.decisions||[]);
+setPosition(snap.position||null);
+setTrades(snap.trades||[]);
+setDecisions(snap.decisions||[]);
 
-    setCapital({
-      total:Number(snap.totalCapital||snap.cashBalance||0),
-      available:Number(snap.availableCapital||snap.cashBalance||0),
-      locked:Number(snap.lockedCapital||0)
-    });
+setCapital({
+total:Number(snap.totalCapital||snap.cashBalance||0),
+available:Number(snap.availableCapital||snap.cashBalance||0),
+locked:Number(snap.lockedCapital||0)
+});
 
-  }
-  catch{}
+}
+catch{}
 
 }
 
@@ -148,41 +153,45 @@ MARKET WEBSOCKET
 
 function connectMarket(){
 
-  const token=getToken();
-  if(!token || !API_BASE) return;
+const token=getToken();
+if(!token || !API_BASE) return;
 
-  const url=new URL(API_BASE);
-  const protocol=url.protocol==="https:"?"wss:":"ws:";
+const url=new URL(API_BASE);
+const protocol=url.protocol==="https:"?"wss:":"ws:";
 
-  const ws=new WebSocket(
-    `${protocol}//${url.host}/ws?channel=market&token=${encodeURIComponent(token)}`
-  );
+const ws=new WebSocket(
+`${protocol}//${url.host}/ws?channel=market&token=${encodeURIComponent(token)}`
+);
 
-  marketWsRef.current=ws;
+marketWsRef.current=ws;
 
-  ws.onmessage=(msg)=>{
+ws.onmessage=(msg)=>{
 
-    try{
+try{
 
-      const packet=JSON.parse(msg.data);
+const packet=JSON.parse(msg.data);
 
-      if(packet.channel!=="market") return;
+if(packet.channel!=="market") return;
 
-      const market=packet?.data?.[SYMBOL];
-      if(!market) return;
+const market=packet?.data?.[SYMBOL];
+if(!market) return;
 
-      const p=Number(market.price);
+const p=Number(market.price);
 
-      if(Number.isFinite(p)){
+if(Number.isFinite(p)){
 
-        setPrice(p);
-        updateCandles(p);
+setPrice(p);
+updateCandles(p);
 
-      }
+}
 
-    }catch{}
+}catch{}
 
-  };
+};
+
+ws.onclose=()=>{
+setTimeout(connectMarket,2000);
+};
 
 }
 
@@ -192,52 +201,56 @@ PAPER WEBSOCKET
 
 function connectPaper(){
 
-  const token=getToken();
-  if(!token || !API_BASE) return;
+const token=getToken();
+if(!token || !API_BASE) return;
 
-  const url=new URL(API_BASE);
-  const protocol=url.protocol==="https:"?"wss:":"ws:";
+const url=new URL(API_BASE);
+const protocol=url.protocol==="https:"?"wss:":"ws:";
 
-  const ws=new WebSocket(
-    `${protocol}//${url.host}/ws?channel=paper&token=${encodeURIComponent(token)}`
-  );
+const ws=new WebSocket(
+`${protocol}//${url.host}/ws?channel=paper&token=${encodeURIComponent(token)}`
+);
 
-  paperWsRef.current=ws;
+paperWsRef.current=ws;
 
-  ws.onmessage=(msg)=>{
+ws.onmessage=(msg)=>{
 
-    try{
+try{
 
-      const data=JSON.parse(msg.data);
+const data=JSON.parse(msg.data);
 
-      if(data.channel!=="paper") return;
+if(data.channel!=="paper") return;
 
-      if(!engineStartRef.current){
-        engineStartRef.current=data.engineStart||Date.now();
-      }
+if(!engineStartRef.current){
+engineStartRef.current=data.engineStart||Date.now();
+}
 
-      const snap=data.snapshot||{};
+const snap=data.snapshot||{};
 
-      setEquity(Number(snap.equity||0));
+setEquity(Number(snap.equity||0));
 
-      setWallet({
-        usd:Number(snap.cashBalance||0),
-        btc:Number(snap.position?.qty||0)
-      });
+setWallet({
+usd:Number(snap.cashBalance||0),
+btc:Number(snap.position?.qty||0)
+});
 
-      setPosition(snap.position||null);
-      setTrades(snap.trades||[]);
-      setDecisions(snap.decisions||[]);
+setPosition(snap.position||null);
+setTrades(snap.trades||[]);
+setDecisions(snap.decisions||[]);
 
-      setCapital({
-        total:Number(snap.totalCapital||snap.cashBalance||0),
-        available:Number(snap.availableCapital||snap.cashBalance||0),
-        locked:Number(snap.lockedCapital||0)
-      });
+setCapital({
+total:Number(snap.totalCapital||snap.cashBalance||0),
+available:Number(snap.availableCapital||snap.cashBalance||0),
+locked:Number(snap.lockedCapital||0)
+});
 
-    }catch{}
+}catch{}
 
-  };
+};
+
+ws.onclose=()=>{
+setTimeout(connectPaper,2000);
+};
 
 }
 
@@ -247,21 +260,21 @@ ENGINE TIMER
 
 useEffect(()=>{
 
-  const timer=setInterval(()=>{
+const timer=setInterval(()=>{
 
-    if(!engineStartRef.current) return;
+if(!engineStartRef.current) return;
 
-    const diff=Date.now()-engineStartRef.current;
+const diff=Date.now()-engineStartRef.current;
 
-    const sec=Math.floor(diff/1000)%60;
-    const min=Math.floor(diff/60000)%60;
-    const hr=Math.floor(diff/3600000);
+const sec=Math.floor(diff/1000)%60;
+const min=Math.floor(diff/60000)%60;
+const hr=Math.floor(diff/3600000);
 
-    setEngineUptime(`${hr}h ${min}m ${sec}s`);
+setEngineUptime(`${hr}h ${min}m ${sec}s`);
 
-  },1000);
+},1000);
 
-  return ()=>clearInterval(timer);
+return ()=>clearInterval(timer);
 
 },[]);
 
@@ -271,9 +284,16 @@ INIT
 
 useEffect(()=>{
 
-  loadEngineSnapshot();
-  connectMarket();
-  connectPaper();
+loadEngineSnapshot();
+connectMarket();
+connectPaper();
+
+return ()=>{
+
+try{marketWsRef.current?.close()}catch{}
+try{paperWsRef.current?.close()}catch{}
+
+};
 
 },[]);
 
