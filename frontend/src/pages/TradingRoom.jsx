@@ -4,15 +4,14 @@
 // PURPOSE: Live market dashboard + AI paper trading interface
 //
 // UPGRADE
-// ✔ stable reconnect logic
-// ✔ avoids reconnect-after-unmount loops
-// ✔ supports dual-slot paper snapshot shape
-// ✔ guards against empty snapshot wipes
-// ✔ richer terminal layout
-// ✔ manual trader intervention controls
-// ✔ close-now action
-// ✔ protect-profit arm/disarm controls
-// ✔ backend-ready action hooks
+// ✔ backend action responses applied immediately
+// ✔ status endpoint engine state integrated
+// ✔ safer snapshot hydration
+// ✔ protection state normalized from backend
+// ✔ websocket + polling consistency improved
+// ✔ less stale UI after manual actions
+// ✔ better fallback handling for engine uptime
+// ✔ preserves current layout and controls
 // ==========================================================
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -28,6 +27,21 @@ const SYMBOL = "BTCUSDT";
 const CANDLE_SECONDS = 60;
 const MAX_CANDLES = 500;
 const PANEL_STORAGE_KEY = `trading-room:${SYMBOL}:panel`;
+const STATUS_POLL_MS = 5000;
+
+const DEFAULT_PROTECTION = {
+  armed: false,
+  mode: "TRAIL_RETRACE",
+  trailPct: 0.0018,
+  triggerPrice: null,
+  highestPrice: null,
+  lowestPrice: null,
+  slot: null,
+  side: null,
+  symbol: null,
+  note: "",
+  updatedAt: 0,
+};
 
 export default function TradingRoom() {
   const marketWsRef = useRef(null);
@@ -71,6 +85,8 @@ export default function TradingRoom() {
     lossesToday: 0,
     lastMode: "SCALP",
     running: true,
+    engine: "IDLE",
+    aiConfidence: 0,
   });
 
   const [connection, setConnection] = useState({
@@ -84,18 +100,7 @@ export default function TradingRoom() {
     disarm: false,
   });
 
-  const [protection, setProtection] = useState({
-    armed: false,
-    mode: "TRAIL_RETRACE",
-    trailPct: 0.0018,
-    triggerPrice: null,
-    highestPrice: null,
-    lowestPrice: null,
-    slot: null,
-    side: null,
-    note: "",
-    updatedAt: 0,
-  });
+  const [protection, setProtection] = useState(DEFAULT_PROTECTION);
 
   function safeNum(v, fallback = 0) {
     const n = Number(v);
@@ -174,11 +179,15 @@ export default function TradingRoom() {
   function normalizePositionShape(pos, fallbackSlot = "scalp") {
     if (!pos || typeof pos !== "object") return null;
 
+    const entry = safeNum(pos.entry, 0);
+    const qty = safeNum(pos.qty, 0);
+    if (entry <= 0 || qty <= 0) return null;
+
     return {
       ...pos,
       slot: pos.slot || fallbackSlot,
-      qty: safeNum(pos.qty, 0),
-      entry: safeNum(pos.entry, 0),
+      qty,
+      entry,
       capitalUsed: safeNum(pos.capitalUsed, 0),
       stopLoss: Number.isFinite(Number(pos.stopLoss)) ? Number(pos.stopLoss) : null,
       takeProfit: Number.isFinite(Number(pos.takeProfit)) ? Number(pos.takeProfit) : null,
@@ -189,6 +198,24 @@ export default function TradingRoom() {
       symbol: pos.symbol || SYMBOL,
       side: pos.side || null,
       mode: pos.mode || null,
+    };
+  }
+
+  function normalizeProtectionShape(raw) {
+    if (!raw || typeof raw !== "object") return { ...DEFAULT_PROTECTION };
+
+    return {
+      armed: !!raw.armed,
+      mode: raw.mode || "TRAIL_RETRACE",
+      trailPct: safeNum(raw.trailPct, DEFAULT_PROTECTION.trailPct),
+      triggerPrice: Number.isFinite(Number(raw.triggerPrice)) ? Number(raw.triggerPrice) : null,
+      highestPrice: Number.isFinite(Number(raw.highestPrice)) ? Number(raw.highestPrice) : null,
+      lowestPrice: Number.isFinite(Number(raw.lowestPrice)) ? Number(raw.lowestPrice) : null,
+      slot: raw.slot || null,
+      side: raw.side || null,
+      symbol: raw.symbol || null,
+      note: raw.note || "",
+      updatedAt: safeNum(raw.updatedAt, 0),
     };
   }
 
@@ -230,7 +257,6 @@ export default function TradingRoom() {
     if (!incoming.length) return prev;
 
     const map = new Map();
-
     prev.forEach((item, i) => map.set(normalizeTradeKey(item, i), item));
     incoming.forEach((item, i) => map.set(normalizeTradeKey(item, i), item));
 
@@ -244,7 +270,6 @@ export default function TradingRoom() {
     if (!incoming.length) return prev;
 
     const map = new Map();
-
     prev.forEach((item, i) => map.set(normalizeDecisionKey(item, i), item));
     incoming.forEach((item, i) => map.set(normalizeDecisionKey(item, i), item));
 
@@ -284,7 +309,10 @@ export default function TradingRoom() {
     const nextCash = safeNum(snap.cashBalance, wallet.usd);
 
     const nextCapital = {
-      total: safeNum(snap.totalCapital, safeNum(snap.cashBalance, capital.total)),
+      total: safeNum(
+        snap.totalCapital,
+        safeNum(snap.cashBalance, nextCash) + safeNum(snap.lockedCapital, capital.locked)
+      ),
       available: safeNum(snap.availableCapital, safeNum(snap.cashBalance, capital.available)),
       locked: safeNum(snap.lockedCapital, capital.locked),
     };
@@ -298,28 +326,11 @@ export default function TradingRoom() {
       lossesToday: safeNum(snap.limits?.lossesToday, telemetry.lossesToday),
       lastMode: snap.lastMode || telemetry.lastMode || "SCALP",
       running: typeof snap.running === "boolean" ? snap.running : telemetry.running,
+      engine: telemetry.engine || "IDLE",
+      aiConfidence: safeNum(telemetry.aiConfidence, 0),
     };
 
-    const nextProtection = snap.protection && typeof snap.protection === "object"
-      ? {
-          armed: !!snap.protection.armed,
-          mode: snap.protection.mode || "TRAIL_RETRACE",
-          trailPct: safeNum(snap.protection.trailPct, protection.trailPct),
-          triggerPrice: Number.isFinite(Number(snap.protection.triggerPrice))
-            ? Number(snap.protection.triggerPrice)
-            : null,
-          highestPrice: Number.isFinite(Number(snap.protection.highestPrice))
-            ? Number(snap.protection.highestPrice)
-            : null,
-          lowestPrice: Number.isFinite(Number(snap.protection.lowestPrice))
-            ? Number(snap.protection.lowestPrice)
-            : null,
-          slot: snap.protection.slot || null,
-          side: snap.protection.side || null,
-          note: snap.protection.note || "",
-          updatedAt: safeNum(snap.protection.updatedAt, Date.now()),
-        }
-      : protection;
+    const nextProtection = normalizeProtectionShape(snap.protection);
 
     setEquity(nextEquity);
 
@@ -355,7 +366,10 @@ export default function TradingRoom() {
     );
 
     setCapital(nextCapital);
-    setTelemetry(nextTelemetry);
+    setTelemetry((prev) => ({
+      ...prev,
+      ...nextTelemetry,
+    }));
     setProtection(nextProtection);
 
     if (persist) {
@@ -366,12 +380,39 @@ export default function TradingRoom() {
           btc: displayPosition ? safeNum(displayPosition.qty, 0) : 0,
         },
         position: displayPosition,
-        positions: hasUsablePositions(nextPositions) ? nextPositions : positions,
-        trades: Array.isArray(snap.trades) && snap.trades.length ? snap.trades.slice(-500) : trades.slice(-500),
-        decisions: Array.isArray(snap.decisions) && snap.decisions.length ? snap.decisions.slice(-200) : decisions.slice(-200),
+        positions: hasUsablePositions(nextPositions) ? nextPositions : { structure: null, scalp: null },
+        trades: Array.isArray(snap.trades) && snap.trades.length ? snap.trades.slice(-500) : [],
+        decisions: Array.isArray(snap.decisions) && snap.decisions.length ? snap.decisions.slice(-200) : [],
         capital: nextCapital,
-        telemetry: nextTelemetry,
+        telemetry: {
+          ...telemetry,
+          ...nextTelemetry,
+        },
         protection: nextProtection,
+      });
+    }
+  }
+
+  function applyStatusPayload(data) {
+    if (!data || typeof data !== "object") return;
+
+    const engineLabel = data.engine || "IDLE";
+    const aiConfidence = safeNum(data?.brainState?.smoothedConfidence, 0);
+
+    setTelemetry((prev) => ({
+      ...prev,
+      engine: engineLabel,
+      aiConfidence,
+      running:
+        typeof data?.engineState?.enabled === "boolean"
+          ? data.engineState.enabled
+          : prev.running,
+    }));
+
+    if (data?.snapshot) {
+      applySnapshotToState(data.snapshot, {
+        preserveOnEmpty: true,
+        persist: true,
       });
     }
   }
@@ -515,10 +556,10 @@ export default function TradingRoom() {
       usd: safeNum(saved.wallet?.usd, 0),
       btc: safeNum(saved.wallet?.btc, 0),
     });
-    setPosition(saved.position || null);
+    setPosition(normalizePositionShape(saved.position, saved.position?.slot || "scalp"));
     setPositions({
-      structure: saved.positions?.structure || null,
-      scalp: saved.positions?.scalp || null,
+      structure: normalizePositionShape(saved.positions?.structure, "structure"),
+      scalp: normalizePositionShape(saved.positions?.scalp, "scalp"),
     });
     setTrades(Array.isArray(saved.trades) ? saved.trades : []);
     setDecisions(Array.isArray(saved.decisions) ? saved.decisions : []);
@@ -532,10 +573,7 @@ export default function TradingRoom() {
       ...(saved.telemetry || {}),
     }));
     if (saved.protection) {
-      setProtection((prev) => ({
-        ...prev,
-        ...saved.protection,
-      }));
+      setProtection(normalizeProtectionShape(saved.protection));
     }
   }, []);
 
@@ -564,20 +602,37 @@ export default function TradingRoom() {
         headers: buildAuthHeaders(),
       });
 
+      if (!res.ok) return;
+
       const data = await res.json();
-      const snap = data?.snapshot;
+      applyStatusPayload(data);
+    } catch {}
+  }
 
-      if (!snap) return;
+  async function postPaperAction(path, payload) {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: buildAuthHeaders(),
+      body: JSON.stringify(payload || {}),
+    });
 
-      if (data?.engineStart && !engineStartRef.current) {
-        engineStartRef.current = data.engineStart;
-      }
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {}
 
-      applySnapshotToState(snap, {
-        preserveOnEmpty: true,
+    if (data?.snapshot) {
+      applySnapshotToState(data.snapshot, {
+        preserveOnEmpty: false,
         persist: true,
       });
-    } catch {}
+    }
+
+    if (data?.protection) {
+      setProtection(normalizeProtectionShape(data.protection));
+    }
+
+    return { ok: res.ok, data };
   }
 
   async function handleCloseNow() {
@@ -586,22 +641,15 @@ export default function TradingRoom() {
     setActionBusy((prev) => ({ ...prev, closeNow: true }));
 
     try {
-      await fetch(`${API_BASE}/api/paper/close`, {
-        method: "POST",
-        headers: buildAuthHeaders(),
-        body: JSON.stringify({
-          symbol: position.symbol || SYMBOL,
-          slot: position.slot || "scalp",
-          reason: "MANUAL_CLOSE_NOW",
-        }),
+      const { data } = await postPaperAction("/api/paper/close", {
+        symbol: position.symbol || SYMBOL,
+        slot: position.slot || "scalp",
+        reason: "MANUAL_CLOSE_NOW",
       });
 
-      setProtection((prev) => ({
-        ...prev,
-        armed: false,
-        note: "Manual close requested",
-        updatedAt: Date.now(),
-      }));
+      if (!data?.snapshot) {
+        await loadEngineSnapshot();
+      }
     } catch {
     } finally {
       setActionBusy((prev) => ({ ...prev, closeNow: false }));
@@ -621,24 +669,11 @@ export default function TradingRoom() {
     setActionBusy((prev) => ({ ...prev, protect: true }));
 
     try {
-      await fetch(`${API_BASE}/api/paper/protect-profit`, {
-        method: "POST",
-        headers: buildAuthHeaders(),
-        body: JSON.stringify(payload),
-      });
+      const { data } = await postPaperAction("/api/paper/protect-profit", payload);
 
-      setProtection({
-        armed: true,
-        mode: "TRAIL_RETRACE",
-        trailPct: payload.trailPct,
-        triggerPrice: protectionPreview,
-        highestPrice: position.side === "LONG" ? price : null,
-        lowestPrice: position.side === "SHORT" ? price : null,
-        slot: position.slot || "scalp",
-        side: position.side || null,
-        note: "Profit protection armed",
-        updatedAt: Date.now(),
-      });
+      if (!data?.snapshot) {
+        await loadEngineSnapshot();
+      }
     } catch {
     } finally {
       setActionBusy((prev) => ({ ...prev, protect: false }));
@@ -651,21 +686,14 @@ export default function TradingRoom() {
     setActionBusy((prev) => ({ ...prev, disarm: true }));
 
     try {
-      await fetch(`${API_BASE}/api/paper/protect-profit/disable`, {
-        method: "POST",
-        headers: buildAuthHeaders(),
-        body: JSON.stringify({
-          symbol: position?.symbol || SYMBOL,
-          slot: position?.slot || protection.slot || "scalp",
-        }),
+      const { data } = await postPaperAction("/api/paper/protect-profit/disable", {
+        symbol: position?.symbol || SYMBOL,
+        slot: position?.slot || protection.slot || "scalp",
       });
 
-      setProtection((prev) => ({
-        ...prev,
-        armed: false,
-        note: "Profit protection disarmed",
-        updatedAt: Date.now(),
-      }));
+      if (!data?.snapshot) {
+        await loadEngineSnapshot();
+      }
     } catch {
     } finally {
       setActionBusy((prev) => ({ ...prev, disarm: false }));
@@ -775,13 +803,15 @@ export default function TradingRoom() {
           if (data.channel !== "paper") return;
 
           if (!engineStartRef.current) {
-            engineStartRef.current = data.engineStart || Date.now();
+            engineStartRef.current = safeNum(data.engineStart, Date.now());
           }
 
-          applySnapshotToState(data.snapshot || {}, {
-            preserveOnEmpty: true,
-            persist: true,
-          });
+          if (data?.snapshot) {
+            applySnapshotToState(data.snapshot, {
+              preserveOnEmpty: true,
+              persist: true,
+            });
+          }
         } catch {}
       };
 
@@ -810,7 +840,8 @@ export default function TradingRoom() {
   useEffect(() => {
     const timer = setInterval(() => {
       if (!engineStartRef.current) {
-        setEngineUptime("0s");
+        const ticks = safeNum(telemetry.ticks, 0);
+        setEngineUptime(ticks > 0 ? `${Math.floor(ticks / 60)}m` : "0s");
         return;
       }
 
@@ -826,7 +857,7 @@ export default function TradingRoom() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [telemetry.ticks]);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -835,9 +866,16 @@ export default function TradingRoom() {
     connectMarket();
     connectPaper();
 
+    const statusTimer = setInterval(() => {
+      if (aliveRef.current) {
+        loadEngineSnapshot();
+      }
+    }, STATUS_POLL_MS);
+
     return () => {
       aliveRef.current = false;
 
+      clearInterval(statusTimer);
       clearTimeout(marketReconnectRef.current);
       clearTimeout(paperReconnectRef.current);
 
@@ -917,8 +955,8 @@ export default function TradingRoom() {
             </div>
 
             <div>
-              <div style={label}>Mode</div>
-              <div style={value}>{telemetry.lastMode || "SCALP"}</div>
+              <div style={label}>Engine</div>
+              <div style={value}>{telemetry.engine || "IDLE"}</div>
             </div>
 
             <div>
@@ -930,10 +968,11 @@ export default function TradingRoom() {
           <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
             <StatusPill label="Market WS" value={connection.market} />
             <StatusPill label="Paper WS" value={connection.paper} />
-            <StatusPill label="Engine" value={telemetry.running ? "RUNNING" : "STOPPED"} />
+            <StatusPill label="Running" value={telemetry.running ? "RUNNING" : "STOPPED"} />
             <StatusPill label="Ticks" value={String(telemetry.ticks)} />
             <StatusPill label="Decisions" value={String(telemetry.decisions)} />
             <StatusPill label="Trades" value={String(telemetry.trades)} />
+            <StatusPill label="AI" value={safeNum(telemetry.aiConfidence, 0).toFixed(2)} />
             <StatusPill label="Volatility" value={fmtPct(telemetry.volatility, 3)} />
           </div>
         </div>
@@ -975,7 +1014,12 @@ export default function TradingRoom() {
                     <div style={{ fontWeight: 700, color: "#fbbf24" }}>Protect Profit Armed</div>
                     <div>Trail: {fmtPct(protection.trailPct, 3)}</div>
                     <div>
-                      Trigger: {protectionPreview ? `$${fmtPrice(protectionPreview)}` : "-"}
+                      Trigger:{" "}
+                      {Number.isFinite(Number(protection.triggerPrice))
+                        ? `$${fmtPrice(protection.triggerPrice)}`
+                        : protectionPreview
+                          ? `$${fmtPrice(protectionPreview)}`
+                          : "-"}
                     </div>
                   </div>
                 </>
@@ -1082,7 +1126,12 @@ export default function TradingRoom() {
             <div><b>Mode:</b> {protection.mode}</div>
             <div><b>Trail Distance:</b> {fmtPct(protection.trailPct, 3)}</div>
             <div>
-              <b>Trail Trigger:</b> {protectionPreview ? `$${fmtPrice(protectionPreview)}` : "-"}
+              <b>Trail Trigger:</b>{" "}
+              {Number.isFinite(Number(protection.triggerPrice))
+                ? `$${fmtPrice(protection.triggerPrice)}`
+                : protectionPreview
+                  ? `$${fmtPrice(protectionPreview)}`
+                  : "-"}
             </div>
             <div><b>Tracking Slot:</b> {protection.slot || position?.slot || "-"}</div>
             <div><b>Note:</b> {protection.note || "No manual protection active"}</div>
@@ -1178,9 +1227,11 @@ export default function TradingRoom() {
           </div>
           <div style={{ fontSize: 13, lineHeight: 1.8, opacity: 0.88 }}>
             <div>Running: {telemetry.running ? "Yes" : "No"}</div>
+            <div>Engine State: {telemetry.engine || "IDLE"}</div>
             <div>Primary Display Slot: {position?.slot || "None"}</div>
             <div>Open Positions: {activePositions.length}</div>
             <div>Last Mode: {telemetry.lastMode || "SCALP"}</div>
+            <div>AI Confidence: {safeNum(telemetry.aiConfidence, 0).toFixed(2)}</div>
             <div>Decision Count: {telemetry.decisions}</div>
             <div>Trade Count: {telemetry.trades}</div>
           </div>
@@ -1194,16 +1245,17 @@ function StatusPill({ label, value }) {
   const normalized = String(value || "").toUpperCase();
 
   let bg = "rgba(59,130,246,.14)";
-  if (normalized.includes("CONNECTED") || normalized.includes("RUNNING")) {
+  if (normalized.includes("CONNECTED") || normalized.includes("RUNNING") || normalized.includes("ON")) {
     bg = "rgba(34,197,94,.16)";
   } else if (
     normalized.includes("ERROR") ||
     normalized.includes("DISCONNECTED") ||
     normalized.includes("STOPPED") ||
-    normalized.includes("NO_URL")
+    normalized.includes("NO_URL") ||
+    normalized.includes("OFF")
   ) {
     bg = "rgba(239,68,68,.16)";
-  } else if (normalized.includes("CONNECTING")) {
+  } else if (normalized.includes("CONNECTING") || normalized.includes("IDLE") || normalized.includes("CHECKING")) {
     bg = "rgba(234,179,8,.16)";
   }
 
