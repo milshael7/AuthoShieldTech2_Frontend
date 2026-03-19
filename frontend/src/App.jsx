@@ -1,6 +1,7 @@
 // frontend/src/App.jsx
 // App — Auth Boot Quieted
 // FIX: Trading websocket provider added
+// FIX: Threats page route added
 
 import React, { useEffect, useState, useRef } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -48,6 +49,7 @@ import Incidents from "./pages/Incidents.jsx";
 import Vulnerabilities from "./pages/Vulnerabilities.jsx";
 import Reports from "./pages/Reports.jsx";
 import Notifications from "./pages/Notifications.jsx";
+import Threats from "./pages/Threats.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
 /* ADMIN */
@@ -100,6 +102,7 @@ function AppRoutes({ user, ready }) {
         <Route index element={<AdminOverview />} />
         <Route path="intelligence" element={<Intelligence />} />
         <Route path="soc" element={<SOC />} />
+        <Route path="threats" element={<Threats />} />
         <Route path="companies" element={<AdminCompanies />} />
         <Route path="company/:companyId" element={<AdminCompanyRoom />} />
         <Route path="corporate" element={<CorporateEntities />} />
@@ -131,6 +134,7 @@ function AppRoutes({ user, ready }) {
         <Route index element={<SOC />} />
         <Route path="command" element={<ManagerCommand />} />
         <Route path="intelligence" element={<Intelligence />} />
+        <Route path="threats" element={<Threats />} />
         <Route path="assets" element={<Assets />} />
         <Route path="incidents" element={<Incidents />} />
         <Route path="vulnerabilities" element={<Vulnerabilities />} />
@@ -210,9 +214,7 @@ export default function App() {
         <BrainAdapter />
         <AutoDevEngine />
 
-        {/* NEW TRADING PROVIDER */}
         <TradingProvider>
-
           <CompanyProvider>
             <ToolProvider user={user}>
               <SecurityProvider>
@@ -222,9 +224,7 @@ export default function App() {
               </SecurityProvider>
             </ToolProvider>
           </CompanyProvider>
-
         </TradingProvider>
-
       </AIDecisionProvider>
     </EventBusProvider>
   );
