@@ -3,15 +3,125 @@
 // MODULE: Trading Room
 // PURPOSE: Live market dashboard + AI paper trading interface
 //
-// UPGRADE
-// ✔ backend action responses applied immediately
-// ✔ status endpoint engine state integrated
-// ✔ safer snapshot hydration
-// ✔ protection state normalized from backend
-// ✔ websocket + polling consistency improved
-// ✔ less stale UI after manual actions
-// ✔ better fallback handling for engine uptime
-// ✔ preserves current layout and controls
+// ==========================================================
+// MAINTENANCE OVERVIEW
+// ==========================================================
+// This is the main orchestration page for the Trading Room.
+//
+// This file is responsible for:
+//
+// 1) Connecting to backend live channels
+//    - market websocket
+//    - paper websocket
+//
+// 2) Loading backend status / snapshot data
+//    - GET /api/paper/status
+//
+// 3) Hydrating frontend state from backend snapshot payloads
+//    - account state
+//    - open positions
+//    - trade history
+//    - decision history
+//    - capital metrics
+//    - protection state
+//
+// 4) Rendering the Trading Room UI
+//    - top engine summary
+//    - live chart
+//    - active trade overlay
+//    - AI behavior panel
+//    - AI performance panel
+//    - manual controls
+//    - account overview
+//    - slot overview
+//    - latest activity
+//
+// 5) Sending manual user actions to backend
+//    - POST /api/paper/close
+//    - POST /api/paper/protect-profit
+//    - POST /api/paper/protect-profit/disable
+//
+// 6) Preserving a browser-side UI snapshot
+//    - localStorage key: trading-room:BTCUSDT:panel
+//
+// ----------------------------------------------------------
+// IMPORTANT BACKEND DEPENDENCIES
+// ----------------------------------------------------------
+// REST
+//   GET  /api/paper/status
+//   POST /api/paper/close
+//   POST /api/paper/protect-profit
+//   POST /api/paper/protect-profit/disable
+//
+// WEBSOCKET
+//   /ws?channel=market&token=...
+//   /ws?channel=paper&token=...
+//
+// AUTH
+//   Authorization: Bearer <token>
+//   x-company-id: <companyId>   (when available)
+//
+// ----------------------------------------------------------
+// WHAT THIS PAGE DOES NOT DO
+// ----------------------------------------------------------
+// - It does NOT create long-term analytics history storage.
+// - It does NOT permanently persist backend brain memory.
+// - It does NOT calculate real backend trading logic.
+// - It does NOT enforce stop loss / take profit by itself.
+//   It only VISUALIZES what backend sends.
+// - It does NOT replace Analytics Room.
+//
+// ----------------------------------------------------------
+// FRONTEND PERSISTENCE NOTES
+// ----------------------------------------------------------
+// This page stores a last-known UI snapshot in localStorage so
+// the Trading Room can recover visual state after refresh.
+//
+// That localStorage snapshot is only a frontend convenience.
+// The source of truth should always be the backend snapshot.
+//
+// If backend and localStorage disagree, backend should win.
+//
+// ----------------------------------------------------------
+// MAINTENANCE WARNING
+// ----------------------------------------------------------
+// If Trading Room looks wrong, check these in order:
+//
+// 1) VITE_API_BASE is valid
+// 2) auth token exists
+// 3) x-company-id is correct
+// 4) /api/paper/status returns snapshot data
+// 5) websocket channel "market" is sending price updates
+// 6) websocket channel "paper" is sending snapshot updates
+// 7) child components still accept the props used here
+//
+// If something is not wired in THIS file, the page may render
+// but the room will not behave like a real live trading room.
+//
+// ----------------------------------------------------------
+// CHILD COMPONENT CONTRACTS USED HERE
+// ----------------------------------------------------------
+// TerminalChart
+//   props: candles, trades, position
+//
+// OrderPanel
+//   props: symbol, price
+//
+// AIBehaviorPanel
+//   props: trades, decisions, position
+//
+// AIPerformanceHistoryPanel
+//   props: trades
+//
+// ----------------------------------------------------------
+// CURRENT DESIGN INTENT
+// ----------------------------------------------------------
+// Trading Room = live operational view
+// Analytics Room = historical memory / long-term analysis
+//
+// Trading Room should feel alive in real time.
+// Analytics Room should prove what happened over time.
+//
 // ==========================================================
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -20,6 +130,10 @@ import OrderPanel from "../components/OrderPanel";
 import AIBehaviorPanel from "../components/AIBehaviorPanel";
 import AIPerformanceHistoryPanel from "../components/AIPerformanceHistoryPanel";
 import { getToken, getSavedUser } from "../lib/api.js";
+
+/* =========================================================
+   CONFIGURATION
+========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
 const SYMBOL = "BTCUSDT";
@@ -43,14 +157,28 @@ const DEFAULT_PROTECTION = {
   updatedAt: 0,
 };
 
+/* =========================================================
+   MAIN PAGE COMPONENT
+========================================================= */
+
 export default function TradingRoom() {
+  /* ======================================================
+     SOCKET + LIFECYCLE REFS
+  ====================================================== */
+
   const marketWsRef = useRef(null);
   const paperWsRef = useRef(null);
+
   const marketReconnectRef = useRef(null);
   const paperReconnectRef = useRef(null);
+
   const engineStartRef = useRef(null);
   const lastCandleRef = useRef(null);
   const aliveRef = useRef(false);
+
+  /* ======================================================
+     LIVE UI STATE
+  ====================================================== */
 
   const [candles, setCandles] = useState([]);
   const [price, setPrice] = useState(null);
@@ -102,6 +230,10 @@ export default function TradingRoom() {
 
   const [protection, setProtection] = useState(DEFAULT_PROTECTION);
 
+  /* ======================================================
+     SMALL HELPERS
+  ====================================================== */
+
   function safeNum(v, fallback = 0) {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
@@ -132,9 +264,28 @@ export default function TradingRoom() {
     return `${(safeNum(v, 0) * 100).toFixed(digits)}%`;
   }
 
+  function formatTime(ms) {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  /* ======================================================
+     AUTH + REQUEST HELPERS
+  ====================================================== */
+
   function getCompanyId() {
     const user = getSavedUser();
-    if (user?.companyId === undefined || user?.companyId === null) return null;
+
+    if (user?.companyId === undefined || user?.companyId === null) {
+      return null;
+    }
+
     return String(user.companyId);
   }
 
@@ -171,16 +322,25 @@ export default function TradingRoom() {
     const qs = new URLSearchParams();
     qs.set("channel", channel);
     qs.set("token", token);
-    if (companyId) qs.set("companyId", companyId);
+
+    if (companyId) {
+      qs.set("companyId", companyId);
+    }
 
     return `${protocol}//${url.host}/ws?${qs.toString()}`;
   }
+
+  /* ======================================================
+     NORMALIZERS
+     These prevent bad backend payloads from breaking the page.
+  ====================================================== */
 
   function normalizePositionShape(pos, fallbackSlot = "scalp") {
     if (!pos || typeof pos !== "object") return null;
 
     const entry = safeNum(pos.entry, 0);
     const qty = safeNum(pos.qty, 0);
+
     if (entry <= 0 || qty <= 0) return null;
 
     return {
@@ -202,7 +362,9 @@ export default function TradingRoom() {
   }
 
   function normalizeProtectionShape(raw) {
-    if (!raw || typeof raw !== "object") return { ...DEFAULT_PROTECTION };
+    if (!raw || typeof raw !== "object") {
+      return { ...DEFAULT_PROTECTION };
+    }
 
     return {
       armed: !!raw.armed,
@@ -228,6 +390,11 @@ export default function TradingRoom() {
   function hasUsablePositions(nextPositions) {
     return !!(nextPositions?.structure || nextPositions?.scalp);
   }
+
+  /* ======================================================
+     DEDUPE / MERGE HELPERS
+     These allow websocket snapshots to merge cleanly.
+  ====================================================== */
 
   function normalizeTradeKey(t, idx = 0) {
     return [
@@ -257,6 +424,7 @@ export default function TradingRoom() {
     if (!incoming.length) return prev;
 
     const map = new Map();
+
     prev.forEach((item, i) => map.set(normalizeTradeKey(item, i), item));
     incoming.forEach((item, i) => map.set(normalizeTradeKey(item, i), item));
 
@@ -270,6 +438,7 @@ export default function TradingRoom() {
     if (!incoming.length) return prev;
 
     const map = new Map();
+
     prev.forEach((item, i) => map.set(normalizeDecisionKey(item, i), item));
     incoming.forEach((item, i) => map.set(normalizeDecisionKey(item, i), item));
 
@@ -277,6 +446,11 @@ export default function TradingRoom() {
       .sort((a, b) => safeNum(a?.time, 0) - safeNum(b?.time, 0))
       .slice(-200);
   }
+
+  /* ======================================================
+     LOCAL UI SNAPSHOT STORAGE
+     Browser convenience only. Backend is source of truth.
+  ====================================================== */
 
   function persistPanelState(next) {
     try {
@@ -291,6 +465,11 @@ export default function TradingRoom() {
       return null;
     }
   }
+
+  /* ======================================================
+     SNAPSHOT APPLICATION
+     This is the main state hydration path for backend payloads.
+  ====================================================== */
 
   function applySnapshotToState(snap, options = {}) {
     if (!snap || typeof snap !== "object") return;
@@ -366,10 +545,12 @@ export default function TradingRoom() {
     );
 
     setCapital(nextCapital);
+
     setTelemetry((prev) => ({
       ...prev,
       ...nextTelemetry,
     }));
+
     setProtection(nextProtection);
 
     if (persist) {
@@ -380,9 +561,14 @@ export default function TradingRoom() {
           btc: displayPosition ? safeNum(displayPosition.qty, 0) : 0,
         },
         position: displayPosition,
-        positions: hasUsablePositions(nextPositions) ? nextPositions : { structure: null, scalp: null },
+        positions: hasUsablePositions(nextPositions)
+          ? nextPositions
+          : { structure: null, scalp: null },
         trades: Array.isArray(snap.trades) && snap.trades.length ? snap.trades.slice(-500) : [],
-        decisions: Array.isArray(snap.decisions) && snap.decisions.length ? snap.decisions.slice(-200) : [],
+        decisions:
+          Array.isArray(snap.decisions) && snap.decisions.length
+            ? snap.decisions.slice(-200)
+            : [],
         capital: nextCapital,
         telemetry: {
           ...telemetry,
@@ -392,6 +578,11 @@ export default function TradingRoom() {
       });
     }
   }
+
+  /* ======================================================
+     STATUS PAYLOAD APPLICATION
+     Used by GET /api/paper/status polling.
+  ====================================================== */
 
   function applyStatusPayload(data) {
     if (!data || typeof data !== "object") return;
@@ -417,6 +608,10 @@ export default function TradingRoom() {
     }
   }
 
+  /* ======================================================
+     DERIVED VIEW DATA
+  ====================================================== */
+
   const activePositions = useMemo(() => {
     return [positions.structure, positions.scalp].filter(Boolean);
   }, [positions]);
@@ -439,6 +634,7 @@ export default function TradingRoom() {
 
     if (position.side === "LONG") return (price - entry) * qty;
     if (position.side === "SHORT") return (entry - price) * qty;
+
     return 0;
   }, [position, price]);
 
@@ -450,6 +646,7 @@ export default function TradingRoom() {
 
     if (position.side === "LONG") return (price - entry) / entry;
     if (position.side === "SHORT") return (entry - price) / entry;
+
     return 0;
   }, [position, price]);
 
@@ -482,6 +679,11 @@ export default function TradingRoom() {
     return null;
   }, [position, price, protection]);
 
+  /* ======================================================
+     POSITION TIMER
+     Shows remaining time for active AI trade duration.
+  ====================================================== */
+
   useEffect(() => {
     if (!position?.time || !position?.maxDuration) {
       setTimeLeft(null);
@@ -495,20 +697,15 @@ export default function TradingRoom() {
     };
 
     update();
+
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
   }, [position]);
 
-  function formatTime(ms) {
-    const total = Math.max(0, Math.floor(ms / 1000));
-    const h = Math.floor(total / 3600);
-    const m = Math.floor((total % 3600) / 60);
-    const s = total % 60;
-
-    if (h > 0) return `${h}h ${m}m ${s}s`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
-  }
+  /* ======================================================
+     LIVE CANDLE BUILDER
+     This is frontend-generated chart data from market price ticks.
+  ====================================================== */
 
   function updateCandles(priceNow) {
     if (!Number.isFinite(priceNow)) return;
@@ -528,6 +725,7 @@ export default function TradingRoom() {
           low: priceNow,
           close: priceNow,
         };
+
         lastCandleRef.current = newCandle;
         next = [...prev.slice(-MAX_CANDLES + 1), newCandle];
       } else {
@@ -537,45 +735,66 @@ export default function TradingRoom() {
           low: Math.min(last.low, priceNow),
           close: priceNow,
         };
+
         lastCandleRef.current = updated;
         next = [...prev];
-        if (next.length) next[next.length - 1] = updated;
-        else next = [updated];
+
+        if (next.length) {
+          next[next.length - 1] = updated;
+        } else {
+          next = [updated];
+        }
       }
 
       return next;
     });
   }
 
+  /* ======================================================
+     LOAD BROWSER-PERSISTED VIEW STATE
+     Only used as a startup convenience.
+  ====================================================== */
+
   useEffect(() => {
     const saved = readPersistedPanelState();
     if (!saved) return;
 
     setEquity(safeNum(saved.equity, 0));
+
     setWallet({
       usd: safeNum(saved.wallet?.usd, 0),
       btc: safeNum(saved.wallet?.btc, 0),
     });
+
     setPosition(normalizePositionShape(saved.position, saved.position?.slot || "scalp"));
+
     setPositions({
       structure: normalizePositionShape(saved.positions?.structure, "structure"),
       scalp: normalizePositionShape(saved.positions?.scalp, "scalp"),
     });
+
     setTrades(Array.isArray(saved.trades) ? saved.trades : []);
     setDecisions(Array.isArray(saved.decisions) ? saved.decisions : []);
+
     setCapital({
       total: safeNum(saved.capital?.total, 0),
       available: safeNum(saved.capital?.available, 0),
       locked: safeNum(saved.capital?.locked, 0),
     });
+
     setTelemetry((prev) => ({
       ...prev,
       ...(saved.telemetry || {}),
     }));
+
     if (saved.protection) {
       setProtection(normalizeProtectionShape(saved.protection));
     }
   }, []);
+
+  /* ======================================================
+     KEEP BROWSER SNAPSHOT FRESH
+  ====================================================== */
 
   useEffect(() => {
     if (!aliveRef.current) return;
@@ -593,6 +812,10 @@ export default function TradingRoom() {
     });
   }, [equity, wallet, position, positions, trades, decisions, capital, telemetry, protection]);
 
+  /* ======================================================
+     BACKEND LOADING
+  ====================================================== */
+
   async function loadEngineSnapshot() {
     const token = getToken();
     if (!token || !API_BASE) return;
@@ -609,6 +832,11 @@ export default function TradingRoom() {
     } catch {}
   }
 
+  /* ======================================================
+     BACKEND ACTION POST WRAPPER
+     Used by manual controls.
+  ====================================================== */
+
   async function postPaperAction(path, payload) {
     const res = await fetch(`${API_BASE}${path}`, {
       method: "POST",
@@ -617,6 +845,7 @@ export default function TradingRoom() {
     });
 
     let data = null;
+
     try {
       data = await res.json();
     } catch {}
@@ -634,6 +863,10 @@ export default function TradingRoom() {
 
     return { ok: res.ok, data };
   }
+
+  /* ======================================================
+     MANUAL ACTIONS
+  ====================================================== */
 
   async function handleCloseNow() {
     if (!position || actionBusy.closeNow) return;
@@ -700,6 +933,10 @@ export default function TradingRoom() {
     }
   }
 
+  /* ======================================================
+     SOCKET HELPERS
+  ====================================================== */
+
   function cleanupSocket(ref) {
     try {
       if (ref.current) {
@@ -710,13 +947,20 @@ export default function TradingRoom() {
         ref.current.close();
       }
     } catch {}
+
     ref.current = null;
   }
+
+  /* ======================================================
+     MARKET WEBSOCKET
+     Source of live price ticks.
+  ====================================================== */
 
   function connectMarket() {
     if (!aliveRef.current) return;
 
     const wsUrl = buildWsUrl("market");
+
     if (!wsUrl) {
       setConnection((prev) => ({ ...prev, market: "NO_URL" }));
       return;
@@ -727,6 +971,7 @@ export default function TradingRoom() {
     try {
       const ws = new WebSocket(wsUrl);
       marketWsRef.current = ws;
+
       setConnection((prev) => ({ ...prev, market: "CONNECTING" }));
 
       ws.onopen = () => {
@@ -745,6 +990,7 @@ export default function TradingRoom() {
           if (!market) return;
 
           const p = Number(market.price);
+
           if (Number.isFinite(p)) {
             setPrice(p);
             updateCandles(p);
@@ -759,7 +1005,9 @@ export default function TradingRoom() {
 
       ws.onclose = () => {
         if (!aliveRef.current) return;
+
         setConnection((prev) => ({ ...prev, market: "DISCONNECTED" }));
+
         clearTimeout(marketReconnectRef.current);
         marketReconnectRef.current = setTimeout(() => {
           if (aliveRef.current) connectMarket();
@@ -767,6 +1015,7 @@ export default function TradingRoom() {
       };
     } catch {
       setConnection((prev) => ({ ...prev, market: "ERROR" }));
+
       clearTimeout(marketReconnectRef.current);
       marketReconnectRef.current = setTimeout(() => {
         if (aliveRef.current) connectMarket();
@@ -774,10 +1023,16 @@ export default function TradingRoom() {
     }
   }
 
+  /* ======================================================
+     PAPER WEBSOCKET
+     Source of live paper trading snapshots.
+  ====================================================== */
+
   function connectPaper() {
     if (!aliveRef.current) return;
 
     const wsUrl = buildWsUrl("paper");
+
     if (!wsUrl) {
       setConnection((prev) => ({ ...prev, paper: "NO_URL" }));
       return;
@@ -788,6 +1043,7 @@ export default function TradingRoom() {
     try {
       const ws = new WebSocket(wsUrl);
       paperWsRef.current = ws;
+
       setConnection((prev) => ({ ...prev, paper: "CONNECTING" }));
 
       ws.onopen = () => {
@@ -822,7 +1078,9 @@ export default function TradingRoom() {
 
       ws.onclose = () => {
         if (!aliveRef.current) return;
+
         setConnection((prev) => ({ ...prev, paper: "DISCONNECTED" }));
+
         clearTimeout(paperReconnectRef.current);
         paperReconnectRef.current = setTimeout(() => {
           if (aliveRef.current) connectPaper();
@@ -830,12 +1088,19 @@ export default function TradingRoom() {
       };
     } catch {
       setConnection((prev) => ({ ...prev, paper: "ERROR" }));
+
       clearTimeout(paperReconnectRef.current);
       paperReconnectRef.current = setTimeout(() => {
         if (aliveRef.current) connectPaper();
       }, 2000);
     }
   }
+
+  /* ======================================================
+     ENGINE UPTIME DISPLAY
+     Uses engineStart when available.
+     Falls back to tick-based approximation if not available.
+  ====================================================== */
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -851,13 +1116,24 @@ export default function TradingRoom() {
       const m = Math.floor((totalSec % 3600) / 60);
       const s = totalSec % 60;
 
-      if (h > 0) setEngineUptime(`${h}h ${m}m ${s}s`);
-      else if (m > 0) setEngineUptime(`${m}m ${s}s`);
-      else setEngineUptime(`${s}s`);
+      if (h > 0) {
+        setEngineUptime(`${h}h ${m}m ${s}s`);
+      } else if (m > 0) {
+        setEngineUptime(`${m}m ${s}s`);
+      } else {
+        setEngineUptime(`${s}s`);
+      }
     }, 1000);
 
     return () => clearInterval(timer);
   }, [telemetry.ticks]);
+
+  /* ======================================================
+     PAGE STARTUP
+     - initial status load
+     - websocket connection
+     - periodic status reconciliation poll
+  ====================================================== */
 
   useEffect(() => {
     aliveRef.current = true;
@@ -884,6 +1160,10 @@ export default function TradingRoom() {
     };
   }, []);
 
+  /* ======================================================
+     UI STYLES
+  ====================================================== */
+
   const card = {
     background: "linear-gradient(180deg, rgba(17,24,39,.98), rgba(10,15,28,.98))",
     border: "1px solid rgba(255,255,255,.07)",
@@ -903,6 +1183,10 @@ export default function TradingRoom() {
     fontSize: 20,
     fontWeight: 700,
   };
+
+  /* ======================================================
+     RENDER
+  ====================================================== */
 
   return (
     <div
@@ -931,9 +1215,11 @@ export default function TradingRoom() {
               <div style={{ fontSize: 12, opacity: 0.55, letterSpacing: ".08em" }}>
                 INTERNAL TRADING ENGINE
               </div>
+
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4 }}>
                 {SYMBOL}
               </div>
+
               <div style={{ marginTop: 6, fontSize: 14, opacity: 0.75 }}>
                 Live Price: ${price ? fmtPrice(price) : "Loading..."}
               </div>
@@ -1001,6 +1287,7 @@ export default function TradingRoom() {
               <div>Side: {position.side || "-"}</div>
               <div>Time Remaining: {formatTime(timeLeft)}</div>
               <div>Entry: ${fmtPrice(position.entry)}</div>
+
               <div>
                 Live PnL:{" "}
                 <span style={{ color: openPnl >= 0 ? "#34d399" : "#f87171" }}>
@@ -1009,20 +1296,22 @@ export default function TradingRoom() {
               </div>
 
               {protection.armed && (
-                <>
-                  <div style={{ marginTop: 8, borderTop: "1px solid rgba(255,255,255,.08)", paddingTop: 8 }}>
-                    <div style={{ fontWeight: 700, color: "#fbbf24" }}>Protect Profit Armed</div>
-                    <div>Trail: {fmtPct(protection.trailPct, 3)}</div>
-                    <div>
-                      Trigger:{" "}
-                      {Number.isFinite(Number(protection.triggerPrice))
-                        ? `$${fmtPrice(protection.triggerPrice)}`
-                        : protectionPreview
-                          ? `$${fmtPrice(protectionPreview)}`
-                          : "-"}
-                    </div>
+                <div style={{ marginTop: 8, borderTop: "1px solid rgba(255,255,255,.08)", paddingTop: 8 }}>
+                  <div style={{ fontWeight: 700, color: "#fbbf24" }}>
+                    Protect Profit Armed
                   </div>
-                </>
+
+                  <div>Trail: {fmtPct(protection.trailPct, 3)}</div>
+
+                  <div>
+                    Trigger:{" "}
+                    {Number.isFinite(Number(protection.triggerPrice))
+                      ? `$${fmtPrice(protection.triggerPrice)}`
+                      : protectionPreview
+                        ? `$${fmtPrice(protectionPreview)}`
+                        : "-"}
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -1125,6 +1414,7 @@ export default function TradingRoom() {
             <div><b>Status:</b> {protection.armed ? "ARMED" : "IDLE"}</div>
             <div><b>Mode:</b> {protection.mode}</div>
             <div><b>Trail Distance:</b> {fmtPct(protection.trailPct, 3)}</div>
+
             <div>
               <b>Trail Trigger:</b>{" "}
               {Number.isFinite(Number(protection.triggerPrice))
@@ -1133,6 +1423,7 @@ export default function TradingRoom() {
                   ? `$${fmtPrice(protectionPreview)}`
                   : "-"}
             </div>
+
             <div><b>Tracking Slot:</b> {protection.slot || position?.slot || "-"}</div>
             <div><b>Note:</b> {protection.note || "No manual protection active"}</div>
           </div>
@@ -1168,7 +1459,10 @@ export default function TradingRoom() {
             Latest AI Activity
           </div>
 
-          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Last Decision</div>
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
+            Last Decision
+          </div>
+
           {latestDecision ? (
             <div
               style={{
@@ -1191,7 +1485,10 @@ export default function TradingRoom() {
 
           <div style={{ height: 14 }} />
 
-          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Last Trade</div>
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
+            Last Trade
+          </div>
+
           {lastTrade ? (
             <div
               style={{
@@ -1207,6 +1504,7 @@ export default function TradingRoom() {
               <div><b>Slot:</b> {lastTrade.slot || "-"}</div>
               <div><b>Price:</b> ${fmtPrice(lastTrade.price || lastTrade.entry)}</div>
               <div><b>Qty:</b> {fmtQty(lastTrade.qty)}</div>
+
               {"pnl" in (lastTrade || {}) && (
                 <div>
                   <b>PnL:</b>{" "}
@@ -1225,6 +1523,7 @@ export default function TradingRoom() {
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
             Engine Summary
           </div>
+
           <div style={{ fontSize: 13, lineHeight: 1.8, opacity: 0.88 }}>
             <div>Running: {telemetry.running ? "Yes" : "No"}</div>
             <div>Engine State: {telemetry.engine || "IDLE"}</div>
@@ -1241,10 +1540,16 @@ export default function TradingRoom() {
   );
 }
 
+/* =========================================================
+   SUPPORT COMPONENTS
+   These are display helpers local to TradingRoom.jsx.
+========================================================= */
+
 function StatusPill({ label, value }) {
   const normalized = String(value || "").toUpperCase();
 
   let bg = "rgba(59,130,246,.14)";
+
   if (normalized.includes("CONNECTED") || normalized.includes("RUNNING") || normalized.includes("ON")) {
     bg = "rgba(34,197,94,.16)";
   } else if (
@@ -1255,7 +1560,11 @@ function StatusPill({ label, value }) {
     normalized.includes("OFF")
   ) {
     bg = "rgba(239,68,68,.16)";
-  } else if (normalized.includes("CONNECTING") || normalized.includes("IDLE") || normalized.includes("CHECKING")) {
+  } else if (
+    normalized.includes("CONNECTING") ||
+    normalized.includes("IDLE") ||
+    normalized.includes("CHECKING")
+  ) {
     bg = "rgba(234,179,8,.16)";
   }
 
@@ -1338,7 +1647,9 @@ function PositionBox({ title, pos, price }) {
         border: "1px solid rgba(255,255,255,.06)",
       }}
     >
-      <div style={{ fontSize: 13, opacity: 0.68, marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 13, opacity: 0.68, marginBottom: 8 }}>
+        {title}
+      </div>
 
       {!pos ? (
         <div style={{ fontSize: 13, opacity: 0.55 }}>No open position</div>
