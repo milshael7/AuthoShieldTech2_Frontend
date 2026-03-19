@@ -3,7 +3,8 @@
 // MODULE: Trading Room
 // PURPOSE: Live market dashboard + AI paper trading interface
 //
-// FIXED VERSION
+// ENTERPRISE UI REFIT
+// ✔ richer terminal layout
 // ✔ live candles
 // ✔ AI trade countdown overlay
 // ✔ chart TP / SL / ENTRY support
@@ -11,9 +12,11 @@
 // ✔ memory protection
 // ✔ panel state persistence across refresh/reconnect
 // ✔ guards against empty/partial snapshot wipes
+// ✔ denser live telemetry + activity feeds
+// ✔ supports dual-slot paper engine snapshot shape
 // ==========================================================
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import TerminalChart from "../components/TerminalChart";
 import OrderPanel from "../components/OrderPanel";
 import AIBehaviorPanel from "../components/AIBehaviorPanel";
@@ -30,15 +33,23 @@ const PANEL_STORAGE_KEY = `trading-room:${SYMBOL}:panel`;
 export default function TradingRoom() {
   const marketWsRef = useRef(null);
   const paperWsRef = useRef(null);
+  const marketReconnectRef = useRef(null);
+  const paperReconnectRef = useRef(null);
   const engineStartRef = useRef(null);
   const lastCandleRef = useRef(null);
+  const mountedRef = useRef(false);
 
   const [candles, setCandles] = useState([]);
   const [price, setPrice] = useState(null);
 
   const [equity, setEquity] = useState(0);
   const [wallet, setWallet] = useState({ usd: 0, btc: 0 });
+
   const [position, setPosition] = useState(null);
+  const [positions, setPositions] = useState({
+    structure: null,
+    scalp: null,
+  });
 
   const [trades, setTrades] = useState([]);
   const [decisions, setDecisions] = useState([]);
@@ -52,6 +63,22 @@ export default function TradingRoom() {
     locked: 0,
   });
 
+  const [telemetry, setTelemetry] = useState({
+    ticks: 0,
+    decisions: 0,
+    trades: 0,
+    volatility: 0,
+    tradesToday: 0,
+    lossesToday: 0,
+    lastMode: "SCALP",
+    running: true,
+  });
+
+  const [connection, setConnection] = useState({
+    market: "CONNECTING",
+    paper: "CONNECTING",
+  });
+
   /* =====================================================
      SAFE HELPERS
   ===================================================== */
@@ -59,6 +86,31 @@ export default function TradingRoom() {
   function safeNum(v, fallback = 0) {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
+  }
+
+  function fmtMoney(v, digits = 2) {
+    return safeNum(v, 0).toLocaleString(undefined, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+  }
+
+  function fmtQty(v, digits = 6) {
+    return safeNum(v, 0).toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: digits,
+    });
+  }
+
+  function fmtPrice(v) {
+    return safeNum(v, 0).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
+
+  function fmtPct(v, digits = 2) {
+    return `${(safeNum(v, 0) * 100).toFixed(digits)}%`;
   }
 
   function getCompanyId() {
@@ -98,6 +150,30 @@ export default function TradingRoom() {
     return `${protocol}//${url.host}/ws?${qs.toString()}`;
   }
 
+  function normalizePositionShape(pos, fallbackSlot = "scalp") {
+    if (!pos || typeof pos !== "object") return null;
+
+    return {
+      ...pos,
+      slot: pos.slot || fallbackSlot,
+      qty: safeNum(pos.qty, 0),
+      entry: safeNum(pos.entry, 0),
+      capitalUsed: safeNum(pos.capitalUsed, 0),
+      stopLoss: Number.isFinite(Number(pos.stopLoss)) ? Number(pos.stopLoss) : null,
+      takeProfit: Number.isFinite(Number(pos.takeProfit)) ? Number(pos.takeProfit) : null,
+      time: safeNum(pos.time, 0),
+      maxDuration: safeNum(pos.maxDuration, 0),
+      bestPnl: safeNum(pos.bestPnl, 0),
+      targetPrice: Number.isFinite(Number(pos.targetPrice)) ? Number(pos.targetPrice) : null,
+    };
+  }
+
+  function getActiveDisplayPosition(nextPositions, fallbackSingle) {
+    if (nextPositions?.scalp) return nextPositions.scalp;
+    if (nextPositions?.structure) return nextPositions.structure;
+    return fallbackSingle || null;
+  }
+
   function normalizeTradeKey(t, idx = 0) {
     return [
       t?.time ?? "na",
@@ -110,12 +186,20 @@ export default function TradingRoom() {
     ].join("|");
   }
 
+  function normalizeDecisionKey(d, idx = 0) {
+    return [
+      d?.time ?? "na",
+      d?.slot ?? "na",
+      d?.mode ?? "na",
+      d?.action ?? "na",
+      d?.symbol ?? SYMBOL,
+      idx,
+    ].join("|");
+  }
+
   function mergeTrades(prev, incoming) {
     if (!Array.isArray(incoming)) return prev;
-
-    if (!incoming.length) {
-      return prev;
-    }
+    if (!incoming.length) return prev;
 
     const map = new Map();
 
@@ -142,28 +226,12 @@ export default function TradingRoom() {
 
     for (let i = 0; i < prev.length; i++) {
       const d = prev[i];
-      const key = [
-        d?.time ?? "na",
-        d?.slot ?? "na",
-        d?.mode ?? "na",
-        d?.action ?? "na",
-        d?.symbol ?? SYMBOL,
-        i,
-      ].join("|");
-      map.set(key, d);
+      map.set(normalizeDecisionKey(d, i), d);
     }
 
     for (let i = 0; i < incoming.length; i++) {
       const d = incoming[i];
-      const key = [
-        d?.time ?? "na",
-        d?.slot ?? "na",
-        d?.mode ?? "na",
-        d?.action ?? "na",
-        d?.symbol ?? SYMBOL,
-        i,
-      ].join("|");
-      map.set(key, d);
+      map.set(normalizeDecisionKey(d, i), d);
     }
 
     return Array.from(map.values())
@@ -188,52 +256,84 @@ export default function TradingRoom() {
   function applySnapshotToState(snap, options = {}) {
     if (!snap || typeof snap !== "object") return;
 
-    const {
-      preserveOnEmpty = true,
-      persist = true,
-    } = options;
+    const { preserveOnEmpty = true, persist = true } = options;
 
-    const nextEquity = safeNum(snap.equity, safeNum(snap.cashBalance, equity));
-    const nextCash = safeNum(snap.cashBalance, wallet.usd);
+    const nextPositions = {
+      structure: normalizePositionShape(snap.positions?.structure, "structure"),
+      scalp: normalizePositionShape(snap.positions?.scalp, "scalp"),
+    };
+
+    const nextSinglePosition =
+      normalizePositionShape(snap.position, "scalp") ||
+      getActiveDisplayPosition(nextPositions, null);
+
+    const displayPosition = getActiveDisplayPosition(nextPositions, nextSinglePosition);
+
+    const nextEquity = safeNum(
+      snap.equity,
+      safeNum(snap.cashBalance, equity)
+    );
+
+    const nextCash = safeNum(
+      snap.cashBalance,
+      wallet.usd
+    );
+
+    const nextCapital = {
+      total: safeNum(
+        snap.totalCapital,
+        safeNum(snap.cashBalance, capital.total)
+      ),
+      available: safeNum(
+        snap.availableCapital,
+        safeNum(snap.cashBalance, capital.available)
+      ),
+      locked: safeNum(snap.lockedCapital, capital.locked),
+    };
 
     setEquity(nextEquity);
 
     setWallet((prev) => ({
       usd: nextCash,
-      btc: safeNum(snap.position?.qty, prev.btc),
+      btc: displayPosition ? safeNum(displayPosition.qty, prev.btc) : 0,
     }));
 
+    setPositions((prev) => {
+      const hasAnyIncoming = !!(nextPositions.structure || nextPositions.scalp);
+      if (hasAnyIncoming) return nextPositions;
+      return preserveOnEmpty ? prev : { structure: null, scalp: null };
+    });
+
     setPosition((prev) => {
-      if (snap.position && typeof snap.position === "object") {
-        return snap.position;
-      }
+      if (displayPosition) return displayPosition;
       return preserveOnEmpty ? prev : null;
     });
 
     setTrades((prev) => {
       if (Array.isArray(snap.trades)) {
-        return preserveOnEmpty ? mergeTrades(prev, snap.trades) : snap.trades;
+        return preserveOnEmpty ? mergeTrades(prev, snap.trades) : snap.trades.slice(-500);
       }
       return prev;
     });
 
     setDecisions((prev) => {
       if (Array.isArray(snap.decisions)) {
-        return preserveOnEmpty ? mergeDecisions(prev, snap.decisions) : snap.decisions;
+        return preserveOnEmpty ? mergeDecisions(prev, snap.decisions) : snap.decisions.slice(-200);
       }
       return prev;
     });
 
-    setCapital((prev) => ({
-      total: safeNum(
-        snap.totalCapital,
-        safeNum(snap.cashBalance, prev.total)
-      ),
-      available: safeNum(
-        snap.availableCapital,
-        safeNum(snap.cashBalance, prev.available)
-      ),
-      locked: safeNum(snap.lockedCapital, prev.locked),
+    setCapital(nextCapital);
+
+    setTelemetry((prev) => ({
+      ticks: safeNum(snap.executionStats?.ticks, prev.ticks),
+      decisions: safeNum(snap.executionStats?.decisions, prev.decisions),
+      trades: safeNum(snap.executionStats?.trades, prev.trades),
+      volatility: safeNum(snap.volatility, prev.volatility),
+      tradesToday: safeNum(snap.limits?.tradesToday, prev.tradesToday),
+      lossesToday: safeNum(snap.limits?.lossesToday, prev.lossesToday),
+      lastMode: snap.lastMode || prev.lastMode || "SCALP",
+      running: typeof snap.running === "boolean" ? snap.running : prev.running,
     }));
 
     if (persist) {
@@ -241,32 +341,89 @@ export default function TradingRoom() {
         equity: nextEquity,
         wallet: {
           usd: nextCash,
-          btc: safeNum(snap.position?.qty, wallet.btc),
+          btc: displayPosition ? safeNum(displayPosition.qty, 0) : 0,
         },
-        position:
-          snap.position && typeof snap.position === "object"
-            ? snap.position
-            : position,
+        position: displayPosition,
+        positions: hasUsablePositions(nextPositions)
+          ? nextPositions
+          : positions,
         trades: Array.isArray(snap.trades) && snap.trades.length
           ? snap.trades.slice(-500)
           : trades.slice(-500),
         decisions: Array.isArray(snap.decisions) && snap.decisions.length
           ? snap.decisions.slice(-200)
           : decisions.slice(-200),
-        capital: {
-          total: safeNum(
-            snap.totalCapital,
-            safeNum(snap.cashBalance, capital.total)
-          ),
-          available: safeNum(
-            snap.availableCapital,
-            safeNum(snap.cashBalance, capital.available)
-          ),
-          locked: safeNum(snap.lockedCapital, capital.locked),
+        capital: nextCapital,
+        telemetry: {
+          ticks: safeNum(snap.executionStats?.ticks, telemetry.ticks),
+          decisions: safeNum(snap.executionStats?.decisions, telemetry.decisions),
+          trades: safeNum(snap.executionStats?.trades, telemetry.trades),
+          volatility: safeNum(snap.volatility, telemetry.volatility),
+          tradesToday: safeNum(snap.limits?.tradesToday, telemetry.tradesToday),
+          lossesToday: safeNum(snap.limits?.lossesToday, telemetry.lossesToday),
+          lastMode: snap.lastMode || telemetry.lastMode || "SCALP",
+          running:
+            typeof snap.running === "boolean" ? snap.running : telemetry.running,
         },
       });
     }
   }
+
+  function hasUsablePositions(nextPositions) {
+    return !!(nextPositions?.structure || nextPositions?.scalp);
+  }
+
+  /* =====================================================
+     DERIVED DATA
+  ===================================================== */
+
+  const activePositions = useMemo(() => {
+    return [positions.structure, positions.scalp].filter(Boolean);
+  }, [positions]);
+
+  const lastTrade = useMemo(() => {
+    if (!trades.length) return null;
+    return trades[trades.length - 1];
+  }, [trades]);
+
+  const latestDecision = useMemo(() => {
+    if (!decisions.length) return null;
+    return decisions[decisions.length - 1];
+  }, [decisions]);
+
+  const openPnl = useMemo(() => {
+    if (!position || !Number.isFinite(price)) return 0;
+    const qty = safeNum(position.qty, 0);
+    const entry = safeNum(position.entry, 0);
+
+    if (!qty || !entry) return 0;
+
+    if (position.side === "LONG") {
+      return (price - entry) * qty;
+    }
+
+    if (position.side === "SHORT") {
+      return (entry - price) * qty;
+    }
+
+    return 0;
+  }, [position, price]);
+
+  const openPnlPct = useMemo(() => {
+    if (!position || !Number.isFinite(price)) return 0;
+    const entry = safeNum(position.entry, 0);
+    if (!entry) return 0;
+
+    if (position.side === "LONG") {
+      return (price - entry) / entry;
+    }
+
+    if (position.side === "SHORT") {
+      return (entry - price) / entry;
+    }
+
+    return 0;
+  }, [position, price]);
 
   /* =====================================================
      TRADE COUNTDOWN
@@ -287,16 +444,18 @@ export default function TradingRoom() {
     update();
 
     const timer = setInterval(update, 1000);
-
     return () => clearInterval(timer);
   }, [position]);
 
   function formatTime(ms) {
-    const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
 
-    return `${m}m ${sec}s`;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
   }
 
   /* =====================================================
@@ -361,6 +520,10 @@ export default function TradingRoom() {
       btc: safeNum(saved.wallet?.btc, 0),
     });
     setPosition(saved.position || null);
+    setPositions({
+      structure: saved.positions?.structure || null,
+      scalp: saved.positions?.scalp || null,
+    });
     setTrades(Array.isArray(saved.trades) ? saved.trades : []);
     setDecisions(Array.isArray(saved.decisions) ? saved.decisions : []);
     setCapital({
@@ -368,6 +531,10 @@ export default function TradingRoom() {
       available: safeNum(saved.capital?.available, 0),
       locked: safeNum(saved.capital?.locked, 0),
     });
+    setTelemetry((prev) => ({
+      ...prev,
+      ...(saved.telemetry || {}),
+    }));
   }, []);
 
   /* =====================================================
@@ -375,15 +542,19 @@ export default function TradingRoom() {
   ===================================================== */
 
   useEffect(() => {
+    if (!mountedRef.current) return;
+
     persistPanelState({
       equity,
       wallet,
       position,
+      positions,
       trades: Array.isArray(trades) ? trades.slice(-500) : [],
       decisions: Array.isArray(decisions) ? decisions.slice(-200) : [],
       capital,
+      telemetry,
     });
-  }, [equity, wallet, position, trades, decisions, capital]);
+  }, [equity, wallet, position, positions, trades, decisions, capital, telemetry]);
 
   /* =====================================================
      ENGINE SNAPSHOT
@@ -403,6 +574,10 @@ export default function TradingRoom() {
 
       if (!snap) return;
 
+      if (data?.engineStart && !engineStartRef.current) {
+        engineStartRef.current = data.engineStart;
+      }
+
       applySnapshotToState(snap, {
         preserveOnEmpty: true,
         persist: true,
@@ -418,28 +593,45 @@ export default function TradingRoom() {
     const wsUrl = buildWsUrl("market");
     if (!wsUrl) return;
 
-    const ws = new WebSocket(wsUrl);
-    marketWsRef.current = ws;
+    try {
+      const ws = new WebSocket(wsUrl);
+      marketWsRef.current = ws;
+      setConnection((prev) => ({ ...prev, market: "CONNECTING" }));
 
-    ws.onmessage = (msg) => {
-      try {
-        const packet = JSON.parse(msg.data);
+      ws.onopen = () => {
+        setConnection((prev) => ({ ...prev, market: "CONNECTED" }));
+      };
 
-        if (packet.channel !== "market") return;
+      ws.onmessage = (msg) => {
+        try {
+          const packet = JSON.parse(msg.data);
+          if (packet.channel !== "market") return;
 
-        const market = packet?.data?.[SYMBOL];
-        if (!market) return;
+          const market = packet?.data?.[SYMBOL];
+          if (!market) return;
 
-        const p = Number(market.price);
+          const p = Number(market.price);
+          if (Number.isFinite(p)) {
+            setPrice(p);
+            updateCandles(p);
+          }
+        } catch {}
+      };
 
-        if (Number.isFinite(p)) {
-          setPrice(p);
-          updateCandles(p);
-        }
-      } catch {}
-    };
+      ws.onerror = () => {
+        setConnection((prev) => ({ ...prev, market: "ERROR" }));
+      };
 
-    ws.onclose = () => setTimeout(connectMarket, 2000);
+      ws.onclose = () => {
+        setConnection((prev) => ({ ...prev, market: "DISCONNECTED" }));
+        clearTimeout(marketReconnectRef.current);
+        marketReconnectRef.current = setTimeout(connectMarket, 2000);
+      };
+    } catch {
+      setConnection((prev) => ({ ...prev, market: "ERROR" }));
+      clearTimeout(marketReconnectRef.current);
+      marketReconnectRef.current = setTimeout(connectMarket, 2000);
+    }
   }
 
   /* =====================================================
@@ -450,28 +642,46 @@ export default function TradingRoom() {
     const wsUrl = buildWsUrl("paper");
     if (!wsUrl) return;
 
-    const ws = new WebSocket(wsUrl);
-    paperWsRef.current = ws;
+    try {
+      const ws = new WebSocket(wsUrl);
+      paperWsRef.current = ws;
+      setConnection((prev) => ({ ...prev, paper: "CONNECTING" }));
 
-    ws.onmessage = (msg) => {
-      try {
-        const data = JSON.parse(msg.data);
+      ws.onopen = () => {
+        setConnection((prev) => ({ ...prev, paper: "CONNECTED" }));
+      };
 
-        if (data.channel !== "paper") return;
+      ws.onmessage = (msg) => {
+        try {
+          const data = JSON.parse(msg.data);
+          if (data.channel !== "paper") return;
 
-        if (!engineStartRef.current) {
-          engineStartRef.current = data.engineStart || Date.now();
-        }
+          if (!engineStartRef.current) {
+            engineStartRef.current = data.engineStart || Date.now();
+          }
 
-        const snap = data.snapshot || {};
-        applySnapshotToState(snap, {
-          preserveOnEmpty: true,
-          persist: true,
-        });
-      } catch {}
-    };
+          const snap = data.snapshot || {};
+          applySnapshotToState(snap, {
+            preserveOnEmpty: true,
+            persist: true,
+          });
+        } catch {}
+      };
 
-    ws.onclose = () => setTimeout(connectPaper, 2000);
+      ws.onerror = () => {
+        setConnection((prev) => ({ ...prev, paper: "ERROR" }));
+      };
+
+      ws.onclose = () => {
+        setConnection((prev) => ({ ...prev, paper: "DISCONNECTED" }));
+        clearTimeout(paperReconnectRef.current);
+        paperReconnectRef.current = setTimeout(connectPaper, 2000);
+      };
+    } catch {
+      setConnection((prev) => ({ ...prev, paper: "ERROR" }));
+      clearTimeout(paperReconnectRef.current);
+      paperReconnectRef.current = setTimeout(connectPaper, 2000);
+    }
   }
 
   /* =====================================================
@@ -504,11 +714,18 @@ export default function TradingRoom() {
   ===================================================== */
 
   useEffect(() => {
+    mountedRef.current = true;
+
     loadEngineSnapshot();
     connectMarket();
     connectPaper();
 
     return () => {
+      mountedRef.current = false;
+
+      clearTimeout(marketReconnectRef.current);
+      clearTimeout(paperReconnectRef.current);
+
       try {
         marketWsRef.current?.close();
       } catch {}
@@ -520,84 +737,400 @@ export default function TradingRoom() {
   }, []);
 
   /* =====================================================
+     STYLES
+  ===================================================== */
+
+  const card = {
+    background: "linear-gradient(180deg, rgba(17,24,39,.98), rgba(10,15,28,.98))",
+    border: "1px solid rgba(255,255,255,.07)",
+    borderRadius: 14,
+    boxShadow: "0 10px 30px rgba(0,0,0,.25)",
+  };
+
+  const label = {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: ".08em",
+    opacity: 0.6,
+    marginBottom: 6,
+  };
+
+  const value = {
+    fontSize: 20,
+    fontWeight: 700,
+  };
+
+  /* =====================================================
      UI
   ===================================================== */
 
   return (
-    <div style={{ display: "flex", flex: 1, background: "#0a0f1c", color: "#fff" }}>
-      <div style={{ flex: 1, padding: 20, position: "relative" }}>
-        <div style={{ fontWeight: 700 }}>{SYMBOL}</div>
-
-        <div style={{ opacity: 0.7 }}>
-          Live Price: {price ? price.toLocaleString() : "Loading"}
-        </div>
-
-        <TerminalChart
-          candles={candles}
-          trades={trades}
-          position={position}
-        />
-
-        {position && timeLeft !== null && (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 320px",
+        gap: 16,
+        flex: 1,
+        minHeight: 0,
+        background: "#0a0f1c",
+        color: "#fff",
+        padding: 16,
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+        <div
+          style={{
+            ...card,
+            padding: 16,
+          }}
+        >
           <div
             style={{
-              position: "absolute",
-              top: 70,
-              right: 40,
-              background: "#111827",
-              padding: "8px 12px",
-              borderRadius: 8,
-              border: "1px solid rgba(255,255,255,.1)",
+              display: "grid",
+              gridTemplateColumns: "minmax(220px, 1.3fr) repeat(5, minmax(120px, 1fr))",
+              gap: 12,
+              alignItems: "stretch",
             }}
           >
-            AI TRADE ACTIVE
-            <br />
-            Time Remaining: {formatTime(timeLeft)}
-          </div>
-        )}
+            <div>
+              <div style={{ fontSize: 12, opacity: 0.55, letterSpacing: ".08em" }}>
+                INTERNAL TRADING ENGINE
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4 }}>
+                {SYMBOL}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 14, opacity: 0.75 }}>
+                Live Price: ${price ? fmtPrice(price) : "Loading..."}
+              </div>
+            </div>
 
-        <div style={{ marginTop: 20 }}>
-          <AIBehaviorPanel
+            <div>
+              <div style={label}>Equity</div>
+              <div style={value}>${fmtMoney(equity)}</div>
+            </div>
+
+            <div>
+              <div style={label}>Available</div>
+              <div style={value}>${fmtMoney(capital.available)}</div>
+            </div>
+
+            <div>
+              <div style={label}>Locked</div>
+              <div style={value}>${fmtMoney(capital.locked)}</div>
+            </div>
+
+            <div>
+              <div style={label}>Mode</div>
+              <div style={value}>{telemetry.lastMode || "SCALP"}</div>
+            </div>
+
+            <div>
+              <div style={label}>Uptime</div>
+              <div style={value}>{engineUptime}</div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              marginTop: 14,
+              flexWrap: "wrap",
+            }}
+          >
+            <StatusPill label="Market WS" value={connection.market} />
+            <StatusPill label="Paper WS" value={connection.paper} />
+            <StatusPill label="Engine" value={telemetry.running ? "RUNNING" : "STOPPED"} />
+            <StatusPill label="Ticks" value={String(telemetry.ticks)} />
+            <StatusPill label="Decisions" value={String(telemetry.decisions)} />
+            <StatusPill label="Trades" value={String(telemetry.trades)} />
+            <StatusPill label="Volatility" value={fmtPct(telemetry.volatility, 3)} />
+          </div>
+        </div>
+
+        <div style={{ ...card, padding: 14, position: "relative", minHeight: 460 }}>
+          <TerminalChart
+            candles={candles}
             trades={trades}
-            decisions={decisions}
             position={position}
           />
+
+          {position && timeLeft !== null && (
+            <div
+              style={{
+                position: "absolute",
+                top: 18,
+                right: 18,
+                background: "rgba(17,24,39,.95)",
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,.1)",
+                boxShadow: "0 8px 24px rgba(0,0,0,.35)",
+                fontSize: 12,
+                lineHeight: 1.5,
+                minWidth: 190,
+              }}
+            >
+              <div style={{ fontWeight: 800, marginBottom: 4 }}>AI TRADE ACTIVE</div>
+              <div>Slot: {(position.slot || "scalp").toUpperCase()}</div>
+              <div>Side: {position.side || "-"}</div>
+              <div>Time Remaining: {formatTime(timeLeft)}</div>
+              <div>Entry: ${fmtPrice(position.entry)}</div>
+              <div>
+                Live PnL:{" "}
+                <span style={{ color: openPnl >= 0 ? "#34d399" : "#f87171" }}>
+                  ${fmtMoney(openPnl)} ({fmtPct(openPnlPct)})
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div style={{ marginTop: 20 }}>
-          <AIPerformanceHistoryPanel trades={trades} />
-        </div>
-      </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 16,
+            minHeight: 0,
+          }}
+        >
+          <div style={{ ...card, padding: 16, minHeight: 260 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
+              AI Behavior Feed
+            </div>
+            <AIBehaviorPanel
+              trades={trades}
+              decisions={decisions}
+              position={position}
+            />
+          </div>
 
-      <div
-        style={{
-          width: 260,
-          padding: 16,
-          background: "#111827",
-          borderLeft: "1px solid rgba(255,255,255,.05)",
-        }}
-      >
-        <OrderPanel symbol={SYMBOL} price={price} />
-
-        <div style={{ marginTop: 20 }}>
-          <h3>AI Engine</h3>
-
-          <div>Status: RUNNING</div>
-          <div>Uptime: {engineUptime}</div>
-
-          <div style={{ marginTop: 12 }}>
-            Equity: ${equity.toFixed(2)}
+          <div style={{ ...card, padding: 16, minHeight: 260 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
+              AI Performance History
+            </div>
+            <AIPerformanceHistoryPanel trades={trades} />
           </div>
         </div>
+      </div>
 
-        <div style={{ marginTop: 20 }}>
-          <h3>AI Capital</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+        <div style={{ ...card, padding: 16 }}>
+          <OrderPanel symbol={SYMBOL} price={price} />
+        </div>
 
-          <div>Total Capital: ${capital.total.toFixed(2)}</div>
-          <div>Available: ${capital.available.toFixed(2)}</div>
-          <div>In Trade: ${capital.locked.toFixed(2)}</div>
+        <div style={{ ...card, padding: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
+            Account Overview
+          </div>
+
+          <MetricRow label="Cash Balance" value={`$${fmtMoney(wallet.usd)}`} />
+          <MetricRow label="BTC Exposure" value={fmtQty(wallet.btc)} />
+          <MetricRow label="Equity" value={`$${fmtMoney(equity)}`} />
+          <MetricRow label="Total Capital" value={`$${fmtMoney(capital.total)}`} />
+          <MetricRow label="Available Capital" value={`$${fmtMoney(capital.available)}`} />
+          <MetricRow label="Locked Capital" value={`$${fmtMoney(capital.locked)}`} />
+          <MetricRow label="Trades Today" value={String(telemetry.tradesToday)} />
+          <MetricRow label="Losses Today" value={String(telemetry.lossesToday)} />
+        </div>
+
+        <div style={{ ...card, padding: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
+            Active Slots
+          </div>
+
+          <PositionBox title="Scalp Slot" pos={positions.scalp} price={price} />
+          <div style={{ height: 10 }} />
+          <PositionBox title="Structure Slot" pos={positions.structure} price={price} />
+        </div>
+
+        <div style={{ ...card, padding: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
+            Latest AI Activity
+          </div>
+
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Last Decision</div>
+          {latestDecision ? (
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 10,
+                background: "rgba(255,255,255,.035)",
+                border: "1px solid rgba(255,255,255,.06)",
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              <div><b>Action:</b> {latestDecision.action || "-"}</div>
+              <div><b>Mode:</b> {latestDecision.mode || "-"}</div>
+              <div><b>Slot:</b> {latestDecision.slot || "-"}</div>
+              <div><b>Reason:</b> {latestDecision.reason || "N/A"}</div>
+            </div>
+          ) : (
+            <div style={{ opacity: 0.55 }}>No decision data yet</div>
+          )}
+
+          <div style={{ height: 14 }} />
+
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Last Trade</div>
+          {lastTrade ? (
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 10,
+                background: "rgba(255,255,255,.035)",
+                border: "1px solid rgba(255,255,255,.06)",
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              <div><b>Side:</b> {lastTrade.side || "-"}</div>
+              <div><b>Slot:</b> {lastTrade.slot || "-"}</div>
+              <div><b>Price:</b> ${fmtPrice(lastTrade.price || lastTrade.entry)}</div>
+              <div><b>Qty:</b> {fmtQty(lastTrade.qty)}</div>
+              {"pnl" in (lastTrade || {}) && (
+                <div>
+                  <b>PnL:</b>{" "}
+                  <span style={{ color: safeNum(lastTrade.pnl, 0) >= 0 ? "#34d399" : "#f87171" }}>
+                    ${fmtMoney(lastTrade.pnl)}
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ opacity: 0.55 }}>No trade data yet</div>
+          )}
+        </div>
+
+        <div style={{ ...card, padding: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
+            Engine Summary
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.8, opacity: 0.88 }}>
+            <div>Running: {telemetry.running ? "Yes" : "No"}</div>
+            <div>Primary Display Slot: {position?.slot || "None"}</div>
+            <div>Open Positions: {activePositions.length}</div>
+            <div>Last Mode: {telemetry.lastMode || "SCALP"}</div>
+            <div>Decision Count: {telemetry.decisions}</div>
+            <div>Trade Count: {telemetry.trades}</div>
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function StatusPill({ label, value }) {
+  const normalized = String(value || "").toUpperCase();
+
+  let bg = "rgba(59,130,246,.14)";
+  if (normalized.includes("CONNECTED") || normalized.includes("RUNNING")) {
+    bg = "rgba(34,197,94,.16)";
+  } else if (normalized.includes("ERROR") || normalized.includes("DISCONNECTED") || normalized.includes("STOPPED")) {
+    bg = "rgba(239,68,68,.16)";
+  } else if (normalized.includes("CONNECTING")) {
+    bg = "rgba(234,179,8,.16)";
+  }
+
+  return (
+    <div
+      style={{
+        padding: "6px 10px",
+        borderRadius: 999,
+        background: bg,
+        fontSize: 12,
+        fontWeight: 700,
+        display: "inline-flex",
+        gap: 6,
+        alignItems: "center",
+      }}
+    >
+      <span style={{ opacity: 0.7 }}>{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function MetricRow({ label, value }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 12,
+        padding: "8px 0",
+        borderBottom: "1px solid rgba(255,255,255,.05)",
+        fontSize: 13,
+      }}
+    >
+      <span style={{ opacity: 0.7 }}>{label}</span>
+      <span style={{ fontWeight: 700 }}>{value}</span>
+    </div>
+  );
+}
+
+function PositionBox({ title, pos, price }) {
+  const safeNum = (v, fallback = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const fmtMoney = (v, digits = 2) =>
+    safeNum(v, 0).toLocaleString(undefined, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+
+  const fmtQty = (v, digits = 6) =>
+    safeNum(v, 0).toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: digits,
+    });
+
+  const fmtPct = (v, digits = 2) => `${(safeNum(v, 0) * 100).toFixed(digits)}%`;
+
+  let pnl = 0;
+  let pnlPct = 0;
+
+  if (pos && Number.isFinite(price) && safeNum(pos.entry) > 0) {
+    if (pos.side === "LONG") {
+      pnl = (price - pos.entry) * safeNum(pos.qty);
+      pnlPct = (price - pos.entry) / pos.entry;
+    } else if (pos.side === "SHORT") {
+      pnl = (pos.entry - price) * safeNum(pos.qty);
+      pnlPct = (pos.entry - price) / pos.entry;
+    }
+  }
+
+  return (
+    <div
+      style={{
+        padding: 12,
+        borderRadius: 12,
+        background: "rgba(255,255,255,.035)",
+        border: "1px solid rgba(255,255,255,.06)",
+      }}
+    >
+      <div style={{ fontSize: 13, opacity: 0.68, marginBottom: 8 }}>{title}</div>
+
+      {!pos ? (
+        <div style={{ fontSize: 13, opacity: 0.55 }}>No open position</div>
+      ) : (
+        <div style={{ fontSize: 13, lineHeight: 1.65 }}>
+          <div><b>Side:</b> {pos.side || "-"}</div>
+          <div><b>Qty:</b> {fmtQty(pos.qty)}</div>
+          <div><b>Entry:</b> ${fmtMoney(pos.entry)}</div>
+          <div><b>Capital:</b> ${fmtMoney(pos.capitalUsed)}</div>
+          <div><b>Stop:</b> {pos.stopLoss ? `$${fmtMoney(pos.stopLoss)}` : "-"}</div>
+          <div><b>Target:</b> {pos.takeProfit ? `$${fmtMoney(pos.takeProfit)}` : "-"}</div>
+          <div>
+            <b>Open PnL:</b>{" "}
+            <span style={{ color: pnl >= 0 ? "#34d399" : "#f87171" }}>
+              ${fmtMoney(pnl)} ({fmtPct(pnlPct)})
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
