@@ -1,12 +1,13 @@
 // ============================================================
 // FILE: frontend/src/components/TerminalChart.jsx
-// TERMINAL CHART — INSTITUTIONAL TRADING VERSION v9
+// TERMINAL CHART — INSTITUTIONAL TRADING VERSION v10
 //
-// NEW
-// ✔ AI trade path visualization
-// ✔ BUY → SELL connection lines
-// ✔ stable markers
-// ✔ realtime websocket markers
+// FIXES
+// ✔ Uses real backend stopLoss / takeProfit values
+// ✔ No fake SL/TP derived from entry
+// ✔ Only draws lines for active live position
+// ✔ Stable trade markers
+// ✔ BUY/SELL/CLOSE path visualization improved
 // ✔ TradingView-style scrolling
 // ============================================================
 
@@ -18,9 +19,8 @@ export default function TerminalChart({
   trades = [],
   position = null,
   height = 520,
-  ws = null
-}){
-
+  ws = null,
+}) {
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
 
@@ -33,378 +33,359 @@ export default function TerminalChart({
 
   const lastTimeRef = useRef(null);
   const initializedRef = useRef(false);
-
   const userScrollingRef = useRef(false);
-
-  const liveMarkersRef = useRef([]);
-  const tradeLinesRef = useRef([]);
 
   /* =========================================================
      SAFE CANDLE SANITIZER
   ========================================================= */
 
-  const candleData = useMemo(()=>{
-
+  const candleData = useMemo(() => {
     const map = new Map();
 
-    for(const c of candles){
-
+    for (const c of candles) {
       const time = Number(c?.time);
       const open = Number(c?.open);
       const high = Number(c?.high);
       const low = Number(c?.low);
       const close = Number(c?.close);
 
-      if(
+      if (
         !Number.isFinite(time) ||
         !Number.isFinite(open) ||
         !Number.isFinite(high) ||
         !Number.isFinite(low) ||
         !Number.isFinite(close)
-      ){
+      ) {
         continue;
       }
 
-      map.set(time,{
+      map.set(time, {
         time,
         open,
-        high:Math.max(open,high,low,close),
-        low:Math.min(open,high,low,close),
-        close
+        high: Math.max(open, high, low, close),
+        low: Math.min(open, high, low, close),
+        close,
       });
-
     }
 
     const cleaned = Array.from(map.values());
-
-    cleaned.sort((a,b)=>a.time-b.time);
-
+    cleaned.sort((a, b) => a.time - b.time);
     return cleaned;
+  }, [candles]);
 
-  },[candles]);
+  /* =========================================================
+     NORMALIZED ACTIVE POSITION
+  ========================================================= */
+
+  const activePosition = useMemo(() => {
+    if (!position || typeof position !== "object") return null;
+
+    const entry = Number(position.entry);
+    if (!Number.isFinite(entry) || entry <= 0) return null;
+
+    const side = String(position.side || "").toUpperCase();
+    if (side !== "LONG" && side !== "SHORT") return null;
+
+    const stopLoss = Number(position.stopLoss);
+    const takeProfit = Number(position.takeProfit);
+
+    return {
+      ...position,
+      side,
+      entry,
+      stopLoss: Number.isFinite(stopLoss) ? stopLoss : null,
+      takeProfit: Number.isFinite(takeProfit) ? takeProfit : null,
+    };
+  }, [position]);
 
   /* =========================================================
      CHART INIT
   ========================================================= */
 
-  useEffect(()=>{
-
+  useEffect(() => {
     const el = wrapRef.current;
-    if(!el) return;
-    if(chartRef.current) return;
+    if (!el) return;
+    if (chartRef.current) return;
 
-    const chart = createChart(el,{
-
+    const chart = createChart(el, {
       height,
       width: el.clientWidth,
-
-      layout:{
-        background:{ color:"#0b1220" },
-        textColor:"#9ca3af"
+      layout: {
+        background: { color: "#0b1220" },
+        textColor: "#9ca3af",
       },
-
-      grid:{
-        vertLines:{ color:"rgba(148,163,184,.05)" },
-        horzLines:{ color:"rgba(148,163,184,.05)" }
+      grid: {
+        vertLines: { color: "rgba(148,163,184,.05)" },
+        horzLines: { color: "rgba(148,163,184,.05)" },
       },
-
-      crosshair:{ mode: CrosshairMode.Normal },
-
-      rightPriceScale:{
-        borderColor:"rgba(148,163,184,.15)"
+      crosshair: { mode: CrosshairMode.Normal },
+      rightPriceScale: {
+        borderColor: "rgba(148,163,184,.15)",
       },
-
-      timeScale:{
-        borderColor:"rgba(148,163,184,.15)",
-        timeVisible:true,
-        barSpacing:12,
-        rightBarOffset:6,
-        rightBarStaysOnScroll:true
-      }
-
+      timeScale: {
+        borderColor: "rgba(148,163,184,.15)",
+        timeVisible: true,
+        barSpacing: 12,
+        rightBarOffset: 6,
+        rightBarStaysOnScroll: true,
+      },
     });
 
-    candleSeriesRef.current =
-      chart.addCandlestickSeries({
+    candleSeriesRef.current = chart.addCandlestickSeries({
+      upColor: "#22c55e",
+      downColor: "#ef4444",
+      borderUpColor: "#22c55e",
+      borderDownColor: "#ef4444",
+      wickUpColor: "#22c55e",
+      wickDownColor: "#ef4444",
+    });
 
-        upColor:"#22c55e",
-        downColor:"#ef4444",
-
-        borderUpColor:"#22c55e",
-        borderDownColor:"#ef4444",
-
-        wickUpColor:"#22c55e",
-        wickDownColor:"#ef4444"
-
-      });
-
-    /* trade path line series */
-
-    tradeLineSeriesRef.current =
-      chart.addLineSeries({
-        color:"#60a5fa",
-        lineWidth:2
-      });
+    tradeLineSeriesRef.current = chart.addLineSeries({
+      color: "#60a5fa",
+      lineWidth: 2,
+    });
 
     chartRef.current = chart;
 
-    chart.timeScale().subscribeVisibleLogicalRangeChange((range)=>{
+    chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (!range) return;
 
-      if(!range) return;
+      const bars = candleSeriesRef.current?.barsInLogicalRange?.(range);
+      if (!bars) return;
 
-      const bars =
-        candleSeriesRef.current?.barsInLogicalRange?.(range);
-
-      if(!bars) return;
-
-      if(bars.barsAfter < 1){
-        userScrollingRef.current=false;
-      }else{
-        userScrollingRef.current=true;
+      if (bars.barsAfter < 1) {
+        userScrollingRef.current = false;
+      } else {
+        userScrollingRef.current = true;
       }
-
     });
 
-    const ro = new ResizeObserver(entries=>{
-
-      const rect = entries[0].contentRect;
-
-      chart.resize(rect.width,height);
-
+    const ro = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (!rect) return;
+      chart.resize(rect.width, height);
     });
 
     ro.observe(el);
 
-    return ()=>{
-
+    return () => {
       ro.disconnect();
       chart.remove();
-
-      chartRef.current=null;
-      candleSeriesRef.current=null;
-
+      chartRef.current = null;
+      candleSeriesRef.current = null;
+      tradeLineSeriesRef.current = null;
     };
-
-  },[height]);
+  }, [height]);
 
   /* =========================================================
      UPDATE CANDLES
   ========================================================= */
 
-  useEffect(()=>{
-
+  useEffect(() => {
     const chart = chartRef.current;
     const series = candleSeriesRef.current;
 
-    if(!chart || !series) return;
-    if(!candleData.length) return;
+    if (!chart || !series) return;
+    if (!candleData.length) return;
 
-    const last =
-      candleData[candleData.length-1];
+    const last = candleData[candleData.length - 1];
 
-    if(lastTimeRef.current===null){
-
+    if (lastTimeRef.current === null) {
       series.setData(candleData);
-
       lastTimeRef.current = last.time;
 
-      if(!initializedRef.current){
-
+      if (!initializedRef.current) {
         chart.timeScale().fitContent();
-        initializedRef.current=true;
-
+        initializedRef.current = true;
       }
-
       return;
-
     }
 
-    if(last.time >= lastTimeRef.current){
-
+    if (last.time >= lastTimeRef.current) {
       series.update(last);
 
-      if(!userScrollingRef.current){
-
-        try{
-          chart.timeScale().scrollToPosition(0,true);
-        }catch{}
-
+      if (!userScrollingRef.current) {
+        try {
+          chart.timeScale().scrollToPosition(0, true);
+        } catch {}
       }
 
       lastTimeRef.current = last.time;
-
     }
-
-  },[candleData]);
+  }, [candleData]);
 
   /* =========================================================
      TRADE MARKERS
   ========================================================= */
 
-  useEffect(()=>{
-
+  useEffect(() => {
     const series = candleSeriesRef.current;
-    if(!series) return;
+    if (!series) return;
 
     const markers = [];
 
-    for(const t of trades){
-
+    for (const t of trades) {
       const time = Number(t?.time);
-      if(!Number.isFinite(time)) continue;
+      if (!Number.isFinite(time)) continue;
 
-      if(t.side==="BUY"){
+      const side = String(t?.side || "").toUpperCase();
+
+      if (side === "BUY") {
         markers.push({
           time,
-          position:"belowBar",
-          color:"#22c55e",
-          shape:"arrowUp",
-          text:"BUY"
+          position: "belowBar",
+          color: "#22c55e",
+          shape: "arrowUp",
+          text: "BUY",
         });
       }
 
-      if(t.side==="SELL"){
+      if (side === "SELL") {
         markers.push({
           time,
-          position:"aboveBar",
-          color:"#ef4444",
-          shape:"arrowDown",
-          text:"SELL"
+          position: "aboveBar",
+          color: "#ef4444",
+          shape: "arrowDown",
+          text: "SELL",
         });
       }
 
+      if (
+        side === "CLOSE" ||
+        side === "STOP_LOSS" ||
+        side === "TAKE_PROFIT" ||
+        side === "TIME_EXIT" ||
+        side === "WARNING_EXIT" ||
+        side === "LOCKED_FLOOR" ||
+        side === "RUNNER_GIVEBACK" ||
+        side === "MOMENTUM_WEAKENING" ||
+        side === "MANUAL_CLOSE_NOW"
+      ) {
+        markers.push({
+          time,
+          position: "aboveBar",
+          color: "#f59e0b",
+          shape: "circle",
+          text: side,
+        });
+      }
     }
 
-    liveMarkersRef.current = markers;
-
     series.setMarkers(markers);
-
-  },[trades]);
+  }, [trades]);
 
   /* =========================================================
      TRADE PATH LINES
   ========================================================= */
 
-  useEffect(()=>{
+  useEffect(() => {
+    const lineSeries = tradeLineSeriesRef.current;
+    if (!lineSeries) return;
 
-    const lineSeries =
-      tradeLineSeriesRef.current;
+    const linePoints = [];
+    let openTrade = null;
 
-    if(!lineSeries) return;
+    for (const t of trades) {
+      const side = String(t?.side || "").toUpperCase();
+      const time = Number(t?.time);
+      const price = Number(t?.price);
 
-    const lines=[];
+      if (!Number.isFinite(time) || !Number.isFinite(price)) continue;
 
-    let entry=null;
-
-    for(const t of trades){
-
-      if(t.side==="BUY" || t.side==="SELL"){
-        entry=t;
+      if (side === "BUY" || side === "SELL") {
+        openTrade = { time, price, side };
+        continue;
       }
 
-      if(t.side==="CLOSE" && entry){
-
-        lines.push({
-          time: entry.time,
-          value: entry.price
-        });
-
-        lines.push({
-          time: t.time,
-          value: t.price
-        });
-
-        entry=null;
-
+      if (
+        openTrade &&
+        (
+          side === "CLOSE" ||
+          side === "STOP_LOSS" ||
+          side === "TAKE_PROFIT" ||
+          side === "TIME_EXIT" ||
+          side === "WARNING_EXIT" ||
+          side === "LOCKED_FLOOR" ||
+          side === "RUNNER_GIVEBACK" ||
+          side === "MOMENTUM_WEAKENING" ||
+          side === "MANUAL_CLOSE_NOW"
+        )
+      ) {
+        linePoints.push(
+          { time: openTrade.time, value: openTrade.price },
+          { time, value: price },
+          { time, value: NaN }
+        );
+        openTrade = null;
       }
-
     }
 
-    lineSeries.setData(lines);
-
-  },[trades]);
+    lineSeries.setData(linePoints.filter((p) => Number.isFinite(p.value) || Number.isNaN(p.value)));
+  }, [trades]);
 
   /* =========================================================
      ACTIVE TRADE LINES
   ========================================================= */
 
-  useEffect(()=>{
-
+  useEffect(() => {
     const series = candleSeriesRef.current;
-    if(!series) return;
+    if (!series) return;
 
-    if(entryLineRef.current){
+    if (entryLineRef.current) {
       series.removePriceLine(entryLineRef.current);
-      entryLineRef.current=null;
+      entryLineRef.current = null;
     }
 
-    if(tpLineRef.current){
+    if (tpLineRef.current) {
       series.removePriceLine(tpLineRef.current);
-      tpLineRef.current=null;
+      tpLineRef.current = null;
     }
 
-    if(slLineRef.current){
+    if (slLineRef.current) {
       series.removePriceLine(slLineRef.current);
-      slLineRef.current=null;
+      slLineRef.current = null;
     }
 
-    if(!position) return;
+    if (!activePosition) return;
 
-    const entry = position.entry;
+    entryLineRef.current = series.createPriceLine({
+      price: activePosition.entry,
+      color: "#38bdf8",
+      lineWidth: 2,
+      title: "ENTRY",
+    });
 
-    const tp =
-      position.side==="LONG"
-        ? entry * 1.0035
-        : entry * 0.9965;
-
-    const sl =
-      position.side==="LONG"
-        ? entry * 0.9975
-        : entry * 1.0025;
-
-    entryLineRef.current =
-      series.createPriceLine({
-        price:entry,
-        color:"#38bdf8",
-        lineWidth:2,
-        title:"ENTRY"
+    if (Number.isFinite(activePosition.takeProfit)) {
+      tpLineRef.current = series.createPriceLine({
+        price: activePosition.takeProfit,
+        color: "#22c55e",
+        lineWidth: 2,
+        title: "TP",
       });
+    }
 
-    tpLineRef.current =
-      series.createPriceLine({
-        price:tp,
-        color:"#22c55e",
-        lineWidth:2,
-        title:"TP"
+    if (Number.isFinite(activePosition.stopLoss)) {
+      slLineRef.current = series.createPriceLine({
+        price: activePosition.stopLoss,
+        color: "#ef4444",
+        lineWidth: 2,
+        title: "SL",
       });
+    }
+  }, [activePosition]);
 
-    slLineRef.current =
-      series.createPriceLine({
-        price:sl,
-        color:"#ef4444",
-        lineWidth:2,
-        title:"SL"
-      });
-
-  },[position]);
-
-  return(
-
-    <div style={{width:"100%"}}>
-
+  return (
+    <div style={{ width: "100%" }}>
       <div
         ref={wrapRef}
         style={{
-          width:"100%",
+          width: "100%",
           height,
-          borderRadius:14,
-          border:"1px solid rgba(148,163,184,.15)",
-          background:"#0b1220"
+          borderRadius: 14,
+          border: "1px solid rgba(148,163,184,.15)",
+          background: "#0b1220",
         }}
       />
-
     </div>
-
   );
-
 }
