@@ -79,10 +79,6 @@ export default function TradingRoom() {
     paper: "CONNECTING",
   });
 
-  /* =====================================================
-     SAFE HELPERS
-  ===================================================== */
-
   function safeNum(v, fallback = 0) {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
@@ -165,7 +161,14 @@ export default function TradingRoom() {
       maxDuration: safeNum(pos.maxDuration, 0),
       bestPnl: safeNum(pos.bestPnl, 0),
       targetPrice: Number.isFinite(Number(pos.targetPrice)) ? Number(pos.targetPrice) : null,
+      symbol: pos.symbol || SYMBOL,
+      side: pos.side || null,
+      mode: pos.mode || null,
     };
+  }
+
+  function hasUsablePositions(nextPositions) {
+    return !!(nextPositions?.structure || nextPositions?.scalp);
   }
 
   function getActiveDisplayPosition(nextPositions, fallbackSingle) {
@@ -258,16 +261,19 @@ export default function TradingRoom() {
 
     const { preserveOnEmpty = true, persist = true } = options;
 
-    const nextPositions = {
+    const normalizedIncomingPositions = {
       structure: normalizePositionShape(snap.positions?.structure, "structure"),
       scalp: normalizePositionShape(snap.positions?.scalp, "scalp"),
     };
 
-    const nextSinglePosition =
+    const normalizedSingle =
       normalizePositionShape(snap.position, "scalp") ||
-      getActiveDisplayPosition(nextPositions, null);
+      getActiveDisplayPosition(normalizedIncomingPositions, null);
 
-    const displayPosition = getActiveDisplayPosition(nextPositions, nextSinglePosition);
+    const displayPosition = getActiveDisplayPosition(
+      normalizedIncomingPositions,
+      normalizedSingle
+    );
 
     const nextEquity = safeNum(
       snap.equity,
@@ -291,6 +297,18 @@ export default function TradingRoom() {
       locked: safeNum(snap.lockedCapital, capital.locked),
     };
 
+    const nextTelemetry = {
+      ticks: safeNum(snap.executionStats?.ticks, telemetry.ticks),
+      decisions: safeNum(snap.executionStats?.decisions, telemetry.decisions),
+      trades: safeNum(snap.executionStats?.trades, telemetry.trades),
+      volatility: safeNum(snap.volatility, telemetry.volatility),
+      tradesToday: safeNum(snap.limits?.tradesToday, telemetry.tradesToday),
+      lossesToday: safeNum(snap.limits?.lossesToday, telemetry.lossesToday),
+      lastMode: snap.lastMode || telemetry.lastMode || "SCALP",
+      running:
+        typeof snap.running === "boolean" ? snap.running : telemetry.running,
+    };
+
     setEquity(nextEquity);
 
     setWallet((prev) => ({
@@ -299,8 +317,9 @@ export default function TradingRoom() {
     }));
 
     setPositions((prev) => {
-      const hasAnyIncoming = !!(nextPositions.structure || nextPositions.scalp);
-      if (hasAnyIncoming) return nextPositions;
+      if (hasUsablePositions(normalizedIncomingPositions)) {
+        return normalizedIncomingPositions;
+      }
       return preserveOnEmpty ? prev : { structure: null, scalp: null };
     });
 
@@ -324,17 +343,7 @@ export default function TradingRoom() {
     });
 
     setCapital(nextCapital);
-
-    setTelemetry((prev) => ({
-      ticks: safeNum(snap.executionStats?.ticks, prev.ticks),
-      decisions: safeNum(snap.executionStats?.decisions, prev.decisions),
-      trades: safeNum(snap.executionStats?.trades, prev.trades),
-      volatility: safeNum(snap.volatility, prev.volatility),
-      tradesToday: safeNum(snap.limits?.tradesToday, prev.tradesToday),
-      lossesToday: safeNum(snap.limits?.lossesToday, prev.lossesToday),
-      lastMode: snap.lastMode || prev.lastMode || "SCALP",
-      running: typeof snap.running === "boolean" ? snap.running : prev.running,
-    }));
+    setTelemetry(nextTelemetry);
 
     if (persist) {
       persistPanelState({
@@ -344,8 +353,8 @@ export default function TradingRoom() {
           btc: displayPosition ? safeNum(displayPosition.qty, 0) : 0,
         },
         position: displayPosition,
-        positions: hasUsablePositions(nextPositions)
-          ? nextPositions
+        positions: hasUsablePositions(normalizedIncomingPositions)
+          ? normalizedIncomingPositions
           : positions,
         trades: Array.isArray(snap.trades) && snap.trades.length
           ? snap.trades.slice(-500)
@@ -354,28 +363,10 @@ export default function TradingRoom() {
           ? snap.decisions.slice(-200)
           : decisions.slice(-200),
         capital: nextCapital,
-        telemetry: {
-          ticks: safeNum(snap.executionStats?.ticks, telemetry.ticks),
-          decisions: safeNum(snap.executionStats?.decisions, telemetry.decisions),
-          trades: safeNum(snap.executionStats?.trades, telemetry.trades),
-          volatility: safeNum(snap.volatility, telemetry.volatility),
-          tradesToday: safeNum(snap.limits?.tradesToday, telemetry.tradesToday),
-          lossesToday: safeNum(snap.limits?.lossesToday, telemetry.lossesToday),
-          lastMode: snap.lastMode || telemetry.lastMode || "SCALP",
-          running:
-            typeof snap.running === "boolean" ? snap.running : telemetry.running,
-        },
+        telemetry: nextTelemetry,
       });
     }
   }
-
-  function hasUsablePositions(nextPositions) {
-    return !!(nextPositions?.structure || nextPositions?.scalp);
-  }
-
-  /* =====================================================
-     DERIVED DATA
-  ===================================================== */
 
   const activePositions = useMemo(() => {
     return [positions.structure, positions.scalp].filter(Boolean);
@@ -393,6 +384,7 @@ export default function TradingRoom() {
 
   const openPnl = useMemo(() => {
     if (!position || !Number.isFinite(price)) return 0;
+
     const qty = safeNum(position.qty, 0);
     const entry = safeNum(position.entry, 0);
 
@@ -411,6 +403,7 @@ export default function TradingRoom() {
 
   const openPnlPct = useMemo(() => {
     if (!position || !Number.isFinite(price)) return 0;
+
     const entry = safeNum(position.entry, 0);
     if (!entry) return 0;
 
@@ -425,10 +418,6 @@ export default function TradingRoom() {
     return 0;
   }, [position, price]);
 
-  /* =====================================================
-     TRADE COUNTDOWN
-  ===================================================== */
-
   useEffect(() => {
     if (!position?.time || !position?.maxDuration) {
       setTimeLeft(null);
@@ -442,7 +431,6 @@ export default function TradingRoom() {
     };
 
     update();
-
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
   }, [position]);
@@ -458,16 +446,11 @@ export default function TradingRoom() {
     return `${s}s`;
   }
 
-  /* =====================================================
-     CANDLE GENERATOR
-  ===================================================== */
-
   function updateCandles(priceNow) {
     if (!Number.isFinite(priceNow)) return;
 
     const now = Math.floor(Date.now() / 1000);
     const candleTime = Math.floor(now / CANDLE_SECONDS) * CANDLE_SECONDS;
-
     const last = lastCandleRef.current;
 
     setCandles((prev) => {
@@ -506,10 +489,6 @@ export default function TradingRoom() {
     });
   }
 
-  /* =====================================================
-     RESTORE PANEL CACHE ON MOUNT
-  ===================================================== */
-
   useEffect(() => {
     const saved = readPersistedPanelState();
     if (!saved) return;
@@ -537,10 +516,6 @@ export default function TradingRoom() {
     }));
   }, []);
 
-  /* =====================================================
-     PERSIST PANEL STATE WHEN IT CHANGES
-  ===================================================== */
-
   useEffect(() => {
     if (!mountedRef.current) return;
 
@@ -555,10 +530,6 @@ export default function TradingRoom() {
       telemetry,
     });
   }, [equity, wallet, position, positions, trades, decisions, capital, telemetry]);
-
-  /* =====================================================
-     ENGINE SNAPSHOT
-  ===================================================== */
 
   async function loadEngineSnapshot() {
     const token = getToken();
@@ -585,10 +556,6 @@ export default function TradingRoom() {
     } catch {}
   }
 
-  /* =====================================================
-     MARKET WS
-  ===================================================== */
-
   function connectMarket() {
     const wsUrl = buildWsUrl("market");
     if (!wsUrl) return;
@@ -596,6 +563,7 @@ export default function TradingRoom() {
     try {
       const ws = new WebSocket(wsUrl);
       marketWsRef.current = ws;
+
       setConnection((prev) => ({ ...prev, market: "CONNECTING" }));
 
       ws.onopen = () => {
@@ -634,10 +602,6 @@ export default function TradingRoom() {
     }
   }
 
-  /* =====================================================
-     PAPER WS
-  ===================================================== */
-
   function connectPaper() {
     const wsUrl = buildWsUrl("paper");
     if (!wsUrl) return;
@@ -645,6 +609,7 @@ export default function TradingRoom() {
     try {
       const ws = new WebSocket(wsUrl);
       paperWsRef.current = ws;
+
       setConnection((prev) => ({ ...prev, paper: "CONNECTING" }));
 
       ws.onopen = () => {
@@ -684,10 +649,6 @@ export default function TradingRoom() {
     }
   }
 
-  /* =====================================================
-     ENGINE UPTIME
-  ===================================================== */
-
   useEffect(() => {
     const timer = setInterval(() => {
       if (!engineStartRef.current) {
@@ -708,10 +669,6 @@ export default function TradingRoom() {
 
     return () => clearInterval(timer);
   }, []);
-
-  /* =====================================================
-     INIT
-  ===================================================== */
 
   useEffect(() => {
     mountedRef.current = true;
@@ -736,10 +693,6 @@ export default function TradingRoom() {
     };
   }, []);
 
-  /* =====================================================
-     STYLES
-  ===================================================== */
-
   const card = {
     background: "linear-gradient(180deg, rgba(17,24,39,.98), rgba(10,15,28,.98))",
     border: "1px solid rgba(255,255,255,.07)",
@@ -760,10 +713,6 @@ export default function TradingRoom() {
     fontWeight: 700,
   };
 
-  /* =====================================================
-     UI
-  ===================================================== */
-
   return (
     <div
       style={{
@@ -778,12 +727,7 @@ export default function TradingRoom() {
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
-        <div
-          style={{
-            ...card,
-            padding: 16,
-          }}
-        >
+        <div style={{ ...card, padding: 16 }}>
           <div
             style={{
               display: "grid",
@@ -1026,7 +970,11 @@ function StatusPill({ label, value }) {
   let bg = "rgba(59,130,246,.14)";
   if (normalized.includes("CONNECTED") || normalized.includes("RUNNING")) {
     bg = "rgba(34,197,94,.16)";
-  } else if (normalized.includes("ERROR") || normalized.includes("DISCONNECTED") || normalized.includes("STOPPED")) {
+  } else if (
+    normalized.includes("ERROR") ||
+    normalized.includes("DISCONNECTED") ||
+    normalized.includes("STOPPED")
+  ) {
     bg = "rgba(239,68,68,.16)";
   } else if (normalized.includes("CONNECTING")) {
     bg = "rgba(234,179,8,.16)";
@@ -1087,7 +1035,8 @@ function PositionBox({ title, pos, price }) {
       maximumFractionDigits: digits,
     });
 
-  const fmtPct = (v, digits = 2) => `${(safeNum(v, 0) * 100).toFixed(digits)}%`;
+  const fmtPct = (v, digits = 2) =>
+    `${(safeNum(v, 0) * 100).toFixed(digits)}%`;
 
   let pnl = 0;
   let pnlPct = 0;
@@ -1118,11 +1067,19 @@ function PositionBox({ title, pos, price }) {
       ) : (
         <div style={{ fontSize: 13, lineHeight: 1.65 }}>
           <div><b>Side:</b> {pos.side || "-"}</div>
+          <div><b>Mode:</b> {pos.mode || "-"}</div>
           <div><b>Qty:</b> {fmtQty(pos.qty)}</div>
           <div><b>Entry:</b> ${fmtMoney(pos.entry)}</div>
           <div><b>Capital:</b> ${fmtMoney(pos.capitalUsed)}</div>
           <div><b>Stop:</b> {pos.stopLoss ? `$${fmtMoney(pos.stopLoss)}` : "-"}</div>
-          <div><b>Target:</b> {pos.takeProfit ? `$${fmtMoney(pos.takeProfit)}` : "-"}</div>
+          <div>
+            <b>Target:</b>{" "}
+            {pos.takeProfit
+              ? `$${fmtMoney(pos.takeProfit)}`
+              : pos.targetPrice
+              ? `$${fmtMoney(pos.targetPrice)}`
+              : "-"}
+          </div>
           <div>
             <b>Open PnL:</b>{" "}
             <span style={{ color: pnl >= 0 ? "#34d399" : "#f87171" }}>
