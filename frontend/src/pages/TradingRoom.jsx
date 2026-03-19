@@ -3,12 +3,16 @@
 // MODULE: Trading Room
 // PURPOSE: Live market dashboard + AI paper trading interface
 //
-// FIXED
+// UPGRADE
 // ✔ stable reconnect logic
 // ✔ avoids reconnect-after-unmount loops
 // ✔ supports dual-slot paper snapshot shape
 // ✔ guards against empty snapshot wipes
 // ✔ richer terminal layout
+// ✔ manual trader intervention controls
+// ✔ close-now action
+// ✔ protect-profit arm/disarm controls
+// ✔ backend-ready action hooks
 // ==========================================================
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -74,6 +78,25 @@ export default function TradingRoom() {
     paper: "CONNECTING",
   });
 
+  const [actionBusy, setActionBusy] = useState({
+    closeNow: false,
+    protect: false,
+    disarm: false,
+  });
+
+  const [protection, setProtection] = useState({
+    armed: false,
+    mode: "TRAIL_RETRACE",
+    trailPct: 0.0018,
+    triggerPrice: null,
+    highestPrice: null,
+    lowestPrice: null,
+    slot: null,
+    side: null,
+    note: "",
+    updatedAt: 0,
+  });
+
   function safeNum(v, fallback = 0) {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
@@ -116,6 +139,7 @@ export default function TradingRoom() {
 
     const headers = {
       Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
     };
 
     if (companyId) {
@@ -276,6 +300,27 @@ export default function TradingRoom() {
       running: typeof snap.running === "boolean" ? snap.running : telemetry.running,
     };
 
+    const nextProtection = snap.protection && typeof snap.protection === "object"
+      ? {
+          armed: !!snap.protection.armed,
+          mode: snap.protection.mode || "TRAIL_RETRACE",
+          trailPct: safeNum(snap.protection.trailPct, protection.trailPct),
+          triggerPrice: Number.isFinite(Number(snap.protection.triggerPrice))
+            ? Number(snap.protection.triggerPrice)
+            : null,
+          highestPrice: Number.isFinite(Number(snap.protection.highestPrice))
+            ? Number(snap.protection.highestPrice)
+            : null,
+          lowestPrice: Number.isFinite(Number(snap.protection.lowestPrice))
+            ? Number(snap.protection.lowestPrice)
+            : null,
+          slot: snap.protection.slot || null,
+          side: snap.protection.side || null,
+          note: snap.protection.note || "",
+          updatedAt: safeNum(snap.protection.updatedAt, Date.now()),
+        }
+      : protection;
+
     setEquity(nextEquity);
 
     setWallet({
@@ -311,6 +356,7 @@ export default function TradingRoom() {
 
     setCapital(nextCapital);
     setTelemetry(nextTelemetry);
+    setProtection(nextProtection);
 
     if (persist) {
       persistPanelState({
@@ -325,6 +371,7 @@ export default function TradingRoom() {
         decisions: Array.isArray(snap.decisions) && snap.decisions.length ? snap.decisions.slice(-200) : decisions.slice(-200),
         capital: nextCapital,
         telemetry: nextTelemetry,
+        protection: nextProtection,
       });
     }
   }
@@ -364,6 +411,35 @@ export default function TradingRoom() {
     if (position.side === "SHORT") return (entry - price) / entry;
     return 0;
   }, [position, price]);
+
+  const protectionPreview = useMemo(() => {
+    if (!position || !Number.isFinite(price)) return null;
+
+    const trailPct = safeNum(protection.trailPct, 0);
+    if (trailPct <= 0) return null;
+
+    const anchorHigh = Math.max(
+      safeNum(protection.highestPrice, 0),
+      safeNum(price, 0),
+      safeNum(position.entry, 0)
+    );
+
+    const anchorLowBase = safeNum(protection.lowestPrice, 0);
+    const anchorLow =
+      anchorLowBase > 0
+        ? Math.min(anchorLowBase, safeNum(price, 0))
+        : Math.min(safeNum(price, 0), safeNum(position.entry, 0));
+
+    if (position.side === "LONG") {
+      return anchorHigh * (1 - trailPct);
+    }
+
+    if (position.side === "SHORT") {
+      return anchorLow * (1 + trailPct);
+    }
+
+    return null;
+  }, [position, price, protection]);
 
   useEffect(() => {
     if (!position?.time || !position?.maxDuration) {
@@ -455,6 +531,12 @@ export default function TradingRoom() {
       ...prev,
       ...(saved.telemetry || {}),
     }));
+    if (saved.protection) {
+      setProtection((prev) => ({
+        ...prev,
+        ...saved.protection,
+      }));
+    }
   }, []);
 
   useEffect(() => {
@@ -469,8 +551,9 @@ export default function TradingRoom() {
       decisions: Array.isArray(decisions) ? decisions.slice(-200) : [],
       capital,
       telemetry,
+      protection,
     });
-  }, [equity, wallet, position, positions, trades, decisions, capital, telemetry]);
+  }, [equity, wallet, position, positions, trades, decisions, capital, telemetry, protection]);
 
   async function loadEngineSnapshot() {
     const token = getToken();
@@ -495,6 +578,98 @@ export default function TradingRoom() {
         persist: true,
       });
     } catch {}
+  }
+
+  async function handleCloseNow() {
+    if (!position || actionBusy.closeNow) return;
+
+    setActionBusy((prev) => ({ ...prev, closeNow: true }));
+
+    try {
+      await fetch(`${API_BASE}/api/paper/close`, {
+        method: "POST",
+        headers: buildAuthHeaders(),
+        body: JSON.stringify({
+          symbol: position.symbol || SYMBOL,
+          slot: position.slot || "scalp",
+          reason: "MANUAL_CLOSE_NOW",
+        }),
+      });
+
+      setProtection((prev) => ({
+        ...prev,
+        armed: false,
+        note: "Manual close requested",
+        updatedAt: Date.now(),
+      }));
+    } catch {
+    } finally {
+      setActionBusy((prev) => ({ ...prev, closeNow: false }));
+    }
+  }
+
+  async function handleArmProtectProfit() {
+    if (!position || actionBusy.protect) return;
+
+    const payload = {
+      symbol: position.symbol || SYMBOL,
+      slot: position.slot || "scalp",
+      mode: "TRAIL_RETRACE",
+      trailPct: 0.0018,
+    };
+
+    setActionBusy((prev) => ({ ...prev, protect: true }));
+
+    try {
+      await fetch(`${API_BASE}/api/paper/protect-profit`, {
+        method: "POST",
+        headers: buildAuthHeaders(),
+        body: JSON.stringify(payload),
+      });
+
+      setProtection({
+        armed: true,
+        mode: "TRAIL_RETRACE",
+        trailPct: payload.trailPct,
+        triggerPrice: protectionPreview,
+        highestPrice: position.side === "LONG" ? price : null,
+        lowestPrice: position.side === "SHORT" ? price : null,
+        slot: position.slot || "scalp",
+        side: position.side || null,
+        note: "Profit protection armed",
+        updatedAt: Date.now(),
+      });
+    } catch {
+    } finally {
+      setActionBusy((prev) => ({ ...prev, protect: false }));
+    }
+  }
+
+  async function handleDisarmProtectProfit() {
+    if (actionBusy.disarm) return;
+
+    setActionBusy((prev) => ({ ...prev, disarm: true }));
+
+    try {
+      await fetch(`${API_BASE}/api/paper/protect-profit/disable`, {
+        method: "POST",
+        headers: buildAuthHeaders(),
+        body: JSON.stringify({
+          symbol: position?.symbol || SYMBOL,
+          slot: position?.slot || protection.slot || "scalp",
+        }),
+      });
+
+      setProtection((prev) => ({
+        ...prev,
+        armed: false,
+        note: "Profit protection disarmed",
+        updatedAt: Date.now(),
+      }));
+    } catch {
+    } finally {
+      setActionBusy((prev) => ({ ...prev, disarm: false }));
+    }
   }
 
   function cleanupSocket(ref) {
@@ -779,7 +954,7 @@ export default function TradingRoom() {
                 boxShadow: "0 8px 24px rgba(0,0,0,.35)",
                 fontSize: 12,
                 lineHeight: 1.5,
-                minWidth: 190,
+                minWidth: 210,
               }}
             >
               <div style={{ fontWeight: 800, marginBottom: 4 }}>AI TRADE ACTIVE</div>
@@ -793,6 +968,18 @@ export default function TradingRoom() {
                   ${fmtMoney(openPnl)} ({fmtPct(openPnlPct)})
                 </span>
               </div>
+
+              {protection.armed && (
+                <>
+                  <div style={{ marginTop: 8, borderTop: "1px solid rgba(255,255,255,.08)", paddingTop: 8 }}>
+                    <div style={{ fontWeight: 700, color: "#fbbf24" }}>Protect Profit Armed</div>
+                    <div>Trail: {fmtPct(protection.trailPct, 3)}</div>
+                    <div>
+                      Trigger: {protectionPreview ? `$${fmtPrice(protectionPreview)}` : "-"}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -817,6 +1004,89 @@ export default function TradingRoom() {
       <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
         <div style={{ ...card, padding: 16 }}>
           <OrderPanel symbol={SYMBOL} price={price} />
+        </div>
+
+        <div style={{ ...card, padding: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
+            Manual Trade Controls
+          </div>
+
+          <div style={{ display: "grid", gap: 10 }}>
+            <button
+              className="btn"
+              onClick={handleCloseNow}
+              disabled={!position || actionBusy.closeNow}
+              style={{
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(248,113,113,.35)",
+                background: "rgba(127,29,29,.35)",
+                color: "#fff",
+                fontWeight: 800,
+                cursor: !position || actionBusy.closeNow ? "not-allowed" : "pointer",
+                opacity: !position || actionBusy.closeNow ? 0.6 : 1,
+              }}
+            >
+              {actionBusy.closeNow ? "Closing..." : "Close Now"}
+            </button>
+
+            <button
+              className="btn"
+              onClick={handleArmProtectProfit}
+              disabled={!position || protection.armed || actionBusy.protect}
+              style={{
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(251,191,36,.35)",
+                background: "rgba(120,53,15,.35)",
+                color: "#fff",
+                fontWeight: 800,
+                cursor: !position || protection.armed || actionBusy.protect ? "not-allowed" : "pointer",
+                opacity: !position || protection.armed || actionBusy.protect ? 0.6 : 1,
+              }}
+            >
+              {actionBusy.protect ? "Arming..." : "Protect Profit"}
+            </button>
+
+            <button
+              className="btn"
+              onClick={handleDisarmProtectProfit}
+              disabled={!protection.armed || actionBusy.disarm}
+              style={{
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(96,165,250,.35)",
+                background: "rgba(30,64,175,.28)",
+                color: "#fff",
+                fontWeight: 800,
+                cursor: !protection.armed || actionBusy.disarm ? "not-allowed" : "pointer",
+                opacity: !protection.armed || actionBusy.disarm ? 0.6 : 1,
+              }}
+            >
+              {actionBusy.disarm ? "Disarming..." : "Disarm Protect"}
+            </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: 12,
+              padding: 12,
+              borderRadius: 10,
+              background: "rgba(255,255,255,.03)",
+              border: "1px solid rgba(255,255,255,.06)",
+              fontSize: 12,
+              lineHeight: 1.6,
+            }}
+          >
+            <div><b>Status:</b> {protection.armed ? "ARMED" : "IDLE"}</div>
+            <div><b>Mode:</b> {protection.mode}</div>
+            <div><b>Trail Distance:</b> {fmtPct(protection.trailPct, 3)}</div>
+            <div>
+              <b>Trail Trigger:</b> {protectionPreview ? `$${fmtPrice(protectionPreview)}` : "-"}
+            </div>
+            <div><b>Tracking Slot:</b> {protection.slot || position?.slot || "-"}</div>
+            <div><b>Note:</b> {protection.note || "No manual protection active"}</div>
+          </div>
         </div>
 
         <div style={{ ...card, padding: 16 }}>
