@@ -15,25 +15,11 @@
 //   1) current engine health and status
 //   2) current paper trading snapshot
 //   3) persistent trade history and decision history
-//   4) daily / weekly / all-time performance summaries
+//   4) daily / weekly / monthly / yearly / all-time summaries
 //   5) AI behavior / confidence / brain state
 //   6) reset history and activity visibility
 //   7) backend-connected monitoring so maintenance can tell
 //      whether history is actually being saved
-//
-// WHY THIS FILE EXISTS
-// ------------------------------------------------------------
-// If the platform needs to answer:
-//
-// - Is the engine alive?
-// - Is the AI making decisions?
-// - Are trades being archived?
-// - How many wins happened today?
-// - How did this week compare to previous days?
-// - When was the last reset?
-// - Is backend analytics working or only live streaming?
-//
-// ...this file should make that visible immediately.
 //
 // BACKEND DATA SOURCES USED
 // ------------------------------------------------------------
@@ -46,45 +32,29 @@
 // Optional historical analytics memory:
 //   GET /api/analytics/trading
 //
-// NOTES ABOUT BACKEND COMPATIBILITY
+// DESIGN RULE
 // ------------------------------------------------------------
-// This file is written with fallbacks because backend versions
-// often drift.
-//
-// That means:
-// - if /api/analytics/trading exists, use it
-// - if it does not exist yet, derive useful history from
-//   /api/paper/status snapshot data
-// - if AI analytics is unavailable, keep the room working
+// This file NEVER treats the browser as the source of truth.
+// The backend should be the memory.
+// This page only reads, merges, displays, and explains it.
 //
 // MAINTENANCE NOTES
 // ------------------------------------------------------------
 // If live status does not update:
 //   - inspect /api/paper/status
-//   - inspect token auth header
+//   - inspect auth headers
 //
 // If AI brain data is blank:
 //   - inspect /api/ai/analytics
 //
-// If daily / weekly / reset history is blank:
+// If login/reset/month/year history is blank:
 //   - inspect /api/analytics/trading
-//   - inspect backend persistence / archival layer
+//   - inspect backend archival / persistence jobs
 //
-// If this page shows live data but no long-term history:
-//   - backend is likely streaming current state only
-//   - persistent analytics memory is likely missing
-//
-// If wins / losses look wrong:
-//   - inspect trade pnl values from backend
-//   - inspect timestamp fields used for daily / weekly grouping
-//
-// DESIGN GOAL
-// ------------------------------------------------------------
-// A maintenance engineer should be able to open this file and
-// immediately understand:
-// - what data comes in
-// - what each panel means
-// - where to inspect if something breaks
+// If counts look wrong:
+//   - inspect timestamp fields on trades/decisions
+//   - inspect whether backend is sending open + close events
+//   - inspect whether some rows are informational events, not trades
 //
 // ============================================================
 
@@ -100,45 +70,49 @@ CONFIG
 const API_BASE = (import.meta.env.VITE_API_BASE || "").replace(/\/+$/, "");
 const LIVE_POLL_MS = 5000;
 const HISTORY_POLL_MS = 15000;
-const MAX_TRADES = 500;
-const MAX_DECISIONS = 200;
+const MAX_TRADES = 1000;
+const MAX_DECISIONS = 400;
 
 /* ============================================================
 DEFAULTS
 ============================================================ */
 
+const EMPTY_PERIOD = {
+  wins: 0,
+  losses: 0,
+  breakeven: 0,
+  trades: 0,
+  closedTrades: 0,
+  pnl: 0,
+  grossWinPnl: 0,
+  grossLossPnl: 0,
+  avgPnl: 0,
+  winRate: 0,
+  profitFactor: 0,
+  resets: 0,
+  logins: 0,
+};
+
 const EMPTY_HISTORY = {
-  today: {
-    wins: 0,
-    losses: 0,
-    trades: 0,
-    pnl: 0,
-    resets: 0,
-    logins: 0,
-  },
-  week: {
-    wins: 0,
-    losses: 0,
-    trades: 0,
-    pnl: 0,
-  },
-  allTime: {
-    wins: 0,
-    losses: 0,
-    trades: 0,
-    pnl: 0,
-    resets: 0,
-    logins: 0,
-  },
+  today: { ...EMPTY_PERIOD },
+  week: { ...EMPTY_PERIOD },
+  month: { ...EMPTY_PERIOD },
+  year: { ...EMPTY_PERIOD },
+  allTime: { ...EMPTY_PERIOD },
   recentResets: [],
   recentLogins: [],
   daily: [],
+  weekly: [],
+  monthly: [],
+  tradeArchive: [],
+  decisionArchive: [],
 };
 
 const EMPTY_STATS = {
   equity: 0,
   winRate: 0,
   trades: 0,
+  closedTrades: 0,
   pnl: 0,
   drawdown: 0,
 };
@@ -244,9 +218,7 @@ export default function Analytics() {
   function formatUptimeFromTicks(ticks) {
     const safeTicks = safeNum(ticks, 0);
     if (safeTicks <= 0) return "0s";
-
-    const approxSeconds = safeTicks;
-    return formatUptimeFromMs(approxSeconds * 1000);
+    return formatUptimeFromMs(safeTicks * 1000);
   }
 
   function getCompanyId() {
@@ -276,6 +248,7 @@ export default function Analytics() {
 
   function getItemTime(item) {
     const raw =
+      item?.closedAt ??
       item?.time ??
       item?.createdAt ??
       item?.updatedAt ??
@@ -286,35 +259,66 @@ export default function Analytics() {
     if (!raw) return null;
 
     const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) {
-      const n = Number(raw);
-      if (Number.isFinite(n)) {
-        const dn = new Date(n);
-        return Number.isNaN(dn.getTime()) ? null : dn;
-      }
-      return null;
+    if (!Number.isNaN(d.getTime())) return d;
+
+    const n = Number(raw);
+    if (Number.isFinite(n)) {
+      const dn = new Date(n);
+      return Number.isNaN(dn.getTime()) ? null : dn;
     }
 
+    return null;
+  }
+
+  function startOfDay(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  function startOfWeek(date) {
+    const d = startOfDay(date);
+    const day = d.getDay();
+    const diff = day === 0 ? 6 : day - 1;
+    d.setDate(d.getDate() - diff);
     return d;
   }
 
-  function isSameDay(dateA, dateB) {
-    return (
-      dateA.getFullYear() === dateB.getFullYear() &&
-      dateA.getMonth() === dateB.getMonth() &&
-      dateA.getDate() === dateB.getDate()
-    );
+  function startOfMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
   }
 
-  function daysAgo(baseDate, days) {
-    const d = new Date(baseDate);
-    d.setDate(d.getDate() - days);
-    return d;
+  function startOfYear(date) {
+    return new Date(date.getFullYear(), 0, 1);
+  }
+
+  function isTradeClosed(trade) {
+    if (!trade || typeof trade !== "object") return false;
+
+    if (trade.pnl !== undefined && trade.pnl !== null) return true;
+
+    const status = String(trade.status || trade.state || "").toUpperCase();
+    if (["CLOSED", "FILLED", "EXITED", "COMPLETED", "SETTLED"].includes(status)) {
+      return true;
+    }
+
+    const action = String(trade.action || trade.type || trade.event || "").toUpperCase();
+    if (action.includes("CLOSE") || action.includes("EXIT")) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function classifyTradeOutcome(trade) {
+    const pnl = safeNum(trade?.pnl, 0);
+    if (pnl > 0) return "win";
+    if (pnl < 0) return "loss";
+    return "breakeven";
   }
 
   function normalizeTradeKey(t, idx = 0) {
     return [
-      t?.time ?? t?.createdAt ?? "na",
+      t?.id ?? "na",
+      t?.time ?? t?.createdAt ?? t?.closedAt ?? "na",
       t?.symbol ?? "na",
       t?.slot ?? "na",
       t?.side ?? "na",
@@ -326,6 +330,7 @@ export default function Analytics() {
 
   function normalizeDecisionKey(d, idx = 0) {
     return [
+      d?.id ?? "na",
       d?.time ?? d?.createdAt ?? "na",
       d?.slot ?? "na",
       d?.mode ?? "na",
@@ -365,116 +370,132 @@ export default function Analytics() {
       .slice(-MAX_DECISIONS);
   }
 
-  function summarizeTrades(tradesInput) {
-    const trades = Array.isArray(tradesInput) ? tradesInput : [];
-    const now = new Date();
-    const weekStart = daysAgo(now, 6);
+  function emptyPeriod() {
+    return { ...EMPTY_PERIOD };
+  }
 
-    let wins = 0;
-    let losses = 0;
-    let pnl = 0;
-
-    let todayWins = 0;
-    let todayLosses = 0;
-    let todayTrades = 0;
-    let todayPnl = 0;
-
-    let weekWins = 0;
-    let weekLosses = 0;
-    let weekTrades = 0;
-    let weekPnl = 0;
-
-    const dailyMap = new Map();
-
-    trades.forEach((t) => {
-      const tradePnl = safeNum(t?.pnl, 0);
-      const tradeDate = getItemTime(t);
-      const isWin = tradePnl > 0;
-      const isLoss = tradePnl < 0;
-
-      pnl += tradePnl;
-      if (isWin) wins += 1;
-      if (isLoss) losses += 1;
-
-      if (tradeDate) {
-        const dayKey = `${tradeDate.getFullYear()}-${String(
-          tradeDate.getMonth() + 1
-        ).padStart(2, "0")}-${String(tradeDate.getDate()).padStart(2, "0")}`;
-
-        const daily = dailyMap.get(dayKey) || {
-          date: dayKey,
-          wins: 0,
-          losses: 0,
-          trades: 0,
-          pnl: 0,
-        };
-
-        daily.trades += 1;
-        daily.pnl += tradePnl;
-        if (isWin) daily.wins += 1;
-        if (isLoss) daily.losses += 1;
-
-        dailyMap.set(dayKey, daily);
-
-        if (isSameDay(tradeDate, now)) {
-          todayTrades += 1;
-          todayPnl += tradePnl;
-          if (isWin) todayWins += 1;
-          if (isLoss) todayLosses += 1;
-        }
-
-        if (tradeDate >= weekStart) {
-          weekTrades += 1;
-          weekPnl += tradePnl;
-          if (isWin) weekWins += 1;
-          if (isLoss) weekLosses += 1;
-        }
-      }
-    });
+  function finalizePeriod(period) {
+    const closedTrades = safeNum(period.closedTrades, 0);
+    const grossWinPnl = safeNum(period.grossWinPnl, 0);
+    const grossLossPnl = Math.abs(safeNum(period.grossLossPnl, 0));
 
     return {
-      today: {
-        wins: todayWins,
-        losses: todayLosses,
-        trades: todayTrades,
-        pnl: todayPnl,
-        resets: 0,
-        logins: 0,
-      },
-      week: {
-        wins: weekWins,
-        losses: weekLosses,
-        trades: weekTrades,
-        pnl: weekPnl,
-      },
-      allTime: {
-        wins,
-        losses,
-        trades: trades.length,
-        pnl,
-        resets: 0,
-        logins: 0,
-      },
-      daily: Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date)).slice(-14),
+      ...period,
+      avgPnl: closedTrades > 0 ? safeNum(period.pnl, 0) / closedTrades : 0,
+      winRate: closedTrades > 0 ? (safeNum(period.wins, 0) / closedTrades) * 100 : 0,
+      profitFactor: grossLossPnl > 0 ? grossWinPnl / grossLossPnl : grossWinPnl > 0 ? grossWinPnl : 0,
     };
   }
 
-  function buildEquityCurve(tradesInput, startingEquity = 0) {
+  function buildPeriodsFromTrades(tradesInput) {
     const trades = Array.isArray(tradesInput) ? tradesInput : [];
+    const now = new Date();
 
-    let rollingEquity = safeNum(startingEquity, 0);
-    let peak = rollingEquity;
+    const todayStart = startOfDay(now);
+    const weekStart = startOfWeek(now);
+    const monthStart = startOfMonth(now);
+    const yearStart = startOfYear(now);
+
+    const today = emptyPeriod();
+    const week = emptyPeriod();
+    const month = emptyPeriod();
+    const year = emptyPeriod();
+    const allTime = emptyPeriod();
+
+    const dailyMap = new Map();
+    const weeklyMap = new Map();
+    const monthlyMap = new Map();
+
+    trades.forEach((trade) => {
+      const tradeDate = getItemTime(trade);
+      const closed = isTradeClosed(trade);
+      const pnl = safeNum(trade?.pnl, 0);
+
+      allTime.trades += 1;
+      if (!tradeDate) return;
+
+      const dayKey = `${tradeDate.getFullYear()}-${String(tradeDate.getMonth() + 1).padStart(2, "0")}-${String(tradeDate.getDate()).padStart(2, "0")}`;
+      const monthKey = `${tradeDate.getFullYear()}-${String(tradeDate.getMonth() + 1).padStart(2, "0")}`;
+      const weekBase = startOfWeek(tradeDate);
+      const weekKey = `${weekBase.getFullYear()}-${String(weekBase.getMonth() + 1).padStart(2, "0")}-${String(weekBase.getDate()).padStart(2, "0")}`;
+
+      const addInto = (bucket) => {
+        bucket.trades += 1;
+        if (!closed) return;
+
+        bucket.closedTrades += 1;
+        bucket.pnl += pnl;
+
+        const outcome = classifyTradeOutcome(trade);
+        if (outcome === "win") {
+          bucket.wins += 1;
+          bucket.grossWinPnl += pnl;
+        } else if (outcome === "loss") {
+          bucket.losses += 1;
+          bucket.grossLossPnl += pnl;
+        } else {
+          bucket.breakeven += 1;
+        }
+      };
+
+      addInto(allTime);
+
+      const dailyBucket = dailyMap.get(dayKey) || { date: dayKey, ...emptyPeriod() };
+      addInto(dailyBucket);
+      dailyMap.set(dayKey, dailyBucket);
+
+      const weeklyBucket = weeklyMap.get(weekKey) || { date: weekKey, ...emptyPeriod() };
+      addInto(weeklyBucket);
+      weeklyMap.set(weekKey, weeklyBucket);
+
+      const monthlyBucket = monthlyMap.get(monthKey) || { date: monthKey, ...emptyPeriod() };
+      addInto(monthlyBucket);
+      monthlyMap.set(monthKey, monthlyBucket);
+
+      if (tradeDate >= todayStart) addInto(today);
+      if (tradeDate >= weekStart) addInto(week);
+      if (tradeDate >= monthStart) addInto(month);
+      if (tradeDate >= yearStart) addInto(year);
+    });
+
+    return {
+      today: finalizePeriod(today),
+      week: finalizePeriod(week),
+      month: finalizePeriod(month),
+      year: finalizePeriod(year),
+      allTime: finalizePeriod(allTime),
+      daily: Array.from(dailyMap.values())
+        .map(finalizePeriod)
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+        .slice(-30),
+      weekly: Array.from(weeklyMap.values())
+        .map(finalizePeriod)
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+        .slice(-16),
+      monthly: Array.from(monthlyMap.values())
+        .map(finalizePeriod)
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+        .slice(-12),
+    };
+  }
+
+  function buildEquityCurve(tradesInput, baseEquity = 0) {
+    const trades = Array.isArray(tradesInput) ? tradesInput : [];
+    let runningEquity = safeNum(baseEquity, 0);
+    let peak = runningEquity;
     let maxDD = 0;
     const curve = [];
 
-    trades.forEach((t) => {
-      rollingEquity += safeNum(t?.pnl, 0);
-      peak = Math.max(peak, rollingEquity);
+    trades.forEach((trade) => {
+      if (!isTradeClosed(trade)) return;
 
-      const dd = peak > 0 ? ((peak - rollingEquity) / peak) * 100 : 0;
+      runningEquity += safeNum(trade?.pnl, 0);
+      peak = Math.max(peak, runningEquity);
+
+      const dd = peak > 0 ? ((peak - runningEquity) / peak) * 100 : 0;
       maxDD = Math.max(maxDD, dd);
 
-      curve.push(rollingEquity);
+      curve.push(runningEquity);
     });
 
     return {
@@ -483,9 +504,42 @@ export default function Analytics() {
     };
   }
 
+  function coerceHistoryShape(raw = {}, fallbackTrades = [], fallbackDecisions = []) {
+    const derived = buildPeriodsFromTrades(fallbackTrades);
+
+    return {
+      today: finalizePeriod({
+        ...derived.today,
+        ...(raw.today || {}),
+      }),
+      week: finalizePeriod({
+        ...derived.week,
+        ...(raw.week || {}),
+      }),
+      month: finalizePeriod({
+        ...derived.month,
+        ...(raw.month || {}),
+      }),
+      year: finalizePeriod({
+        ...derived.year,
+        ...(raw.year || {}),
+      }),
+      allTime: finalizePeriod({
+        ...derived.allTime,
+        ...(raw.allTime || {}),
+      }),
+      recentResets: Array.isArray(raw.recentResets) ? raw.recentResets : [],
+      recentLogins: Array.isArray(raw.recentLogins) ? raw.recentLogins : [],
+      daily: Array.isArray(raw.daily) && raw.daily.length ? raw.daily : derived.daily,
+      weekly: Array.isArray(raw.weekly) && raw.weekly.length ? raw.weekly : derived.weekly,
+      monthly: Array.isArray(raw.monthly) && raw.monthly.length ? raw.monthly : derived.monthly,
+      tradeArchive: Array.isArray(raw.tradeArchive) && raw.tradeArchive.length ? raw.tradeArchive : fallbackTrades,
+      decisionArchive: Array.isArray(raw.decisionArchive) && raw.decisionArchive.length ? raw.decisionArchive : fallbackDecisions,
+    };
+  }
+
   /* ==========================================================
   LIVE STATUS LOAD
-  This is the primary source for current engine state.
   ========================================================== */
 
   async function loadLiveStatus() {
@@ -511,24 +565,28 @@ export default function Analytics() {
       const decisions = Array.isArray(snap?.decisions) ? snap.decisions : [];
       const execStats = snap?.executionStats || {};
 
+      const mergedTrades = mergeTrades(tradeLog, trades);
+      const mergedDecisions = mergeDecisions(decisionLog, decisions);
+
       setSnapshot(snap);
-      setTradeLog((prev) => mergeTrades(prev, trades));
-      setDecisionLog((prev) => mergeDecisions(prev, decisions));
+      setTradeLog(mergedTrades);
+      setDecisionLog(mergedDecisions);
 
       const currentEquity = safeNum(snap?.equity, safeNum(snap?.cashBalance, 0));
-      const { curve, drawdownPct } = buildEquityCurve(trades, currentEquity);
-      const tradeSummary = summarizeTrades(trades);
+      const periods = buildPeriodsFromTrades(mergedTrades);
+      const { curve, drawdownPct } = buildEquityCurve(
+        mergedTrades,
+        safeNum(snap?.startingEquity, currentEquity - periods.allTime.pnl)
+      );
 
       setEquityHistory(curve);
 
       setStats({
         equity: currentEquity,
-        winRate:
-          trades.length > 0
-            ? (tradeSummary.allTime.wins / trades.length) * 100
-            : 0,
-        trades: trades.length,
-        pnl: tradeSummary.allTime.pnl,
+        winRate: periods.allTime.winRate,
+        trades: periods.allTime.trades,
+        closedTrades: periods.allTime.closedTrades,
+        pnl: periods.allTime.pnl,
         drawdown: drawdownPct,
       });
 
@@ -542,8 +600,8 @@ export default function Analytics() {
           ? formatUptimeFromMs(Date.now() - safeNum(data.engineStart, Date.now()))
           : formatUptimeFromTicks(execStats?.ticks),
         ticks: safeNum(execStats?.ticks, 0),
-        decisions: safeNum(execStats?.decisions, decisions.length),
-        trades: safeNum(execStats?.trades, trades.length),
+        decisions: safeNum(execStats?.decisions, mergedDecisions.length),
+        trades: safeNum(execStats?.trades, mergedTrades.length),
         aiConfidence: safeNum(data?.brainState?.smoothedConfidence, 0),
         lastMode: snap?.lastMode || "SCALP",
       });
@@ -552,7 +610,7 @@ export default function Analytics() {
       let sell = 0;
       let hold = 0;
 
-      decisions.forEach((d) => {
+      mergedDecisions.forEach((d) => {
         const action = String(d?.action || "").toUpperCase();
         if (action.includes("BUY")) buy += 1;
         else if (action.includes("SELL")) sell += 1;
@@ -563,8 +621,7 @@ export default function Analytics() {
         buy,
         sell,
         hold,
-        accuracy:
-          trades.length > 0 ? (tradeSummary.allTime.wins / trades.length) * 100 : 0,
+        accuracy: periods.allTime.winRate,
       });
 
       const activePosition = snap?.position || null;
@@ -578,24 +635,40 @@ export default function Analytics() {
         mode: prev.mode || "paper",
       }));
 
-      setHistory((prev) => ({
-        ...prev,
-        today: {
-          ...prev.today,
-          ...tradeSummary.today,
-        },
-        week: {
-          ...prev.week,
-          ...tradeSummary.week,
-        },
-        allTime: {
-          ...prev.allTime,
-          ...tradeSummary.allTime,
-          resets: prev.allTime?.resets || 0,
-          logins: prev.allTime?.logins || 0,
-        },
-        daily: prev.daily?.length ? prev.daily : tradeSummary.daily,
-      }));
+      setHistory((prev) => {
+        const next = coerceHistoryShape(prev, mergedTrades, mergedDecisions);
+
+        return {
+          ...next,
+          today: {
+            ...next.today,
+            ...periods.today,
+          },
+          week: {
+            ...next.week,
+            ...periods.week,
+          },
+          month: {
+            ...next.month,
+            ...periods.month,
+          },
+          year: {
+            ...next.year,
+            ...periods.year,
+          },
+          allTime: {
+            ...next.allTime,
+            ...periods.allTime,
+            resets: safeNum(next.allTime?.resets, 0),
+            logins: safeNum(next.allTime?.logins, 0),
+          },
+          daily: next.daily?.length ? next.daily : periods.daily,
+          weekly: next.weekly?.length ? next.weekly : periods.weekly,
+          monthly: next.monthly?.length ? next.monthly : periods.monthly,
+          tradeArchive: mergedTrades,
+          decisionArchive: mergedDecisions,
+        };
+      });
 
       setError("");
     } catch (e) {
@@ -607,7 +680,6 @@ export default function Analytics() {
 
   /* ==========================================================
   OPTIONAL AI ANALYTICS LOAD
-  This enriches the room with brain/config information.
   ========================================================== */
 
   async function loadAIAnalytics() {
@@ -631,10 +703,7 @@ export default function Analytics() {
 
       setRisk((prev) => ({
         ...prev,
-        riskPercent: safeNum(
-          nextConfig?.riskPercent ?? nextConfig?.riskPct,
-          prev.riskPercent
-        ),
+        riskPercent: safeNum(nextConfig?.riskPercent ?? nextConfig?.riskPct, prev.riskPercent),
         maxTrades: safeNum(nextConfig?.maxTrades, prev.maxTrades),
         mode: String(nextConfig?.tradingMode || prev.mode || "paper").toLowerCase(),
       }));
@@ -643,8 +712,6 @@ export default function Analytics() {
 
   /* ==========================================================
   OPTIONAL PERSISTENT HISTORY LOAD
-  This is where long-term memory should come from if backend
-  archival analytics exists.
   ========================================================== */
 
   async function loadPersistentHistory() {
@@ -664,36 +731,44 @@ export default function Analytics() {
       }
 
       const data = await res.json().catch(() => ({}));
+      const raw = data?.history || data?.analytics || data || {};
 
-      const nextHistory = data?.history || data?.analytics || data || {};
-      const today = nextHistory?.today || {};
-      const week = nextHistory?.week || {};
-      const allTime = nextHistory?.allTime || {};
-      const recentResets = Array.isArray(nextHistory?.recentResets)
-        ? nextHistory.recentResets
-        : [];
-      const recentLogins = Array.isArray(nextHistory?.recentLogins)
-        ? nextHistory.recentLogins
-        : [];
-      const daily = Array.isArray(nextHistory?.daily) ? nextHistory.daily : [];
+      setHistory((prev) => {
+        const next = coerceHistoryShape(raw, tradeLog, decisionLog);
 
-      setHistory((prev) => ({
-        today: {
-          ...prev.today,
-          ...today,
-        },
-        week: {
-          ...prev.week,
-          ...week,
-        },
-        allTime: {
-          ...prev.allTime,
-          ...allTime,
-        },
-        recentResets,
-        recentLogins,
-        daily: daily.length ? daily : prev.daily,
-      }));
+        return {
+          ...prev,
+          ...next,
+          today: finalizePeriod({
+            ...prev.today,
+            ...next.today,
+          }),
+          week: finalizePeriod({
+            ...prev.week,
+            ...next.week,
+          }),
+          month: finalizePeriod({
+            ...prev.month,
+            ...next.month,
+          }),
+          year: finalizePeriod({
+            ...prev.year,
+            ...next.year,
+          }),
+          allTime: finalizePeriod({
+            ...prev.allTime,
+            ...next.allTime,
+          }),
+        };
+      });
+
+      if (Array.isArray(raw?.tradeArchive) && raw.tradeArchive.length) {
+        setTradeLog((prev) => mergeTrades(prev, raw.tradeArchive));
+      }
+
+      if (Array.isArray(raw?.decisionArchive) && raw.decisionArchive.length) {
+        setDecisionLog((prev) => mergeDecisions(prev, raw.decisionArchive));
+      }
     } catch {
       // Keep fallback analytics working even if history endpoint is missing.
     } finally {
@@ -787,10 +862,10 @@ export default function Analytics() {
         <h2 style={{ margin: "6px 0 8px" }}>
           Trading Intelligence Memory
         </h2>
-        <div style={{ fontSize: 13, opacity: 0.72, maxWidth: 900, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 13, opacity: 0.72, maxWidth: 980, lineHeight: 1.6 }}>
           This room is the historical and operational memory for trading activity.
-          It shows whether the engine is alive, what the AI has been doing, and
-          whether the backend is preserving meaningful history instead of only live state.
+          It tracks the live engine, keeps long-range performance summaries, and
+          helps maintenance confirm whether the backend is truly saving history.
         </div>
       </div>
 
@@ -809,13 +884,7 @@ export default function Analytics() {
         </div>
       )}
 
-      <div
-        style={{
-          ...card,
-          padding: 16,
-          marginBottom: 18,
-        }}
-      >
+      <div style={{ ...card, padding: 16, marginBottom: 18 }}>
         <div
           style={{
             display: "flex",
@@ -843,12 +912,12 @@ export default function Analytics() {
         }}
       >
         <Metric title="Equity" value={`$${fmtMoney(stats.equity)}`} />
-        <Metric title="Win Rate" value={fmtPct(stats.winRate, 1)} />
-        <Metric title="Trades" value={String(stats.trades)} />
+        <Metric title="Closed Win Rate" value={fmtPct(history.allTime.winRate, 1)} />
+        <Metric title="Total Records" value={String(history.allTime.trades)} />
+        <Metric title="Closed Trades" value={String(history.allTime.closedTrades)} />
         <Metric title="PnL" value={`$${fmtMoney(stats.pnl)}`} />
         <Metric title="Drawdown" value={fmtPct(stats.drawdown, 2)} />
         <Metric title="AI Decisions" value={String(engine.decisions)} />
-        <Metric title="Engine Ticks" value={String(engine.ticks)} />
         <Metric title="Exposure" value={`$${fmtMoney(risk.exposure)}`} />
       </div>
 
@@ -878,35 +947,16 @@ export default function Analytics() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
+          gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
           gap: 16,
           marginBottom: 16,
         }}
       >
-        <Panel title="Today" style={card}>
-          <InfoRow label="Wins" value={String(history.today.wins)} />
-          <InfoRow label="Losses" value={String(history.today.losses)} />
-          <InfoRow label="Trades" value={String(history.today.trades)} />
-          <InfoRow label="PnL" value={`$${fmtMoney(history.today.pnl)}`} />
-          <InfoRow label="Resets" value={String(history.today.resets || 0)} />
-          <InfoRow label="Logins" value={String(history.today.logins || 0)} />
-        </Panel>
-
-        <Panel title="This Week" style={card}>
-          <InfoRow label="Wins" value={String(history.week.wins)} />
-          <InfoRow label="Losses" value={String(history.week.losses)} />
-          <InfoRow label="Trades" value={String(history.week.trades)} />
-          <InfoRow label="PnL" value={`$${fmtMoney(history.week.pnl)}`} />
-        </Panel>
-
-        <Panel title="All-Time Memory" style={card}>
-          <InfoRow label="Wins" value={String(history.allTime.wins)} />
-          <InfoRow label="Losses" value={String(history.allTime.losses)} />
-          <InfoRow label="Trades" value={String(history.allTime.trades)} />
-          <InfoRow label="PnL" value={`$${fmtMoney(history.allTime.pnl)}`} />
-          <InfoRow label="Resets" value={String(history.allTime.resets || 0)} />
-          <InfoRow label="Logins" value={String(history.allTime.logins || 0)} />
-        </Panel>
+        <PeriodPanel title="Today" data={history.today} />
+        <PeriodPanel title="This Week" data={history.week} />
+        <PeriodPanel title="This Month" data={history.month} />
+        <PeriodPanel title="This Year" data={history.year} />
+        <PeriodPanel title="All-Time" data={history.allTime} />
       </div>
 
       <div
@@ -919,14 +969,8 @@ export default function Analytics() {
       >
         <Panel title="AI Brain Intelligence" style={card}>
           <InfoRow label="Last Action" value={brain?.lastAction || "-"} />
-          <InfoRow
-            label="Smoothed Confidence"
-            value={safeNum(brain?.smoothedConfidence, 0).toFixed(3)}
-          />
-          <InfoRow
-            label="Edge Momentum"
-            value={safeNum(brain?.edgeMomentum, 0).toFixed(4)}
-          />
+          <InfoRow label="Smoothed Confidence" value={safeNum(brain?.smoothedConfidence, 0).toFixed(3)} />
+          <InfoRow label="Edge Momentum" value={safeNum(brain?.edgeMomentum, 0).toFixed(4)} />
           <InfoRow label="Win Streak" value={String(brain?.winStreak ?? 0)} />
           <InfoRow label="Loss Streak" value={String(brain?.lossStreak ?? 0)} />
         </Panel>
@@ -971,6 +1015,27 @@ export default function Analytics() {
       <div
         style={{
           display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          gap: 16,
+          marginBottom: 16,
+        }}
+      >
+        <Panel title="Daily Memory (Last 30 Days)" style={card}>
+          <CompactPeriodTable rows={history.daily} dateLabel="Day" />
+        </Panel>
+
+        <Panel title="Weekly Memory" style={card}>
+          <CompactPeriodTable rows={history.weekly} dateLabel="Week Of" />
+        </Panel>
+
+        <Panel title="Monthly Memory" style={card}>
+          <CompactPeriodTable rows={history.monthly} dateLabel="Month" />
+        </Panel>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
           gridTemplateColumns: "1fr 1fr",
           gap: 16,
           marginBottom: 16,
@@ -978,10 +1043,7 @@ export default function Analytics() {
       >
         <Panel title="Recent Reset History" style={card}>
           {Array.isArray(history.recentResets) && history.recentResets.length ? (
-            <HistoryList
-              items={history.recentResets}
-              emptyLabel="No reset history recorded"
-            />
+            <HistoryList items={history.recentResets} emptyLabel="No reset history recorded" />
           ) : (
             <div style={{ opacity: 0.58 }}>
               No reset history recorded. If resets should be tracked, inspect backend analytics persistence.
@@ -991,10 +1053,7 @@ export default function Analytics() {
 
         <Panel title="Recent Login / Activity History" style={card}>
           {Array.isArray(history.recentLogins) && history.recentLogins.length ? (
-            <HistoryList
-              items={history.recentLogins}
-              emptyLabel="No login history recorded"
-            />
+            <HistoryList items={history.recentLogins} emptyLabel="No login history recorded" />
           ) : (
             <div style={{ opacity: 0.58 }}>
               No login history recorded. If platform activity should appear here, inspect the analytics archival endpoint.
@@ -1019,7 +1078,7 @@ export default function Analytics() {
               { key: "mode", label: "Mode", render: (row) => row?.mode || "-" },
               { key: "reason", label: "Reason", render: (row) => row?.reason || "-" },
             ]}
-            rows={decisionLog.slice(-12).reverse()}
+            rows={decisionLog.slice(-20).reverse()}
             emptyLabel="No decision history yet"
           />
         </Panel>
@@ -1030,6 +1089,11 @@ export default function Analytics() {
               { key: "time", label: "Time", render: (row) => fmtTime(getItemTime(row)) },
               { key: "side", label: "Side", render: (row) => row?.side || "-" },
               {
+                key: "status",
+                label: "Status",
+                render: (row) => (isTradeClosed(row) ? "CLOSED" : row?.status || "OPEN"),
+              },
+              {
                 key: "price",
                 label: "Price",
                 render: (row) => `$${fmtMoney(row?.price ?? row?.entry)}`,
@@ -1039,21 +1103,44 @@ export default function Analytics() {
                 key: "pnl",
                 label: "PnL",
                 render: (row) => (
-                  <span
-                    style={{
-                      color: safeNum(row?.pnl, 0) >= 0 ? "#34d399" : "#f87171",
-                    }}
-                  >
+                  <span style={{ color: safeNum(row?.pnl, 0) >= 0 ? "#34d399" : "#f87171" }}>
                     ${fmtMoney(row?.pnl)}
                   </span>
                 ),
               },
             ]}
-            rows={tradeLog.slice(-12).reverse()}
+            rows={tradeLog.slice(-20).reverse()}
             emptyLabel="No trade history yet"
           />
         </Panel>
       </div>
+
+      <Panel title="Full Trade Archive" style={card}>
+        <SimpleTable
+          columns={[
+            { key: "time", label: "Time", render: (row) => fmtDateTime(getItemTime(row)) },
+            { key: "symbol", label: "Symbol", render: (row) => row?.symbol || "-" },
+            { key: "slot", label: "Slot", render: (row) => row?.slot || "-" },
+            { key: "side", label: "Side", render: (row) => row?.side || "-" },
+            { key: "status", label: "Status", render: (row) => (isTradeClosed(row) ? "CLOSED" : row?.status || "OPEN") },
+            { key: "entry", label: "Entry", render: (row) => `$${fmtMoney(row?.entry ?? row?.price)}` },
+            { key: "qty", label: "Qty", render: (row) => fmtQty(row?.qty) },
+            {
+              key: "pnl",
+              label: "PnL",
+              render: (row) => (
+                <span style={{ color: safeNum(row?.pnl, 0) >= 0 ? "#34d399" : "#f87171" }}>
+                  ${fmtMoney(row?.pnl)}
+                </span>
+              ),
+            },
+            { key: "reason", label: "Reason", render: (row) => row?.reason || row?.note || "-" },
+          ]}
+          rows={(history.tradeArchive?.length ? history.tradeArchive : tradeLog).slice().reverse()}
+          emptyLabel="No archived trades yet"
+          maxHeight={420}
+        />
+      </Panel>
     </div>
   );
 }
@@ -1076,7 +1163,6 @@ function Metric({ title, value }) {
       <div style={{ opacity: 0.62, fontSize: 12, marginBottom: 8 }}>
         {title}
       </div>
-
       <div
         style={{
           fontSize: 24,
@@ -1103,7 +1189,6 @@ function Panel({ title, children, style = {} }) {
       <h3 style={{ marginBottom: 14 }}>
         {title}
       </h3>
-
       {children}
     </div>
   );
@@ -1129,7 +1214,6 @@ function InfoRow({ label, value }) {
 
 function StatusPill({ label, value, tone = "neutral" }) {
   let bg = "rgba(59,130,246,.14)";
-
   if (tone === "good") bg = "rgba(34,197,94,.16)";
   if (tone === "bad") bg = "rgba(239,68,68,.16)";
   if (tone === "warn") bg = "rgba(234,179,8,.16)";
@@ -1150,6 +1234,49 @@ function StatusPill({ label, value, tone = "neutral" }) {
       <span style={{ opacity: 0.72 }}>{label}</span>
       <span>{value}</span>
     </div>
+  );
+}
+
+function PeriodPanel({ title, data }) {
+  const safeNum = (v, fallback = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const fmtMoney = (v, digits = 2) =>
+    safeNum(v, 0).toLocaleString(undefined, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+
+  const fmtPct = (v, digits = 1) => `${safeNum(v, 0).toFixed(digits)}%`;
+
+  return (
+    <Panel
+      title={title}
+      style={{
+        background: "linear-gradient(180deg, rgba(17,24,39,.98), rgba(10,15,28,.98))",
+        border: "1px solid rgba(255,255,255,.07)",
+        borderRadius: 14,
+        boxShadow: "0 10px 30px rgba(0,0,0,.25)",
+      }}
+    >
+      <InfoRow label="Wins" value={String(data?.wins || 0)} />
+      <InfoRow label="Losses" value={String(data?.losses || 0)} />
+      <InfoRow label="Breakeven" value={String(data?.breakeven || 0)} />
+      <InfoRow label="Records" value={String(data?.trades || 0)} />
+      <InfoRow label="Closed Trades" value={String(data?.closedTrades || 0)} />
+      <InfoRow label="PnL" value={`$${fmtMoney(data?.pnl)}`} />
+      <InfoRow label="Win Rate" value={fmtPct(data?.winRate, 1)} />
+      <InfoRow label="Avg PnL" value={`$${fmtMoney(data?.avgPnl)}`} />
+      <InfoRow label="Profit Factor" value={safeNum(data?.profitFactor, 0).toFixed(2)} />
+      {title === "Today" || title === "All-Time" ? (
+        <>
+          <InfoRow label="Resets" value={String(data?.resets || 0)} />
+          <InfoRow label="Logins" value={String(data?.logins || 0)} />
+        </>
+      ) : null}
+    </Panel>
   );
 }
 
@@ -1200,13 +1327,13 @@ function HistoryList({ items = [], emptyLabel = "No history" }) {
   );
 }
 
-function SimpleTable({ columns = [], rows = [], emptyLabel = "No data" }) {
+function SimpleTable({ columns = [], rows = [], emptyLabel = "No data", maxHeight = null }) {
   if (!rows.length) {
     return <div style={{ opacity: 0.58 }}>{emptyLabel}</div>;
   }
 
   return (
-    <div style={{ overflowX: "auto" }}>
+    <div style={{ overflowX: "auto", maxHeight: maxHeight || "none", overflowY: maxHeight ? "auto" : "visible" }}>
       <table
         style={{
           width: "100%",
@@ -1225,6 +1352,9 @@ function SimpleTable({ columns = [], rows = [], emptyLabel = "No data" }) {
                   opacity: 0.68,
                   borderBottom: "1px solid rgba(255,255,255,.08)",
                   fontWeight: 700,
+                  position: maxHeight ? "sticky" : "static",
+                  top: maxHeight ? 0 : "auto",
+                  background: maxHeight ? "#111827" : "transparent",
                 }}
               >
                 {col.label}
@@ -1235,7 +1365,7 @@ function SimpleTable({ columns = [], rows = [], emptyLabel = "No data" }) {
 
         <tbody>
           {rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
+            <tr key={row?.id || rowIndex}>
               {columns.map((col) => (
                 <td
                   key={col.key}
@@ -1255,3 +1385,73 @@ function SimpleTable({ columns = [], rows = [], emptyLabel = "No data" }) {
     </div>
   );
 }
+
+function CompactPeriodTable({ rows = [], dateLabel = "Date" }) {
+  const safeNum = (v, fallback = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const fmtMoney = (v, digits = 2) =>
+    safeNum(v, 0).toLocaleString(undefined, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+
+  if (!rows.length) {
+    return <div style={{ opacity: 0.58 }}>No archived period data yet</div>;
+  }
+
+  return (
+    <div style={{ overflowX: "auto", maxHeight: 320, overflowY: "auto" }}>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          fontSize: 12,
+        }}
+      >
+        <thead>
+          <tr>
+            <th style={tableHeadStyle}>{dateLabel}</th>
+            <th style={tableHeadStyle}>Wins</th>
+            <th style={tableHeadStyle}>Losses</th>
+            <th style={tableHeadStyle}>Closed</th>
+            <th style={tableHeadStyle}>PnL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows
+            .slice()
+            .reverse()
+            .map((row, index) => (
+              <tr key={`${row?.date || "row"}-${index}`}>
+                <td style={tableCellStyle}>{row?.date || "-"}</td>
+                <td style={tableCellStyle}>{safeNum(row?.wins, 0)}</td>
+                <td style={tableCellStyle}>{safeNum(row?.losses, 0)}</td>
+                <td style={tableCellStyle}>{safeNum(row?.closedTrades, row?.trades, 0)}</td>
+                <td style={tableCellStyle}>${fmtMoney(row?.pnl)}</td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const tableHeadStyle = {
+  textAlign: "left",
+  padding: "10px 8px",
+  opacity: 0.68,
+  borderBottom: "1px solid rgba(255,255,255,.08)",
+  fontWeight: 700,
+  position: "sticky",
+  top: 0,
+  background: "#111827",
+};
+
+const tableCellStyle = {
+  padding: "10px 8px",
+  borderBottom: "1px solid rgba(255,255,255,.05)",
+  verticalAlign: "top",
+};
