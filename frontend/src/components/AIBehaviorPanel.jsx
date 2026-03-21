@@ -1,12 +1,6 @@
 // ============================================================
 // FILE: frontend/src/components/AIBehaviorPanel.jsx
-// MODULE: AI Behavior Intelligence Panel
-//
-// UPGRADE
-// ------------------------------------------------------------
-// ✔ Countdown timer for active trades
-// ✔ Displays Time Remaining instead of Time Open
-// ✔ Compatible with backend trade duration system
+// FIXED VERSION — REAL TRADE TRACKING + ACCURATE STATS
 // ============================================================
 
 import React, { useMemo, useEffect, useState } from "react";
@@ -28,11 +22,9 @@ useEffect(()=>{
 
   const update = () => {
 
-    const elapsed =
-      Date.now() - position.time;
+    const elapsed = Date.now() - position.time;
 
-    const left =
-      Math.max(position.maxDuration - elapsed,0);
+    const left = Math.max(position.maxDuration - elapsed,0);
 
     setRemaining(left);
 
@@ -47,21 +39,28 @@ useEffect(()=>{
 },[position]);
 
 function formatDuration(ms){
-
   const s = Math.floor(ms/1000);
   const m = Math.floor(s/60);
   const sec = s%60;
-
   return `${m}m ${sec}s`;
-
 }
 
-/* ================= CLOSED TRADES ================= */
+/* ================= CLOSED TRADES (FIXED) ================= */
 
 const closedTrades = useMemo(()=>{
 
   return trades
-    .filter(t=>t?.side==="CLOSE")
+    .filter(t => {
+
+      const side = String(t?.side || "").toUpperCase();
+
+      return (
+        side === "CLOSE" ||
+        side === "STOP_LOSS" ||
+        side === "TAKE_PROFIT"
+      );
+
+    })
     .sort((a,b)=>(b.time||0)-(a.time||0));
 
 },[trades]);
@@ -70,13 +69,13 @@ const closedTrades = useMemo(()=>{
 
 const winningTrades = useMemo(()=>{
   return closedTrades.filter(
-    t=>Number(t?.pnl||0)>=0
+    t=>Number(t?.pnl||0) > 0
   );
 },[closedTrades]);
 
 const losingTrades = useMemo(()=>{
   return closedTrades.filter(
-    t=>Number(t?.pnl||0)<0
+    t=>Number(t?.pnl||0) <= 0
   );
 },[closedTrades]);
 
@@ -95,7 +94,7 @@ const tradeStats = useMemo(()=>{
     pnl+=p;
 
     if(p>0) wins++;
-    else if(p<0) losses++;
+    else losses++;
 
   });
 
@@ -130,7 +129,7 @@ const dailyStats = useMemo(()=>{
     pnl+=p;
 
     if(p>0) wins++;
-    else if(p<0) losses++;
+    else losses++;
 
   });
 
@@ -184,8 +183,6 @@ return(
 }}>
 
 <h3>AI Behavior Intelligence</h3>
-
-{/* ================= ANALYTICS ================= */}
 
 <div style={{marginTop:10}}>
 <strong>Average AI Confidence:</strong> {avgConfidence.toFixed(1)}%
@@ -267,31 +264,17 @@ border:"1px solid rgba(255,255,255,.05)"
 
 <strong>Active Trade Monitor</strong>
 
-<div>
-Status:
-<span style={{
-color:"#22c55e",
-marginLeft:6
-}}>
-LIVE
-</span>
-</div>
+<div>Status: <span style={{color:"#22c55e"}}>LIVE</span></div>
 
-<div>
-Market: {position.symbol || "UNKNOWN"}
-</div>
+<div>Market: {position.symbol || "UNKNOWN"}</div>
 
-<div>
-Entry Price:
+<div>Entry Price:
  {Number(position.entry||0).toLocaleString()}
 </div>
 
-<div>
-Position Size: {position.qty}
-</div>
+<div>Position Size: {position.qty}</div>
 
-<div>
-Capital Used: $
+<div>Capital Used: $
 {(
   position.capitalUsed ||
   (position.entry * position.qty)
@@ -300,10 +283,7 @@ Capital Used: $
 
 <div>
 Time Remaining:
-<span style={{
-marginLeft:6,
-color:"#38bdf8"
-}}>
+<span style={{marginLeft:6,color:"#38bdf8"}}>
 {formatDuration(remaining)}
 </span>
 </div>
@@ -312,88 +292,18 @@ color:"#38bdf8"
 
 )}
 
-{/* ================= TRADE JOURNAL ================= */}
+{/* ================= JOURNAL ================= */}
 
-<div style={{
-display:"flex",
-gap:20,
-marginTop:25
-}}>
-
-{/* ================= WINNING ================= */}
+<div style={{display:"flex",gap:20,marginTop:25}}>
 
 <div style={{flex:1}}>
-
 <h4 style={{color:"#22c55e"}}>Winning Trades</h4>
-
-<div style={{
-maxHeight:300,
-overflowY:"auto"
-}}>
-
-{winningTrades.length===0 && (
-<div style={{opacity:.6}}>
-No winning trades yet
+{winningTrades.map((t,i)=>(<div key={i}>+{t.pnl}</div>))}
 </div>
-)}
-
-{winningTrades.map((t,i)=>(
-
-<div key={i} style={{
-background:"rgba(34,197,94,.08)",
-padding:8,
-marginBottom:8,
-borderRadius:6
-}}>
-
-<div>{new Date(t.time).toLocaleString()}</div>
-<div>Market: {t.symbol || "UNKNOWN"}</div>
-<div>PnL: +{Number(t.pnl||0).toFixed(2)}</div>
-
-</div>
-
-))}
-
-</div>
-
-</div>
-
-{/* ================= LOSING ================= */}
 
 <div style={{flex:1}}>
-
 <h4 style={{color:"#ef4444"}}>Losing Trades</h4>
-
-<div style={{
-maxHeight:300,
-overflowY:"auto"
-}}>
-
-{losingTrades.length===0 && (
-<div style={{opacity:.6}}>
-No losing trades
-</div>
-)}
-
-{losingTrades.map((t,i)=>(
-
-<div key={i} style={{
-background:"rgba(239,68,68,.08)",
-padding:8,
-marginBottom:8,
-borderRadius:6
-}}>
-
-<div>{new Date(t.time).toLocaleString()}</div>
-<div>Market: {t.symbol || "UNKNOWN"}</div>
-<div>PnL: {Number(t.pnl||0).toFixed(2)}</div>
-
-</div>
-
-))}
-
-</div>
-
+{losingTrades.map((t,i)=>(<div key={i}>{t.pnl}</div>))}
 </div>
 
 </div>
