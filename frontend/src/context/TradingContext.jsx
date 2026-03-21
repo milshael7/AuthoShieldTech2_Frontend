@@ -1,7 +1,31 @@
+// ============================================================
+// 🔒 PROTECTED CORE FILE — DO NOT MODIFY WITHOUT AUTHORIZATION
+// MODULE: Trading Context (Realtime Data Layer)
+// VERSION: v2.0 (State-Accurate + Analytics-Ready)
+//
+// PURPOSE:
+// This file is the SINGLE SOURCE OF TRUTH for:
+// - market price (live)
+// - paper trading snapshot
+// - trades history
+// - AI decisions history
+// - engine metrics
+//
+// RULES:
+// 1. DO NOT compute analytics here (UI responsibility)
+// 2. DO NOT mutate trade objects
+// 3. DO NOT reset history unless explicitly required
+// 4. ALWAYS append data — NEVER overwrite history
+//
+// VIOLATION OF THESE RULES = FAKE DATA / BROKEN PLATFORM
+// ============================================================
+
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getToken, getSavedUser } from "../lib/api.js";
 
 const TradingContext = createContext(null);
+
+/* ================= UTIL ================= */
 
 function safeNum(v, fallback = 0) {
   const n = Number(v);
@@ -28,9 +52,7 @@ function buildWsUrl(channel) {
     const qs = new URLSearchParams();
     qs.set("channel", channel);
     qs.set("token", token);
-    if (companyId) {
-      qs.set("companyId", companyId);
-    }
+    if (companyId) qs.set("companyId", companyId);
 
     return `${protocol}//${url.host}/ws?${qs.toString()}`;
   } catch {
@@ -38,143 +60,153 @@ function buildWsUrl(channel) {
   }
 }
 
+/* ================= PROVIDER ================= */
+
 export function TradingProvider({ children }) {
   const marketWsRef = useRef(null);
   const paperWsRef = useRef(null);
+
   const reconnectMarketRef = useRef(null);
   const reconnectPaperRef = useRef(null);
+
+  /* ================= STATE ================= */
 
   const [price, setPrice] = useState(null);
   const [snapshot, setSnapshot] = useState(null);
   const [metrics, setMetrics] = useState(null);
 
+  // 🔥 CRITICAL: These power analytics — NEVER remove
+  const [trades, setTrades] = useState([]);
+  const [decisions, setDecisions] = useState([]);
+
   const [marketStatus, setMarketStatus] = useState("idle");
   const [paperStatus, setPaperStatus] = useState("idle");
+
+  /* ================= INTERNAL HELPERS ================= */
+
+  function appendUnique(list, item, keyFn, max = 2000) {
+    if (!item) return list;
+
+    const key = keyFn(item);
+    const exists = list.some((x) => keyFn(x) === key);
+
+    if (!exists) list.push(item);
+
+    if (list.length > max) {
+      list.splice(0, list.length - max);
+    }
+
+    return [...list];
+  }
+
+  function tradeKey(t) {
+    return `${t.time}|${t.symbol}|${t.side}|${t.price}|${t.qty}`;
+  }
+
+  function decisionKey(d) {
+    return `${d.time}|${d.symbol}|${d.action}|${d.reason}`;
+  }
+
+  /* ================= CONNECTION ================= */
 
   useEffect(() => {
     let active = true;
 
-    function clearReconnectTimers() {
-      if (reconnectMarketRef.current) {
-        clearTimeout(reconnectMarketRef.current);
-        reconnectMarketRef.current = null;
-      }
-
-      if (reconnectPaperRef.current) {
-        clearTimeout(reconnectPaperRef.current);
-        reconnectPaperRef.current = null;
-      }
-    }
-
     function connectMarket() {
       const wsUrl = buildWsUrl("market");
+      if (!active || !wsUrl) return;
 
-      if (!active || !wsUrl) {
-        setMarketStatus("unavailable");
-        return;
-      }
+      const ws = new WebSocket(wsUrl);
+      marketWsRef.current = ws;
 
-      try {
-        setMarketStatus("connecting");
+      setMarketStatus("connecting");
 
-        const ws = new WebSocket(wsUrl);
-        marketWsRef.current = ws;
+      ws.onopen = () => active && setMarketStatus("connected");
 
-        ws.onopen = () => {
-          if (!active) return;
-          setMarketStatus("connected");
-        };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg?.channel !== "market") return;
 
-        ws.onmessage = (event) => {
-          try {
-            const msg = JSON.parse(event.data);
-            if (msg?.channel !== "market") return;
+          const btc = msg?.data?.BTCUSDT;
+          const p = safeNum(btc?.price, NaN);
 
-            const btc = msg?.data?.BTCUSDT;
-            const nextPrice = safeNum(btc?.price, NaN);
+          if (Number.isFinite(p) && p > 0) {
+            setPrice(p);
+          }
+        } catch {}
+      };
 
-            if (Number.isFinite(nextPrice) && nextPrice > 0) {
-              setPrice(nextPrice);
-            }
-          } catch {}
-        };
-
-        ws.onerror = () => {
-          if (!active) return;
-          setMarketStatus("error");
-        };
-
-        ws.onclose = () => {
-          if (!active) return;
-          setMarketStatus("disconnected");
-
-          reconnectMarketRef.current = setTimeout(() => {
-            connectMarket();
-          }, 2000);
-        };
-      } catch {
-        setMarketStatus("error");
-
-        reconnectMarketRef.current = setTimeout(() => {
-          connectMarket();
-        }, 2000);
-      }
+      ws.onclose = () => {
+        if (!active) return;
+        setMarketStatus("disconnected");
+        reconnectMarketRef.current = setTimeout(connectMarket, 2000);
+      };
     }
 
     function connectPaper() {
       const wsUrl = buildWsUrl("paper");
+      if (!active || !wsUrl) return;
 
-      if (!active || !wsUrl) {
-        setPaperStatus("unavailable");
-        return;
-      }
+      const ws = new WebSocket(wsUrl);
+      paperWsRef.current = ws;
 
-      try {
-        setPaperStatus("connecting");
+      setPaperStatus("connecting");
 
-        const ws = new WebSocket(wsUrl);
-        paperWsRef.current = ws;
+      ws.onopen = () => active && setPaperStatus("connected");
 
-        ws.onopen = () => {
-          if (!active) return;
-          setPaperStatus("connected");
-        };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg?.channel !== "paper") return;
 
-        ws.onmessage = (event) => {
-          try {
-            const msg = JSON.parse(event.data);
-            if (msg?.channel !== "paper") return;
+          /* ================= SNAPSHOT ================= */
+          if (msg?.snapshot) {
+            setSnapshot(msg.snapshot);
 
-            if (msg?.snapshot && typeof msg.snapshot === "object") {
-              setSnapshot((prev) => msg.snapshot ?? prev);
+            // 🔥 Extract trades from snapshot safely
+            if (Array.isArray(msg.snapshot.trades)) {
+              setTrades((prev) => {
+                let next = [...prev];
+                for (const t of msg.snapshot.trades) {
+                  next = appendUnique(next, t, tradeKey);
+                }
+                return next;
+              });
             }
+          }
 
-            if (msg?.metrics && typeof msg.metrics === "object") {
-              setMetrics((prev) => msg.metrics ?? prev);
-            }
-          } catch {}
-        };
+          /* ================= DECISIONS ================= */
+          if (Array.isArray(msg.decisions)) {
+            setDecisions((prev) => {
+              let next = [...prev];
+              for (const d of msg.decisions) {
+                next = appendUnique(next, d, decisionKey);
+              }
+              return next;
+            });
+          }
 
-        ws.onerror = () => {
-          if (!active) return;
-          setPaperStatus("error");
-        };
+          /* ================= METRICS ================= */
+          if (msg?.metrics) {
+            setMetrics(msg.metrics);
+          }
 
-        ws.onclose = () => {
-          if (!active) return;
-          setPaperStatus("disconnected");
+          /* ================= REAL-TIME TRADE ================= */
+          if (msg?.type === "trade" && msg.trade) {
+            setTrades((prev) =>
+              appendUnique([...prev], msg.trade, tradeKey)
+            );
+          }
 
-          reconnectPaperRef.current = setTimeout(() => {
-            connectPaper();
-          }, 2000);
-        };
-      } catch {
-        setPaperStatus("error");
+        } catch {}
+      };
 
-        reconnectPaperRef.current = setTimeout(() => {
-          connectPaper();
-        }, 2000);
-      }
+      ws.onclose = () => {
+        if (!active) return;
+        setPaperStatus("disconnected");
+        reconnectPaperRef.current = setTimeout(connectPaper, 2000);
+      };
     }
 
     connectMarket();
@@ -182,28 +214,31 @@ export function TradingProvider({ children }) {
 
     return () => {
       active = false;
-      clearReconnectTimers();
 
-      try {
-        marketWsRef.current?.close();
-      } catch {}
-
-      try {
-        paperWsRef.current?.close();
-      } catch {}
+      try { marketWsRef.current?.close(); } catch {}
+      try { paperWsRef.current?.close(); } catch {}
     };
   }, []);
 
-  const value = useMemo(
-    () => ({
-      price,
-      snapshot,
-      metrics,
-      marketStatus,
-      paperStatus,
-    }),
-    [price, snapshot, metrics, marketStatus, paperStatus]
-  );
+  /* ================= OUTPUT ================= */
+
+  const value = useMemo(() => ({
+    price,
+    snapshot,
+    metrics,
+    trades,
+    decisions,
+    marketStatus,
+    paperStatus,
+  }), [
+    price,
+    snapshot,
+    metrics,
+    trades,
+    decisions,
+    marketStatus,
+    paperStatus,
+  ]);
 
   return (
     <TradingContext.Provider value={value}>
@@ -211,6 +246,8 @@ export function TradingProvider({ children }) {
     </TradingContext.Provider>
   );
 }
+
+/* ================= HOOK ================= */
 
 export function useTrading() {
   return useContext(TradingContext);
