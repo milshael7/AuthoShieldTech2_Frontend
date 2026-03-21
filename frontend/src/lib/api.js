@@ -1,6 +1,6 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v20
-   FIXED: AI snapshot + AI config endpoints
+   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v25
+   FULL AI + EXECUTION + ANALYTICS INTEGRATION
 ========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
@@ -54,6 +54,7 @@ function joinUrl(base, path) {
 async function fetchWithTimeout(url, options = {}, ms = REQUEST_TIMEOUT) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
+
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
@@ -65,9 +66,11 @@ async function fetchWithTimeout(url, options = {}, ms = REQUEST_TIMEOUT) {
 
 function attachTenantHeader(headers) {
   const user = getSavedUser();
+
   if (user?.companyId) {
     headers["x-company-id"] = String(user.companyId);
   }
+
   return headers;
 }
 
@@ -94,13 +97,16 @@ export async function req(
 
   if (auth) {
     const token = getToken();
+
     if (!token) {
       return { ok: false, error: "No session", silent: true };
     }
+
     headers.Authorization = `Bearer ${token}`;
   }
 
   let res;
+
   try {
     res = await fetchWithTimeout(joinUrl(API_BASE, path), {
       method,
@@ -112,6 +118,7 @@ export async function req(
   }
 
   let data = null;
+
   try {
     data = await res.json();
   } catch {}
@@ -119,6 +126,7 @@ export async function req(
   if (res.status === 401 && auth) {
     clearToken();
     clearUser();
+
     return {
       ok: false,
       error: "Session expired",
@@ -140,7 +148,7 @@ export async function req(
 }
 
 /* =========================================================
-   API SURFACE
+   API SURFACE (INSTITUTIONAL LEVEL)
 ========================================================= */
 
 export const api = {
@@ -164,19 +172,17 @@ export const api = {
     return data;
   },
 
-  logout: () =>
-    req("/api/auth/logout", { method: "POST" }),
-
-  refresh: () =>
-    req("/api/auth/refresh", { method: "POST" }),
+  logout: () => req("/api/auth/logout", { method: "POST" }),
+  refresh: () => req("/api/auth/refresh", { method: "POST" }),
 
   /* ================= AI ENGINE ================= */
 
-  aiSnapshot: () =>
-    req("/api/trading/ai/snapshot"),
+  aiSnapshot: () => req("/api/trading/ai/snapshot"),
+  aiConfig: () => req("/api/ai/config"),
 
-  aiConfig: () =>
-    req("/api/ai/config"),
+  // 🔥 NEW — Deep brain analytics
+  aiBrainStats: () => req("/api/ai/brain/stats"),
+  aiReasonerStatus: () => req("/api/ai/reasoner/status"),
 
   /* ================= MARKET ================= */
 
@@ -189,15 +195,29 @@ export const api = {
   /* ================= PAPER TRADING ================= */
 
   paperAccount: () => req("/api/paper/account"),
-
   paperPositions: () => req("/api/paper/positions"),
-
   paperOrders: () => req("/api/paper/orders"),
 
   placePaperOrder: (payload) =>
     req("/api/paper/order", {
       method: "POST",
-      body: payload
+      body: payload,
     }),
+
+  /* ================= EXECUTION METRICS ================= */
+
+  executionMetrics: () =>
+    req("/api/execution/metrics"),
+
+  executionAllMetrics: () =>
+    req("/api/execution/metrics/all"),
+
+  /* ================= PERFORMANCE ================= */
+
+  tradeHistory: () =>
+    req("/api/trades/history"),
+
+  performanceSummary: () =>
+    req("/api/performance/summary"),
 
 };
