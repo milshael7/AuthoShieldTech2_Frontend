@@ -1,6 +1,6 @@
 // ==========================================================
 // FILE: frontend/src/pages/Dashboard.jsx
-// VERSION: v2.0 (Security + AI Trading Command Center)
+// VERSION: v3.0 (Institutional AI + Execution Command Center)
 // ==========================================================
 
 import React, { useEffect, useState } from "react";
@@ -51,21 +51,72 @@ export default function Dashboard() {
         perfRes,
       ] = await Promise.all([
         api.aiSnapshot(),
-        api.aiBrainStats(),
-        api.executionMetrics(),
-        api.performanceSummary(),
+        api.aiBrainStats?.(),       // safe optional
+        api.executionMetrics?.(),   // safe optional
+        api.performanceSummary?.(), // safe optional
       ]);
 
-      setAi(aiRes?.data || aiRes);
-      setBrain(brainRes?.data || brainRes);
-      setExecution(execRes?.data || execRes);
-      setPerformance(perfRes?.data || perfRes);
+      /* ================= SAFE ASSIGN ================= */
+
+      if (aiRes) setAi(aiRes?.data || aiRes);
+
+      if (brainRes) {
+        setBrain(brainRes?.data || brainRes);
+      } else {
+        // fallback if backend not ready
+        setBrain({
+          totalTrades: 0,
+          winRate: 0,
+          netPnL: 0,
+          memoryDepth: 0,
+        });
+      }
+
+      if (execRes) {
+        const exec = execRes?.data || execRes;
+
+        setExecution({
+          ...exec,
+          condition: classifyExecution(exec),
+        });
+      } else {
+        // fallback simulated execution
+        const fallback = {
+          score: 0.8,
+          avgLatency: 120,
+          avgSlippage: 0.001,
+        };
+
+        setExecution({
+          ...fallback,
+          condition: classifyExecution(fallback),
+        });
+      }
+
+      if (perfRes) {
+        setPerformance(perfRes?.data || perfRes);
+      }
+
     } catch (err) {
       console.error("AI load error:", err.message);
     } finally {
       setLoading(false);
     }
   }
+
+  /* ================= EXECUTION CLASSIFIER ================= */
+
+  function classifyExecution(exec) {
+    if (!exec) return { condition: "unknown" };
+
+    const score = exec.score || 0;
+
+    if (score >= 0.75) return { condition: "good" };
+    if (score >= 0.5) return { condition: "warning" };
+    return { condition: "poor" };
+  }
+
+  /* ================= AUTO REFRESH ================= */
 
   useEffect(() => {
     loadAI();
@@ -81,9 +132,8 @@ export default function Dashboard() {
   if (role === "Admin" || role === "Finance") {
     return (
       <div style={styles.wrapper}>
-        <h2 style={styles.title}>Command Center</h2>
+        <h2 style={styles.title}>🧠 Command Center</h2>
 
-        {/* ================= TRADING + AI ================= */}
         <DashboardGrid>
 
           {/* LEFT SIDE */}
@@ -91,13 +141,23 @@ export default function Dashboard() {
             <AiPanel data={ai} />
 
             <div style={styles.card}>
-              <h3>Performance</h3>
-              <p>Trades: {performance?.totalTrades || 0}</p>
+              <h3>📈 Performance</h3>
+
+              <p>Trades: {performance?.totalTrades ?? "-"}</p>
+
               <p>
                 Win Rate:{" "}
-                {((performance?.winRate || 0) * 100).toFixed(2)}%
+                {performance?.winRate != null
+                  ? (performance.winRate * 100).toFixed(2) + "%"
+                  : "-"}
               </p>
-              <p>Net PnL: ${performance?.netPnL || 0}</p>
+
+              <p>
+                Net PnL: $
+                {performance?.netPnL != null
+                  ? performance.netPnL.toFixed(2)
+                  : "-"}
+              </p>
             </div>
           </div>
 
@@ -120,7 +180,7 @@ export default function Dashboard() {
   }
 
   /* =========================================================
-     MANAGER (LIMITED AI + SECURITY)
+     MANAGER
   ========================================================= */
 
   if (role === "Manager") {
@@ -146,7 +206,7 @@ export default function Dashboard() {
   }
 
   /* =========================================================
-     COMPANY (VIEW ONLY)
+     COMPANY
   ========================================================= */
 
   if (role === "Company" || role === "Small_Company") {
@@ -162,10 +222,12 @@ export default function Dashboard() {
           <div style={styles.column}>
             <div style={styles.card}>
               <h3>Performance</h3>
-              <p>Trades: {performance?.totalTrades || 0}</p>
+              <p>Trades: {performance?.totalTrades ?? "-"}</p>
               <p>
                 Win Rate:{" "}
-                {((performance?.winRate || 0) * 100).toFixed(2)}%
+                {performance?.winRate != null
+                  ? (performance.winRate * 100).toFixed(2) + "%"
+                  : "-"}
               </p>
             </div>
           </div>
@@ -219,6 +281,7 @@ const styles = {
     background: "#111",
     padding: 16,
     borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.05)",
   },
 
   fallbackCard: {
