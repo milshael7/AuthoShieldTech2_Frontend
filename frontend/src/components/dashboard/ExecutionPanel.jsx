@@ -6,6 +6,36 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function getQuality(score) {
+  if (score > 0.8) return { label: "OPTIMAL", color: "#16c784" };
+  if (score > 0.6) return { label: "STABLE", color: "#3b82f6" };
+  if (score > 0.4) return { label: "DEGRADED", color: "#f59e0b" };
+  return { label: "CRITICAL", color: "#ea3943" };
+}
+
+function getLatencyState(latency) {
+  if (latency < 200) return { label: "FAST", color: "#16c784" };
+  if (latency < 500) return { label: "NORMAL", color: "#3b82f6" };
+  if (latency < 900) return { label: "SLOW", color: "#f59e0b" };
+  return { label: "VERY SLOW", color: "#ea3943" };
+}
+
+function getSlippageRisk(slippage) {
+  if (slippage < 0.0015) return { label: "LOW", color: "#16c784" };
+  if (slippage < 0.0035) return { label: "MEDIUM", color: "#f59e0b" };
+  return { label: "HIGH", color: "#ea3943" };
+}
+
+function getExecutionSafety(score, latency, slippage) {
+  if (score > 0.75 && latency < 400 && slippage < 0.002)
+    return { label: "SAFE", color: "#16c784" };
+
+  if (score > 0.55)
+    return { label: "CAUTION", color: "#f59e0b" };
+
+  return { label: "RISK", color: "#ea3943" };
+}
+
 /* ================= COMPONENT ================= */
 
 export default function ExecutionPanel({ data }) {
@@ -25,32 +55,10 @@ export default function ExecutionPanel({ data }) {
   const scorePct = (score * 100).toFixed(1);
   const slippagePct = (slippage * 100).toFixed(3);
 
-  /* ================= CONDITIONS ================= */
-
-  let status = "GOOD";
-  let color = "#16c784";
-
-  if (score < 0.75) {
-    status = "WARNING";
-    color = "#f5a623";
-  }
-
-  if (score < 0.5) {
-    status = "POOR";
-    color = "#ea3943";
-  }
-
-  /* ================= LATENCY STATUS ================= */
-
-  let latencyColor = "#16c784";
-  if (latency > 400) latencyColor = "#f5a623";
-  if (latency > 800) latencyColor = "#ea3943";
-
-  /* ================= SLIPPAGE STATUS ================= */
-
-  let slippageColor = "#16c784";
-  if (slippage > 0.002) slippageColor = "#f5a623";
-  if (slippage > 0.005) slippageColor = "#ea3943";
+  const quality = getQuality(score);
+  const latencyState = getLatencyState(latency);
+  const slippageRisk = getSlippageRisk(slippage);
+  const safety = getExecutionSafety(score, latency, slippage);
 
   return (
     <div style={styles.card}>
@@ -68,33 +76,49 @@ export default function ExecutionPanel({ data }) {
             style={{
               ...styles.barFill,
               width: `${score * 100}%`,
-              background: color,
+              background: quality.color,
             }}
           />
         </div>
       </div>
 
+      {/* QUALITY LABEL */}
+      <div style={styles.row}>
+        <span style={styles.label}>Quality</span>
+        <span style={{ ...styles.value, color: quality.color }}>
+          {quality.label}
+        </span>
+      </div>
+
       {/* LATENCY */}
-      <div style={{ marginBottom: 10 }}>
+      <div style={styles.row}>
         <span style={styles.label}>Latency</span>
-        <div style={{ ...styles.value, color: latencyColor }}>
-          {latency.toFixed(0)} ms
-        </div>
+        <span style={{ ...styles.value, color: latencyState.color }}>
+          {latency.toFixed(0)} ms ({latencyState.label})
+        </span>
       </div>
 
       {/* SLIPPAGE */}
-      <div style={{ marginBottom: 10 }}>
+      <div style={styles.row}>
         <span style={styles.label}>Slippage</span>
-        <div style={{ ...styles.value, color: slippageColor }}>
-          {slippagePct}%
-        </div>
+        <span style={{ ...styles.value, color: slippageRisk.color }}>
+          {slippagePct}% ({slippageRisk.label})
+        </span>
       </div>
 
-      {/* STATUS */}
-      <div style={{ ...styles.status, color }}>
-        {status === "GOOD" && "🟢 Optimal Execution"}
-        {status === "WARNING" && "🟡 Degrading Conditions"}
-        {status === "POOR" && "🔴 Execution Risk High"}
+      {/* SAFETY */}
+      <div style={styles.row}>
+        <span style={styles.label}>Execution Safety</span>
+        <span style={{ ...styles.value, color: safety.color }}>
+          {safety.label}
+        </span>
+      </div>
+
+      {/* FINAL STATUS */}
+      <div style={{ ...styles.status, color: safety.color }}>
+        {safety.label === "SAFE" && "🟢 Execution environment optimal"}
+        {safety.label === "CAUTION" && "🟡 Monitor execution conditions"}
+        {safety.label === "RISK" && "🔴 High execution risk detected"}
       </div>
     </div>
   );
@@ -111,13 +135,18 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.05)",
   },
 
+  row: {
+    display: "flex",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+
   label: {
     fontSize: 13,
     opacity: 0.7,
   },
 
   value: {
-    fontSize: 18,
     fontWeight: "bold",
   },
 
