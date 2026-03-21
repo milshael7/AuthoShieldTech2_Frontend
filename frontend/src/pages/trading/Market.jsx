@@ -3,6 +3,10 @@ import TerminalChart from "../../components/TerminalChart";
 import { getToken } from "../../lib/api.js";
 import "../../styles/terminal.css";
 
+/* =========================================================
+CONFIG
+========================================================= */
+
 const SYMBOL_GROUPS = {
   Crypto: ["BTCUSDT","ETHUSDT","SOLUSDT"],
   Forex: ["EURUSD","GBPUSD"],
@@ -18,6 +22,10 @@ const MAX_CANDLES = 500;
 const API_BASE =
   (import.meta.env.VITE_API_BASE || "").replace(/\/+$/, "");
 
+/* =========================================================
+CACHE
+========================================================= */
+
 if (!window.__MARKET_CACHE__) {
   window.__MARKET_CACHE__ = {};
 }
@@ -32,29 +40,9 @@ function ensureSymbolCache(symbol) {
   return window.__MARKET_CACHE__[symbol];
 }
 
-function storageKey(symbol){
-  return `market_candles_${symbol}`;
-}
-
-function loadPersisted(symbol){
-  try{
-    const raw = localStorage.getItem(storageKey(symbol));
-    if(!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  }catch{
-    return [];
-  }
-}
-
-function savePersisted(symbol,candles){
-  try{
-    localStorage.setItem(
-      storageKey(symbol),
-      JSON.stringify(candles.slice(-MAX_CANDLES))
-    );
-  }catch{}
-}
+/* =========================================================
+COMPONENT
+========================================================= */
 
 export default function Market(){
 
@@ -68,21 +56,24 @@ export default function Market(){
   const [price,setPrice] = useState(null);
   const [candles,setCandles] = useState([]);
 
+  // 🔥 NEW — TRADING STATE
+  const [trades,setTrades] = useState([]);
+  const [position,setPosition] = useState(null);
+
   const lastCandleRef = useRef(null);
+
+/* =========================================================
+UTIL
+========================================================= */
 
   function toNumber(v){
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }
 
-  function syncCache(sym,next,last){
-    const cache = ensureSymbolCache(sym);
-    cache.candles = next;
-    cache.lastCandle = last;
-    savePersisted(sym,next);
-  }
-
-  /* ================= CANDLE UPDATE ================= */
+/* =========================================================
+CANDLES
+========================================================= */
 
   function updateCandles(sym,priceNow){
 
@@ -127,107 +118,55 @@ export default function Market(){
       }
 
       lastCandleRef.current=nextLast;
-
-      syncCache(sym,next,nextLast);
-
       return next;
 
     });
 
   }
 
-  /* ================= MERGE HISTORY ================= */
+/* =========================================================
+BACKEND — TRADES + POSITION
+========================================================= */
 
-  function mergeHistory(existing, incoming){
-
-    if(!existing.length) return incoming;
-
-    const map = new Map();
-
-    existing.forEach(c => map.set(c.time,c));
-    incoming.forEach(c => map.set(c.time,c));
-
-    return Array.from(map.values())
-      .sort((a,b)=>a.time-b.time)
-      .slice(-MAX_CANDLES);
-  }
-
-  /* ================= HISTORY LOAD ================= */
-
-  async function loadHistory(sym){
-
-    if(!API_BASE) return;
-
-    const token=getToken();
-    if(!token) return;
-
-    try{
-
-      const res=await fetch(
-        `${API_BASE}/api/market/candles/${sym}?limit=${MAX_CANDLES}`,
-        {headers:{Authorization:`Bearer ${token}`}}
-      );
-
-      if(!res.ok) return;
-
-      const data=await res.json();
-
-      if(!Array.isArray(data?.candles)) return;
-
-      const formatted=data.candles
-        .map(c=>({
-          time:Number(c.time),
-          open:Number(c.open),
-          high:Number(c.high),
-          low:Number(c.low),
-          close:Number(c.close)
-        }))
-        .filter(c=>Number.isFinite(c.time))
-        .slice(-MAX_CANDLES);
-
-      if(!formatted.length) return;
-
-      setCandles(prev => {
-
-        const merged = mergeHistory(prev, formatted);
-
-        const last = merged[merged.length-1];
-
-        lastCandleRef.current = last;
-
-        syncCache(sym,merged,last);
-
-        return merged;
-
+  async function loadTrades() {
+    try {
+      const res = await fetch(`${API_BASE}/api/trades/history`, {
+        headers: { Authorization: `Bearer ${getToken()}` }
       });
 
-    }catch{}
+      const data = await res.json();
 
+      if (Array.isArray(data?.trades)) {
+        setTrades(data.trades);
+      }
+
+    } catch (err) {
+      console.error("Trade load error:", err.message);
+    }
   }
 
-  /* ================= SYMBOL CHANGE ================= */
+  async function loadPosition() {
+    try {
+      const res = await fetch(`${API_BASE}/api/paper/positions`, {
+        headers: { Authorization: `Bearer ${getToken()}` }
+      });
 
-  useEffect(()=>{
+      const data = await res.json();
 
-    symbolRef.current=symbol;
+      if (data?.position) {
+        setPosition(data.position);
+      } else {
+        setPosition(null);
+      }
 
-    const cache=ensureSymbolCache(symbol);
-    const persisted=loadPersisted(symbol);
-
-    const next=cache.candles.length ? cache.candles : persisted;
-
-    const last=cache.lastCandle || next[next.length-1] || null;
-
-    lastCandleRef.current=last;
-    setCandles(next);
-
-    if(next.length < 50){
-      loadHistory(symbol);
+    } catch (err) {
+      console.error("Position load error:", err.message);
     }
+  }
 
-  },[symbol]);
-
-  /* ================= WEBSOCKET ================= */
+/* =========================================================
+WEBSOCKET
+========================================================= */
 
   function connectWS(){
 
@@ -256,15 +195,14 @@ export default function Market(){
         try{
 
           const data=JSON.parse(msg.data);
-
           const market=data?.data?.[symbolRef.current];
+
           if(!market) return;
 
           const priceNow=toNumber(market.price);
           if(priceNow===null) return;
 
           setPrice(priceNow);
-
           updateCandles(symbolRef.current,priceNow);
 
         }catch{}
@@ -285,29 +223,28 @@ export default function Market(){
 
   }
 
-  /* ================= HEARTBEAT ================= */
+/* =========================================================
+LIFECYCLE
+========================================================= */
 
   useEffect(()=>{
 
-    const timer=setInterval(()=>{
+    symbolRef.current=symbol;
 
-      if(Date.now()-lastMessage.current > 10000){
-
-        if(wsRef.current){
-          wsRef.current.close();
-        }
-
-      }
-
-    },5000);
-
-    return ()=>clearInterval(timer);
-
-  },[]);
+  },[symbol]);
 
   useEffect(()=>{
 
     connectWS();
+
+    // 🔥 LOAD AI DATA LOOP
+    loadTrades();
+    loadPosition();
+
+    const interval = setInterval(()=>{
+      loadTrades();
+      loadPosition();
+    },3000);
 
     return ()=>{
 
@@ -319,9 +256,15 @@ export default function Market(){
         clearTimeout(reconnectTimer.current);
       }
 
+      clearInterval(interval);
+
     };
 
   },[]);
+
+/* =========================================================
+UI
+========================================================= */
 
   return(
 
@@ -363,10 +306,8 @@ export default function Market(){
 
         <TerminalChart
           candles={candles}
-          volume={[]}
-          trades={[]}
-          aiSignals={[]}
-          pnlSeries={[]}
+          trades={trades}       // ✅ FIXED
+          position={position}   // ✅ FIXED
           height={520}
         />
 
