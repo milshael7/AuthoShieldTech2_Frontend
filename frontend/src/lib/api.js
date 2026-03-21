@@ -1,6 +1,6 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v25
-   FULL AI + EXECUTION + ANALYTICS INTEGRATION
+   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v30
+   FULL AI + EXECUTION + ANALYTICS + SAFETY LAYER
 ========================================================= */
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
@@ -72,6 +72,18 @@ function attachTenantHeader(headers) {
   }
 
   return headers;
+}
+
+/* ================= SAFE RESPONSE ================= */
+
+function extractData(res) {
+  if (!res) return null;
+
+  if (res.ok === false) return null;
+
+  if (res.data !== undefined) return res.data;
+
+  return res;
 }
 
 /* ================= CORE REQUEST ================= */
@@ -148,7 +160,7 @@ export async function req(
 }
 
 /* =========================================================
-   API SURFACE (INSTITUTIONAL LEVEL)
+   API SURFACE — INSTITUTIONAL CORE
 ========================================================= */
 
 export const api = {
@@ -175,49 +187,73 @@ export const api = {
   logout: () => req("/api/auth/logout", { method: "POST" }),
   refresh: () => req("/api/auth/refresh", { method: "POST" }),
 
-  /* ================= AI ENGINE ================= */
+  /* ================= AI ================= */
 
-  aiSnapshot: () => req("/api/trading/ai/snapshot"),
-  aiConfig: () => req("/api/ai/config"),
+  aiSnapshot: async () =>
+    extractData(await req("/api/trading/ai/snapshot")),
 
-  // 🔥 NEW — Deep brain analytics
-  aiBrainStats: () => req("/api/ai/brain/stats"),
-  aiReasonerStatus: () => req("/api/ai/reasoner/status"),
+  aiConfig: async () =>
+    extractData(await req("/api/ai/config")),
+
+  aiBrainStats: async () =>
+    extractData(await req("/api/ai/brain/stats")),
+
+  aiReasonerStatus: async () =>
+    extractData(await req("/api/ai/reasoner/status")),
+
+  // 🔥 FUTURE (safe if backend adds later)
+  aiDiagnostics: async () =>
+    extractData(await req("/api/ai/diagnostics")),
+
+  aiLiveDecision: async () =>
+    extractData(await req("/api/ai/live")),
 
   /* ================= MARKET ================= */
 
-  marketPrice: (symbol) =>
-    req(`/api/market/price?symbol=${encodeURIComponent(symbol)}`),
+  marketPrice: async (symbol) =>
+    extractData(
+      await req(`/api/market/price?symbol=${encodeURIComponent(symbol)}`)
+    ),
 
-  marketCandles: (symbol, limit = 200) =>
-    req(`/api/market/candles?symbol=${encodeURIComponent(symbol)}&limit=${limit}`),
+  marketCandles: async (symbol, limit = 200) =>
+    extractData(
+      await req(
+        `/api/market/candles?symbol=${encodeURIComponent(symbol)}&limit=${limit}`
+      )
+    ),
 
-  /* ================= PAPER TRADING ================= */
+  /* ================= PAPER ================= */
 
-  paperAccount: () => req("/api/paper/account"),
-  paperPositions: () => req("/api/paper/positions"),
-  paperOrders: () => req("/api/paper/orders"),
+  paperAccount: async () =>
+    extractData(await req("/api/paper/account")),
 
-  placePaperOrder: (payload) =>
-    req("/api/paper/order", {
-      method: "POST",
-      body: payload,
-    }),
+  paperPositions: async () =>
+    extractData(await req("/api/paper/positions")),
 
-  /* ================= EXECUTION METRICS ================= */
+  paperOrders: async () =>
+    extractData(await req("/api/paper/orders")),
 
-  executionMetrics: () =>
-    req("/api/execution/metrics"),
+  placePaperOrder: async (payload) =>
+    extractData(
+      await req("/api/paper/order", {
+        method: "POST",
+        body: payload,
+      })
+    ),
 
-  executionAllMetrics: () =>
-    req("/api/execution/metrics/all"),
+  /* ================= EXECUTION ================= */
+
+  executionMetrics: async () =>
+    extractData(await req("/api/execution/metrics")),
+
+  executionAllMetrics: async () =>
+    extractData(await req("/api/execution/metrics/all")),
 
   /* ================= PERFORMANCE ================= */
 
-  tradeHistory: () =>
-    req("/api/trades/history"),
+  tradeHistory: async () =>
+    extractData(await req("/api/trades/history")),
 
-  performanceSummary: () =>
-    req("/api/performance/summary"),
-
+  performanceSummary: async () =>
+    extractData(await req("/api/performance/summary")),
 };
