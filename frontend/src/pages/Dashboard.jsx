@@ -1,7 +1,7 @@
 // ==========================================================
 // 🔒 PROTECTED CORE FILE — MAINTENANCE SAFE
-// FILE: Dashboard.jsx
-// VERSION: v4.2 (STABLE + SAFE + REAL DATA ONLY)
+// FILE: frontend/src/pages/Dashboard.jsx
+// VERSION: v4.3 (STABLE + GUARDED + REAL DATA FLOW)
 // ==========================================================
 
 import React, { useEffect, useState } from "react";
@@ -27,7 +27,7 @@ import ExecutionPanel from "../components/dashboard/ExecutionPanel";
 import { api } from "../services/api";
 
 /* =========================================================
-UTIL
+UTIL (SAFE NUMBERS)
 ========================================================= */
 
 function safeNum(v, fallback = 0) {
@@ -50,7 +50,7 @@ export default function Dashboard() {
   const [status, setStatus] = useState({});
 
   /* =========================================================
-     LOAD REAL DATA (SAFE)
+     LOAD REAL DATA (SAFE + GUARDED)
   ========================================================= */
 
   async function loadAI() {
@@ -67,18 +67,17 @@ export default function Dashboard() {
         api.req("/api/trading/status"),
       ]);
 
-      /* ================= SAFE ASSIGN ================= */
-
-      setAi(aiRes?.data || aiRes || {});
-
-      setBrain(brainRes?.data || brainRes || {});
-
-      setPerformance(perfRes?.data || perfRes || {});
-
+      const aiData = aiRes?.data || aiRes || {};
+      const brainData = brainRes?.data || brainRes || {};
+      const perfData = perfRes?.data || perfRes || {};
       const statusData = statusRes?.data || statusRes || {};
+
+      setAi(aiData);
+      setBrain(brainData);
+      setPerformance(perfData);
       setStatus(statusData);
 
-      /* ================= EXECUTION DERIVED ================= */
+      /* ================= DERIVED EXECUTION ================= */
 
       setExecution({
         score: safeNum(statusData?.ai?.confidence),
@@ -92,7 +91,7 @@ export default function Dashboard() {
   }
 
   /* =========================================================
-     AUTO REFRESH
+     AUTO REFRESH (SAFE)
   ========================================================= */
 
   useEffect(() => {
@@ -112,6 +111,8 @@ export default function Dashboard() {
 
   const aiRate = safeNum(status?.ai?.rate);
   const aiConfidence = safeNum(status?.ai?.confidence) * 100;
+
+  const engineStatus = status?.engine || "UNKNOWN";
 
   /* =========================================================
      ADMIN / FINANCE
@@ -137,7 +138,7 @@ export default function Dashboard() {
 
             <div style={styles.card}>
               <h3>⚙️ Engine</h3>
-              <p>Status: {status?.engine || "UNKNOWN"}</p>
+              <p>Status: {engineStatus}</p>
               <p>AI Rate: {aiRate}/min</p>
               <p>Confidence: {aiConfidence.toFixed(1)}%</p>
             </div>
@@ -151,6 +152,7 @@ export default function Dashboard() {
 
         </DashboardGrid>
 
+        {/* SECURITY */}
         <SecurityOverview />
         <RiskMonitor />
         <SessionMonitor />
