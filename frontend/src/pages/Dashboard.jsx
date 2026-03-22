@@ -1,6 +1,6 @@
 // ==========================================================
 // FILE: frontend/src/pages/Dashboard.jsx
-// VERSION: v3.0 (Institutional AI + Execution Command Center)
+// VERSION: v4.0 (FULLY SYNCED — NO FAKE DATA)
 // ==========================================================
 
 import React, { useEffect, useState } from "react";
@@ -37,10 +37,11 @@ export default function Dashboard() {
   const [brain, setBrain] = useState(null);
   const [execution, setExecution] = useState(null);
   const [performance, setPerformance] = useState(null);
+  const [status, setStatus] = useState(null);
 
-  const [loading, setLoading] = useState(true);
-
-  /* ================= LOAD AI DATA ================= */
+  /* =========================================================
+     LOAD REAL DATA (NO FALLBACKS)
+  ========================================================= */
 
   async function loadAI() {
     try {
@@ -49,84 +50,39 @@ export default function Dashboard() {
         brainRes,
         execRes,
         perfRes,
+        statusRes,
       ] = await Promise.all([
         api.aiSnapshot(),
-        api.aiBrainStats?.(),       // safe optional
-        api.executionMetrics?.(),   // safe optional
-        api.performanceSummary?.(), // safe optional
+        api.aiBrainStats(),
+        api.executionMetrics(),
+        api.performanceSummary(),
+        api.req("/api/trading/status"), // 🔥 NEW
       ]);
 
-      /* ================= SAFE ASSIGN ================= */
-
-      if (aiRes) setAi(aiRes?.data || aiRes);
-
-      if (brainRes) {
-        setBrain(brainRes?.data || brainRes);
-      } else {
-        // fallback if backend not ready
-        setBrain({
-          totalTrades: 0,
-          winRate: 0,
-          netPnL: 0,
-          memoryDepth: 0,
-        });
-      }
-
-      if (execRes) {
-        const exec = execRes?.data || execRes;
-
-        setExecution({
-          ...exec,
-          condition: classifyExecution(exec),
-        });
-      } else {
-        // fallback simulated execution
-        const fallback = {
-          score: 0.8,
-          avgLatency: 120,
-          avgSlippage: 0.001,
-        };
-
-        setExecution({
-          ...fallback,
-          condition: classifyExecution(fallback),
-        });
-      }
-
-      if (perfRes) {
-        setPerformance(perfRes?.data || perfRes);
-      }
+      setAi(aiRes?.data || aiRes);
+      setBrain(brainRes?.data || brainRes);
+      setExecution(execRes?.data || execRes);
+      setPerformance(perfRes?.data || perfRes);
+      setStatus(statusRes?.data || statusRes);
 
     } catch (err) {
-      console.error("AI load error:", err.message);
-    } finally {
-      setLoading(false);
+      console.error("Dashboard load error:", err.message);
     }
   }
 
-  /* ================= EXECUTION CLASSIFIER ================= */
-
-  function classifyExecution(exec) {
-    if (!exec) return { condition: "unknown" };
-
-    const score = exec.score || 0;
-
-    if (score >= 0.75) return { condition: "good" };
-    if (score >= 0.5) return { condition: "warning" };
-    return { condition: "poor" };
-  }
-
-  /* ================= AUTO REFRESH ================= */
+  /* =========================================================
+     AUTO REFRESH
+  ========================================================= */
 
   useEffect(() => {
     loadAI();
 
-    const interval = setInterval(loadAI, 3000);
+    const interval = setInterval(loadAI, 2000);
     return () => clearInterval(interval);
   }, []);
 
   /* =========================================================
-     ADMIN / FINANCE (FULL SYSTEM)
+     ADMIN / FINANCE
   ========================================================= */
 
   if (role === "Admin" || role === "Finance") {
@@ -136,32 +92,32 @@ export default function Dashboard() {
 
         <DashboardGrid>
 
-          {/* LEFT SIDE */}
+          {/* LEFT */}
           <div style={styles.column}>
             <AiPanel data={ai} />
 
             <div style={styles.card}>
               <h3>📈 Performance</h3>
-
-              <p>Trades: {performance?.totalTrades ?? "-"}</p>
-
+              <p>Trades: {performance?.totalTrades}</p>
               <p>
-                Win Rate:{" "}
-                {performance?.winRate != null
-                  ? (performance.winRate * 100).toFixed(2) + "%"
-                  : "-"}
+                Win Rate: {(performance?.winRate * 100 || 0).toFixed(2)}%
               </p>
+              <p>Net PnL: ${performance?.netPnL?.toFixed(2)}</p>
+            </div>
 
+            {/* 🔥 ENGINE STATUS */}
+            <div style={styles.card}>
+              <h3>⚙️ Engine</h3>
+              <p>Status: {status?.engine}</p>
+              <p>AI Rate: {status?.ai?.rate}/min</p>
               <p>
-                Net PnL: $
-                {performance?.netPnL != null
-                  ? performance.netPnL.toFixed(2)
-                  : "-"}
+                Confidence:{" "}
+                {(status?.ai?.confidence * 100 || 0).toFixed(1)}%
               </p>
             </div>
           </div>
 
-          {/* RIGHT SIDE */}
+          {/* RIGHT */}
           <div style={styles.column}>
             <BrainPanel data={brain} />
             <ExecutionPanel data={execution} />
@@ -169,7 +125,7 @@ export default function Dashboard() {
 
         </DashboardGrid>
 
-        {/* ================= SECURITY ================= */}
+        {/* SECURITY */}
         <SecurityOverview />
         <RiskMonitor />
         <SessionMonitor />
@@ -189,13 +145,8 @@ export default function Dashboard() {
         <h2 style={styles.title}>Manager Dashboard</h2>
 
         <DashboardGrid>
-          <div style={styles.column}>
-            <AiPanel data={ai} />
-          </div>
-
-          <div style={styles.column}>
-            <BrainPanel data={brain} />
-          </div>
+          <AiPanel data={ai} />
+          <BrainPanel data={brain} />
         </DashboardGrid>
 
         <SecurityOverview />
@@ -215,21 +166,14 @@ export default function Dashboard() {
         <h2 style={styles.title}>Company Dashboard</h2>
 
         <DashboardGrid>
-          <div style={styles.column}>
-            <AiPanel data={ai} />
-          </div>
+          <AiPanel data={ai} />
 
-          <div style={styles.column}>
-            <div style={styles.card}>
-              <h3>Performance</h3>
-              <p>Trades: {performance?.totalTrades ?? "-"}</p>
-              <p>
-                Win Rate:{" "}
-                {performance?.winRate != null
-                  ? (performance.winRate * 100).toFixed(2) + "%"
-                  : "-"}
-              </p>
-            </div>
+          <div style={styles.card}>
+            <h3>Performance</h3>
+            <p>Trades: {performance?.totalTrades}</p>
+            <p>
+              Win Rate: {(performance?.winRate * 100 || 0).toFixed(2)}%
+            </p>
           </div>
         </DashboardGrid>
 
@@ -249,9 +193,6 @@ export default function Dashboard() {
 
       <div style={styles.fallbackCard}>
         <p>Dashboard is operational.</p>
-        <p style={{ fontSize: 13, opacity: 0.6 }}>
-          Limited access.
-        </p>
       </div>
     </div>
   );
