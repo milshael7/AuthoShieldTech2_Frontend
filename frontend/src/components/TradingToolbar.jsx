@@ -1,21 +1,6 @@
 // ==========================================================
 // FILE: frontend/src/components/TradingToolbar.jsx
-//
-// MODULE: Trading Toolbar
-//
-// PURPOSE
-// ----------------------------------------------------------
-// Top bar for the Trading Room.
-//
-// UPGRADE
-// ----------------------------------------------------------
-// ✔ uses authenticated backend status requests
-// ✔ reads real snapshot + engine telemetry safely
-// ✔ avoids stale polling closure issues
-// ✔ supports engineStart when available
-// ✔ falls back cleanly when backend fields are missing
-// ✔ keeps parent-controlled mode/symbol/panels unchanged
-//
+// VERSION: v2.0 (ENGINE + AI + ROUTES FULLY ALIGNED)
 // ==========================================================
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -52,8 +37,6 @@ COMPONENT
 ========================================================= */
 
 export default function TradingToolbar({
-  /* ===== Parent Controlled State ===== */
-
   mode = "Paper",
   setMode = () => {},
 
@@ -65,8 +48,6 @@ export default function TradingToolbar({
   lastText = "Loading",
 
   running = false,
-
-  /* ===== Panel Toggles ===== */
 
   showMoney = false,
   setShowMoney = () => {},
@@ -86,9 +67,6 @@ export default function TradingToolbar({
   wideChart = false,
   setWideChart = () => {},
 }) {
-  /* ======================================================
-  ENGINE TELEMETRY STATE
-  ====================================================== */
 
   const [engine, setEngine] = useState("CHECKING");
   const [ai, setAI] = useState("0.00");
@@ -97,44 +75,36 @@ export default function TradingToolbar({
   const API_BASE =
     (import.meta.env.VITE_API_BASE || "").replace(/\/+$/, "");
 
-  function getCompanyId() {
-    const user = getSavedUser();
-    if (user?.companyId === undefined || user?.companyId === null) return null;
-    return String(user.companyId);
-  }
+  /* ======================================================
+  AUTH
+  ====================================================== */
 
   function buildAuthHeaders() {
     const token = getToken();
-    const companyId = getCompanyId();
+    const user = getSavedUser();
 
     const headers = {
       "Content-Type": "application/json",
     };
 
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
-    if (companyId) {
-      headers["x-company-id"] = companyId;
-    }
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (user?.companyId) headers["x-company-id"] = String(user.companyId);
 
     return headers;
   }
 
   /* ======================================================
-  LOAD ENGINE STATUS
+  LOAD STATUS (🔥 FIXED)
   ====================================================== */
 
   useEffect(() => {
     let mounted = true;
-    let timer = null;
 
     async function loadStatus() {
       if (!API_BASE) return;
 
       try {
-        const res = await fetch(`${API_BASE}/api/paper/status`, {
+        const res = await fetch(`${API_BASE}/api/trading/status`, {
           headers: buildAuthHeaders(),
         });
 
@@ -143,44 +113,41 @@ export default function TradingToolbar({
         const data = await res.json();
         if (!mounted) return;
 
+        /* ================= ENGINE ================= */
+
         const engineState =
           data?.engine ||
-          (typeof data?.engineState?.enabled === "boolean"
-            ? data.engineState.enabled
-              ? "RUNNING"
-              : "STOPPED"
-            : "OFFLINE");
-
-        const confidence =
-          data?.brainState?.smoothedConfidence ??
-          data?.snapshot?.brainState?.smoothedConfidence ??
-          0;
-
-        const ticks =
-          data?.snapshot?.executionStats?.ticks ??
-          data?.executionStats?.ticks ??
-          0;
-
-        const engineStart =
-          safeNum(data?.engineStart, 0);
+          (data?.telemetry?.ticks > 0 ? "RUNNING" : "STARTING");
 
         setEngine(String(engineState || "OFFLINE"));
+
+        /* ================= AI ================= */
+
+        const confidence =
+          data?.ai?.confidence ??
+          0;
+
         setAI(safeNum(confidence, 0).toFixed(2));
 
-        if (engineStart > 0) {
-          setUptime(formatUptimeFromMs(Date.now() - engineStart));
+        /* ================= UPTIME ================= */
+
+        const ticks = safeNum(data?.telemetry?.ticks, 0);
+
+        if (ticks > 0) {
+          setUptime(formatUptimeFromMs(ticks * 1000));
         } else {
-          setUptime(
-            ticks
-              ? `${Math.floor(safeNum(ticks, 0) / 60)}m`
-              : "0s"
-          );
+          setUptime("0s");
         }
-      } catch {}
+
+      } catch {
+        if (mounted) {
+          setEngine("OFFLINE");
+        }
+      }
     }
 
     loadStatus();
-    timer = setInterval(loadStatus, POLL_INTERVAL);
+    const timer = setInterval(loadStatus, POLL_INTERVAL);
 
     return () => {
       mounted = false;
@@ -215,7 +182,7 @@ export default function TradingToolbar({
     running ? "ON" : "OFF";
 
   /* ======================================================
-  UI STYLES
+  UI
   ====================================================== */
 
   const chip = {
@@ -256,50 +223,30 @@ export default function TradingToolbar({
     <div className="tpBar">
       <div className="tpLeft">
         <div className="tpTitleRow">
-          <h2 className="tpTitle">
-            Trading Room
-          </h2>
+          <h2 className="tpTitle">Trading Room</h2>
 
           <span style={chip}>
-            Feed:
-            <b style={{ marginLeft: 6 }}>
-              {normalizedFeedStatus}
-            </b>
+            Feed: <b style={{ marginLeft: 6 }}>{normalizedFeedStatus}</b>
           </span>
 
           <span style={chip}>
-            Last:
-            <b style={{ marginLeft: 6 }}>
-              {normalizedLastText}
-            </b>
+            Last: <b style={{ marginLeft: 6 }}>{normalizedLastText}</b>
           </span>
 
           <span style={chip}>
-            Paper:
-            <b style={{ marginLeft: 6 }}>
-              {paperState}
-            </b>
+            Paper: <b style={{ marginLeft: 6 }}>{paperState}</b>
           </span>
 
           <span style={chip}>
-            Engine:
-            <b style={{ marginLeft: 6 }}>
-              {engine}
-            </b>
+            Engine: <b style={{ marginLeft: 6 }}>{engine}</b>
           </span>
 
           <span style={chip}>
-            AI:
-            <b style={{ marginLeft: 6 }}>
-              {ai}
-            </b>
+            AI: <b style={{ marginLeft: 6 }}>{ai}</b>
           </span>
 
           <span style={chip}>
-            Uptime:
-            <b style={{ marginLeft: 6 }}>
-              {uptime}
-            </b>
+            Uptime: <b style={{ marginLeft: 6 }}>{uptime}</b>
           </span>
         </div>
 
@@ -310,9 +257,7 @@ export default function TradingToolbar({
 
       <div className="tpRight">
         <div style={pill}>
-          <div className="tpPillLabel">
-            Mode
-          </div>
+          <div className="tpPillLabel">Mode</div>
 
           <div className="tpRow">
             <button
@@ -332,9 +277,7 @@ export default function TradingToolbar({
         </div>
 
         <div style={pill}>
-          <div className="tpPillLabel">
-            Symbol
-          </div>
+          <div className="tpPillLabel">Symbol</div>
 
           <select
             value={
@@ -354,52 +297,15 @@ export default function TradingToolbar({
         </div>
 
         <div style={pill}>
-          <div className="tpPillLabel">
-            Panels
-          </div>
+          <div className="tpPillLabel">Panels</div>
 
           <div className="tpRow tpRowWrap">
-            <button
-              style={btn(showMoney)}
-              onClick={() => setShowMoney((v) => !v)}
-            >
-              Money
-            </button>
-
-            <button
-              style={btn(showTradeLog)}
-              onClick={() => setShowTradeLog((v) => !v)}
-            >
-              Log
-            </button>
-
-            <button
-              style={btn(showHistory)}
-              onClick={() => setShowHistory((v) => !v)}
-            >
-              History
-            </button>
-
-            <button
-              style={btn(showControls)}
-              onClick={() => setShowControls((v) => !v)}
-            >
-              Controls
-            </button>
-
-            <button
-              style={btn(showAI)}
-              onClick={() => setShowAI((v) => !v)}
-            >
-              AI
-            </button>
-
-            <button
-              style={btn(wideChart)}
-              onClick={() => setWideChart((v) => !v)}
-            >
-              Wide
-            </button>
+            <button style={btn(showMoney)} onClick={() => setShowMoney(v => !v)}>Money</button>
+            <button style={btn(showTradeLog)} onClick={() => setShowTradeLog(v => !v)}>Log</button>
+            <button style={btn(showHistory)} onClick={() => setShowHistory(v => !v)}>History</button>
+            <button style={btn(showControls)} onClick={() => setShowControls(v => !v)}>Controls</button>
+            <button style={btn(showAI)} onClick={() => setShowAI(v => !v)}>AI</button>
+            <button style={btn(wideChart)} onClick={() => setWideChart(v => !v)}>Wide</button>
           </div>
         </div>
       </div>
