@@ -1,11 +1,15 @@
+// ==========================================================
+// 🔒 CLEAN MARKET TERMINAL (ALIGNED SYSTEM)
+// FILE: frontend/src/pages/Market.jsx
+// VERSION: v2.0 (STABLE + REALTIME SAFE)
+// ==========================================================
+
 import React, { useEffect, useRef, useState } from "react";
 import TerminalChart from "../../components/TerminalChart";
 import { getToken } from "../../lib/api.js";
 import "../../styles/terminal.css";
 
-/* =========================================================
-CONFIG
-========================================================= */
+/* ========================================================= */
 
 const SYMBOL_GROUPS = {
   Crypto: ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
@@ -22,48 +26,46 @@ const MAX_CANDLES = 500;
 const API_BASE =
   (import.meta.env.VITE_API_BASE || "").replace(/\/+$/, "");
 
-/* =========================================================
-COMPONENT
-========================================================= */
+/* ========================================================= */
 
 export default function Market() {
+
   const wsRef = useRef(null);
-  const reconnectTimer = useRef(null);
-  const lastMessage = useRef(Date.now());
+  const reconnectRef = useRef(null);
+  const aliveRef = useRef(true);
 
   const symbolRef = useRef(ALL_SYMBOLS[0]);
+  const lastCandleRef = useRef(null);
 
   const [symbol, setSymbol] = useState(ALL_SYMBOLS[0]);
   const [price, setPrice] = useState(null);
   const [candles, setCandles] = useState([]);
 
-  // 🔥 LIVE ENGINE STATE
   const [trades, setTrades] = useState([]);
   const [position, setPosition] = useState(null);
 
-  const lastCandleRef = useRef(null);
+  /* =========================================================
+  UTIL
+  ========================================================= */
 
-/* =========================================================
-UTIL
-========================================================= */
-
-  function toNumber(v) {
+  function safeNum(v) {
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }
 
-/* =========================================================
-CANDLES
-========================================================= */
+  /* =========================================================
+  CANDLES
+  ========================================================= */
 
-  function updateCandles(sym, priceNow) {
+  function updateCandles(priceNow) {
+
     if (!Number.isFinite(priceNow)) return;
 
     const now = Math.floor(Date.now() / 1000);
-    const candleTime = Math.floor(now / CANDLE_SECONDS) * CANDLE_SECONDS;
+    const candleTime =
+      Math.floor(now / CANDLE_SECONDS) * CANDLE_SECONDS;
 
-    setCandles((prev) => {
-      if (sym !== symbolRef.current) return prev;
+    setCandles(prev => {
 
       const last = lastCandleRef.current;
 
@@ -71,21 +73,24 @@ CANDLES
       let nextLast;
 
       if (!last || last.time !== candleTime) {
+
         nextLast = {
           time: candleTime,
           open: priceNow,
           high: priceNow,
           low: priceNow,
-          close: priceNow,
+          close: priceNow
         };
 
         next = [...prev.slice(-MAX_CANDLES), nextLast];
+
       } else {
+
         nextLast = {
           ...last,
           high: Math.max(last.high, priceNow),
           low: Math.min(last.low, priceNow),
-          close: priceNow,
+          close: priceNow
         };
 
         next = [...prev];
@@ -97,175 +102,178 @@ CANDLES
     });
   }
 
-/* =========================================================
-FALLBACK API (SAFETY)
-========================================================= */
+  /* =========================================================
+  BACKEND FALLBACK (SAFE)
+  ========================================================= */
 
-  async function loadTrades() {
-    try {
-      const res = await fetch(`${API_BASE}/api/trades/history`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
+  async function loadSnapshot(){
+
+    try{
+
+      const res = await fetch(
+        `${API_BASE}/api/paper/status`,
+        { headers: { Authorization: `Bearer ${getToken()}` } }
+      );
 
       const data = await res.json();
 
-      if (Array.isArray(data?.trades)) {
-        setTrades(data.trades);
+      const snap = data?.snapshot || {};
+
+      if (Array.isArray(snap?.trades)) {
+        setTrades(snap.trades.slice(-200));
       }
-    } catch {}
+
+      setPosition(snap?.position || null);
+
+    }catch{}
+
   }
 
-  async function loadPosition() {
-    try {
-      const res = await fetch(`${API_BASE}/api/paper/positions`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
+  /* =========================================================
+  WEBSOCKET
+  ========================================================= */
 
-      const data = await res.json();
+  function connectWS(){
 
-      setPosition(data?.position || null);
-    } catch {}
-  }
-
-/* =========================================================
-🔥 WEBSOCKET (FIXED)
-========================================================= */
-
-  function connectWS() {
-    if (!API_BASE) return;
+    if (!API_BASE || !aliveRef.current) return;
 
     const token = getToken();
     if (!token) return;
 
-    try {
-      const url = new URL(API_BASE);
+    try{
 
+      const url = new URL(API_BASE);
       const protocol =
         url.protocol === "https:" ? "wss:" : "ws:";
 
-      // 🔥 FIX: USE PAPER CHANNEL (NOT MARKET)
       const ws = new WebSocket(
         `${protocol}//${url.host}/ws?channel=paper&token=${encodeURIComponent(token)}`
       );
 
       wsRef.current = ws;
 
-      ws.onmessage = (msg) => {
-        lastMessage.current = Date.now();
+      ws.onmessage = (msg)=>{
 
-        try {
+        if (!aliveRef.current) return;
+
+        try{
+
           const data = JSON.parse(msg.data);
 
-          /* ================= MARKET ================= */
+          /* ================= PRICE ================= */
 
           if (data?.channel === "market") {
+
             const market = data?.data?.[symbolRef.current];
-            if (!market) return;
+            const priceNow = safeNum(market?.price);
 
-            const priceNow = toNumber(market.price);
-            if (priceNow === null) return;
-
-            setPrice(priceNow);
-            updateCandles(symbolRef.current, priceNow);
+            if (priceNow !== null) {
+              setPrice(priceNow);
+              updateCandles(priceNow);
+            }
           }
 
-          /* ================= 🔥 ENGINE ================= */
+          /* ================= ENGINE ================= */
 
           if (data?.channel === "paper") {
-            // ENGINE SNAPSHOT
-            if (data.type === "engine" && data.snapshot) {
+
+            if (data?.snapshot) {
+
               const snap = data.snapshot;
 
               setPosition(snap?.position || null);
 
               if (Array.isArray(snap?.trades)) {
-                setTrades(snap.trades.slice(-200));
+                setTrades(prev => mergeTrades(prev, snap.trades));
               }
             }
 
-            // LIVE TRADE EVENT
-            if (data.type === "trade" && data.trade) {
-              setTrades((prev) => [
-                ...prev.slice(-200),
-                data.trade,
-              ]);
+            if (data?.trade) {
+              setTrades(prev => mergeTrades(prev, [data.trade]));
             }
           }
-        } catch {}
+
+        }catch{}
+
       };
 
       ws.onclose = () => {
-        wsRef.current = null;
 
-        reconnectTimer.current = setTimeout(() => {
+        if (!aliveRef.current) return;
+
+        reconnectRef.current = setTimeout(() => {
           connectWS();
         }, 3000);
+
       };
-    } catch {}
+
+    }catch{}
+
   }
 
-/* =========================================================
-HEARTBEAT
-========================================================= */
+  /* =========================================================
+  MERGE (PREVENT DUPES)
+  ========================================================= */
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (Date.now() - lastMessage.current > 10000) {
-        if (wsRef.current) {
-          wsRef.current.close();
-        }
-      }
-    }, 5000);
+  function mergeTrades(prev, incoming){
 
-    return () => clearInterval(timer);
-  }, []);
+    const map = new Map();
 
-/* =========================================================
-LIFECYCLE
-========================================================= */
+    prev.forEach(t => map.set(t.time + t.side, t));
+    incoming.forEach(t => map.set(t.time + t.side, t));
 
-  useEffect(() => {
+    return Array.from(map.values()).slice(-200);
+  }
+
+  /* =========================================================
+  LIFECYCLE
+  ========================================================= */
+
+  useEffect(()=>{
     symbolRef.current = symbol;
-  }, [symbol]);
+  },[symbol]);
 
-  useEffect(() => {
+  useEffect(()=>{
+
+    aliveRef.current = true;
+
     connectWS();
+    loadSnapshot();
 
-    // fallback polling (backup safety)
-    loadTrades();
-    loadPosition();
+    const fallback = setInterval(loadSnapshot,5000);
 
-    const interval = setInterval(() => {
-      loadTrades();
-      loadPosition();
-    }, 5000);
+    return ()=>{
 
-    return () => {
+      aliveRef.current = false;
+
       if (wsRef.current) wsRef.current.close();
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      clearInterval(interval);
-    };
-  }, []);
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
 
-/* =========================================================
-UI
-========================================================= */
+      clearInterval(fallback);
+
+    };
+
+  },[]);
+
+  /* =========================================================
+  UI
+  ========================================================= */
 
   return (
     <div className="terminalRoot">
+
       <header className="tvTopBar">
+
         <div className="tvTopLeft">
           <select
             className="tvSelect"
             value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
+            onChange={(e)=>setSymbol(e.target.value)}
           >
-            {Object.entries(SYMBOL_GROUPS).map(([group, list]) => (
+            {Object.entries(SYMBOL_GROUPS).map(([group,list])=>(
               <optgroup key={group} label={group}>
-                {list.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
+                {list.map(s=>(
+                  <option key={s} value={s}>{s}</option>
                 ))}
               </optgroup>
             ))}
@@ -273,20 +281,24 @@ UI
         </div>
 
         <div className="tvTopRight">
-          <div style={{ fontWeight: 600 }}>
+          <div style={{fontWeight:600}}>
             {symbol} — {price ? price.toLocaleString() : "Loading"}
           </div>
         </div>
+
       </header>
 
       <main className="tvChartArea">
+
         <TerminalChart
           candles={candles}
           trades={trades}
           position={position}
           height={520}
         />
+
       </main>
+
     </div>
   );
 }
