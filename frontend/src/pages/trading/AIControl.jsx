@@ -1,33 +1,7 @@
 // ============================================================
-// FILE LOCATION:
-// frontend/src/pages/trading/AIControl.jsx
-//
-// MODULE:
-// AI Control Room — Engine Control Panel
-//
-// PURPOSE:
-// Controls AI trading configuration and monitors engine health.
-//
-// BACKEND CONNECTIONS
-// ------------------------------------------------------------
-// Engine health endpoint:
-//    GET /api/paper/status
-//
-// Configuration endpoint:
-//    GET  /api/ai/config
-//    POST /api/ai/config
-//
-// IMPORTANT
-// ------------------------------------------------------------
-// The AI engine ALWAYS runs in the backend.
-// This panel only:
-//
-// 1. Reads engine telemetry
-// 2. Updates AI configuration
-// 3. Allows switching between PAPER and LIVE execution
-//
-// DO NOT CHANGE endpoint paths unless backend routes change.
-//
+// 🔒 CLEAN CORE — AI CONTROL ROOM (ALIGNED)
+// FILE: frontend/src/pages/trading/AIControl.jsx
+// VERSION: v2.0 (STABLE + SAFE + BACKEND SYNC)
 // ============================================================
 
 import React, { useEffect, useState } from "react";
@@ -35,6 +9,8 @@ import { getToken } from "../../lib/api.js";
 
 const API_BASE =
   (import.meta.env.VITE_API_BASE || "").replace(/\/+$/, "");
+
+/* ========================================================= */
 
 export default function AIControl(){
 
@@ -45,35 +21,36 @@ export default function AIControl(){
   const [riskPercent,setRiskPercent] = useState(1.5);
   const [positionMultiplier,setPositionMultiplier] = useState(1);
 
-  const [aggressiveness,setAggressiveness] = useState("Balanced");
+  const [strategyMode,setStrategyMode] = useState("Balanced");
+
+  const [engineHealth,setEngineHealth] = useState("CHECKING");
 
   const [saving,setSaving] = useState(false);
   const [statusMsg,setStatusMsg] = useState("");
 
-  const [engineHealth,setEngineHealth] = useState("STARTING");
-
   /* =========================================================
-     INITIAL LOAD
+     INIT
   ========================================================= */
 
   useEffect(()=>{
 
-    loadConfig();
-    checkEngine();
+    loadAll();
 
-    const loop=setInterval(()=>{
-
-      loadConfig();
-      checkEngine();
-
-    },8000);
+    const loop=setInterval(loadAll,8000);
 
     return ()=>clearInterval(loop);
 
   },[]);
 
+  async function loadAll(){
+    await Promise.all([
+      loadConfig(),
+      checkEngine()
+    ]);
+  }
+
   /* =========================================================
-     ENGINE HEALTH CHECK
+     ENGINE STATUS
   ========================================================= */
 
   async function checkEngine(){
@@ -92,18 +69,19 @@ export default function AIControl(){
 
       const data = await res.json();
 
-      if(data?.engine === "RUNNING"){
+      const state = String(data?.engine || "").toUpperCase();
+
+      if(state === "RUNNING"){
         setEngineHealth("RUNNING");
       }
-      else if(data?.engine === "IDLE"){
+      else if(state === "IDLE" || state === "STARTING"){
         setEngineHealth("STARTING");
       }
       else{
         setEngineHealth("OFFLINE");
       }
 
-    }
-    catch{
+    }catch{
 
       setEngineHealth("OFFLINE");
 
@@ -112,7 +90,7 @@ export default function AIControl(){
   }
 
   /* =========================================================
-     LOAD CONFIGURATION
+     LOAD CONFIG
   ========================================================= */
 
   async function loadConfig(){
@@ -121,7 +99,7 @@ export default function AIControl(){
 
       const res = await fetch(
         `${API_BASE}/api/ai/config`,
-        {headers:authHeader()}
+        { headers: authHeader() }
       );
 
       if(!res.ok) return;
@@ -135,18 +113,18 @@ export default function AIControl(){
       setEnabled(Boolean(cfg.enabled));
       setTradingMode(cfg.tradingMode || "paper");
 
-      setMaxTrades(Number(cfg.maxTrades ?? 5));
-      setRiskPercent(Number(cfg.riskPercent ?? 1.5));
-      setPositionMultiplier(Number(cfg.positionMultiplier ?? 1));
+      setMaxTrades(safeNum(cfg.maxTrades,5));
+      setRiskPercent(safeNum(cfg.riskPercent,1.5));
+      setPositionMultiplier(safeNum(cfg.positionMultiplier,1));
 
-      setAggressiveness(cfg.strategyMode || "Balanced");
+      setStrategyMode(cfg.strategyMode || "Balanced");
 
     }catch{}
 
   }
 
   /* =========================================================
-     SAVE CONFIGURATION
+     SAVE CONFIG
   ========================================================= */
 
   async function saveConfig(){
@@ -156,6 +134,15 @@ export default function AIControl(){
 
     try{
 
+      const payload = {
+        enabled,
+        tradingMode,
+        maxTrades: clamp(maxTrades,1,50),
+        riskPercent: clamp(riskPercent,0.1,10),
+        positionMultiplier: clamp(positionMultiplier,0.1,10),
+        strategyMode
+      };
+
       const res = await fetch(
         `${API_BASE}/api/ai/config`,
         {
@@ -164,34 +151,21 @@ export default function AIControl(){
             ...authHeader(),
             "Content-Type":"application/json"
           },
-          body:JSON.stringify({
-
-            enabled,
-            tradingMode,
-
-            maxTrades:Number(maxTrades),
-            riskPercent:Number(riskPercent),
-            positionMultiplier:Number(positionMultiplier),
-
-            strategyMode:aggressiveness
-
-          })
+          body:JSON.stringify(payload)
         }
       );
 
       const data = await res.json();
 
       if(res.ok && data?.ok){
-        setStatusMsg("Configuration saved");
-      }
-      else{
-        setStatusMsg(data?.error || "Configuration rejected");
+        setStatusMsg("✅ Configuration saved");
+      }else{
+        setStatusMsg(data?.error || "❌ Save failed");
       }
 
-    }
-    catch{
+    }catch{
 
-      setStatusMsg("Server unreachable");
+      setStatusMsg("❌ Server unreachable");
 
     }
 
@@ -210,17 +184,16 @@ export default function AIControl(){
     if(mode === "live"){
 
       const confirmLive = window.confirm(
-        "WARNING: Enable LIVE trading with real capital?"
+        "⚠ WARNING: Enable LIVE trading with real capital?"
       );
 
       if(!confirmLive) return;
 
-      setStatusMsg("⚠ LIVE TRADING ENABLED");
+      setStatusMsg("⚠ LIVE MODE ENABLED");
 
-    }
-    else{
+    }else{
 
-      setStatusMsg("Paper trading mode");
+      setStatusMsg("Paper mode active");
 
     }
 
@@ -229,11 +202,11 @@ export default function AIControl(){
   }
 
   /* =========================================================
-     RISK PREVIEW
+     CALCULATIONS
   ========================================================= */
 
   const estimatedRisk =
-    (Number(riskPercent) * Number(positionMultiplier)).toFixed(2);
+    clamp(riskPercent * positionMultiplier,0,100).toFixed(2);
 
   /* =========================================================
      UI
@@ -241,28 +214,16 @@ export default function AIControl(){
 
   return(
 
-    <div style={{padding:24,color:"#fff"}}>
+    <div style={styles.wrapper}>
 
-      <h2 style={{marginBottom:20}}>
-        AI Control Room
-      </h2>
+      <h2>AI Control Room</h2>
 
-      <div style={{
-        background:"#111827",
-        padding:24,
-        borderRadius:12,
-        border:"1px solid rgba(255,255,255,.08)",
-        maxWidth:800
-      }}>
+      <div style={styles.card}>
 
-        {/* ENGINE HEALTH */}
+        {/* ENGINE */}
 
-        <div style={{marginBottom:20}}>
-
-          <strong>Engine Health:</strong>
-
+        <Row label="Engine">
           <span style={{
-            marginLeft:10,
             color:
               engineHealth==="RUNNING"
                 ? "#22c55e"
@@ -272,50 +233,33 @@ export default function AIControl(){
           }}>
             {engineHealth}
           </span>
+        </Row>
 
-        </div>
+        {/* AI ENABLE */}
 
-        {/* AI ENABLE / DISABLE */}
-
-        <div style={{marginBottom:20}}>
-
-          <strong>AI Status:</strong>
-
+        <Row label="AI Status">
           <button
             onClick={()=>setEnabled(!enabled)}
             style={{
-              marginLeft:15,
-              padding:"6px 14px",
-              background:enabled?"#16a34a":"#dc2626",
-              border:"none",
-              color:"#fff",
-              cursor:"pointer",
-              borderRadius:6
+              ...styles.btn,
+              background: enabled ? "#16a34a" : "#dc2626"
             }}
           >
             {enabled ? "ACTIVE" : "PAUSED"}
           </button>
+        </Row>
 
-        </div>
+        {/* MODE */}
 
-        {/* TRADING MODE */}
-
-        <div style={{marginBottom:20}}>
-
-          <label>Trading Mode:</label>
-
+        <Row label="Trading Mode">
           <button
             onClick={()=>switchMode("paper")}
             style={{
-              marginLeft:15,
-              padding:"6px 14px",
+              ...styles.btn,
               background:
                 tradingMode==="paper"
                   ? "#2563eb"
-                  : "#374151",
-              color:"#fff",
-              border:"none",
-              borderRadius:6
+                  : "#374151"
             }}
           >
             PAPER
@@ -324,69 +268,48 @@ export default function AIControl(){
           <button
             onClick={()=>switchMode("live")}
             style={{
-              marginLeft:10,
-              padding:"6px 14px",
+              ...styles.btn,
               background:
                 tradingMode==="live"
                   ? "#16a34a"
-                  : "#374151",
-              color:"#fff",
-              border:"none",
-              borderRadius:6
+                  : "#374151"
             }}
           >
             LIVE
           </button>
+        </Row>
 
-        </div>
+        <Control label="Max Trades" value={maxTrades} onChange={setMaxTrades}/>
+        <Control label="Risk %" value={riskPercent} step="0.1" onChange={setRiskPercent}/>
+        <Control label="Multiplier" value={positionMultiplier} step="0.1" onChange={setPositionMultiplier}/>
 
-        <Control label="Max Trades Per Day" value={maxTrades} onChange={setMaxTrades}/>
-        <Control label="Risk % Per Trade" value={riskPercent} step="0.1" onChange={setRiskPercent}/>
-        <Control label="Position Multiplier" value={positionMultiplier} step="0.1" onChange={setPositionMultiplier}/>
+        {/* STRATEGY */}
 
-        {/* STRATEGY MODE */}
-
-        <div style={{marginBottom:20}}>
-
-          <label>Strategy Mode:</label>
-
+        <Row label="Strategy">
           <select
-            value={aggressiveness}
-            onChange={e=>setAggressiveness(e.target.value)}
-            style={{marginLeft:15,padding:6}}
+            value={strategyMode}
+            onChange={e=>setStrategyMode(e.target.value)}
           >
             <option>Conservative</option>
             <option>Balanced</option>
             <option>Aggressive</option>
           </select>
+        </Row>
 
+        <div style={{marginTop:10,opacity:.7}}>
+          Estimated Risk: {estimatedRisk}%
         </div>
-
-        {/* RISK ESTIMATE */}
-
-        <div style={{marginBottom:20,opacity:.7}}>
-          Estimated Position Risk: {estimatedRisk}%
-        </div>
-
-        {/* SAVE BUTTON */}
 
         <button
           onClick={saveConfig}
           disabled={saving}
-          style={{
-            marginTop:10,
-            padding:"8px 18px",
-            background:"#2563eb",
-            border:"none",
-            color:"#fff",
-            borderRadius:6
-          }}
+          style={{...styles.btn,marginTop:20}}
         >
-          {saving ? "Saving..." : "Save Configuration"}
+          {saving ? "Saving..." : "Save"}
         </button>
 
         {statusMsg && (
-          <div style={{marginTop:15,opacity:.7}}>
+          <div style={{marginTop:10}}>
             {statusMsg}
           </div>
         )}
@@ -400,45 +323,68 @@ export default function AIControl(){
 }
 
 /* =========================================================
-   CONTROL FIELD
+   SMALL COMPONENTS
 ========================================================= */
 
-function Control({label,value,onChange,step=1}){
-
+function Row({label,children}){
   return(
+    <div style={{marginBottom:16}}>
+      <strong>{label}:</strong> {children}
+    </div>
+  );
+}
 
-    <div style={{marginBottom:20}}>
-
+function Control({label,value,onChange,step=1}){
+  return(
+    <div style={{marginBottom:16}}>
       <label>{label}:</label>
-
       <input
         type="number"
         value={value}
         step={step}
-        onChange={e=>onChange(Number(e.target.value) || 0)}
-        style={{
-          marginLeft:15,
-          padding:6,
-          width:100
-        }}
+        onChange={e=>onChange(Number(e.target.value)||0)}
+        style={{marginLeft:10,width:100}}
       />
-
     </div>
-
   );
-
 }
 
-/* =========================================================
-   AUTH HEADER
-========================================================= */
+/* ========================================================= */
 
 function authHeader(){
-
   const token = getToken();
-
-  return token
-    ? {Authorization:`Bearer ${token}`}
-    : {};
-
+  return token ? {Authorization:`Bearer ${token}`} : {};
 }
+
+function safeNum(v,f=0){
+  const n = Number(v);
+  return Number.isFinite(n) ? n : f;
+}
+
+function clamp(n,min,max){
+  return Math.max(min,Math.min(max,n));
+}
+
+/* ========================================================= */
+
+const styles = {
+  wrapper:{
+    padding:24,
+    color:"#fff"
+  },
+  card:{
+    background:"#111827",
+    padding:20,
+    borderRadius:12,
+    border:"1px solid rgba(255,255,255,.08)",
+    maxWidth:700
+  },
+  btn:{
+    padding:"6px 14px",
+    border:"none",
+    color:"#fff",
+    borderRadius:6,
+    cursor:"pointer",
+    marginLeft:10
+  }
+};
