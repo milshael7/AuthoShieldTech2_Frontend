@@ -1,6 +1,6 @@
 // ============================================================
 // FILE: frontend/src/components/AIPerformanceHistoryPanel.jsx
-// VERSION: v2 (INSTITUTIONAL + ACCURATE)
+// VERSION: v3 (FIXED CLOSED TRADE DETECTION)
 // ============================================================
 
 import React, { useMemo } from "react";
@@ -20,7 +20,18 @@ function normalizeTime(t) {
   return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
 }
 
+/* =========================================================
+🔥 FIXED CLOSED TRADE LOGIC
+========================================================= */
+
 function isClosedTrade(t) {
+  if (!t || typeof t !== "object") return false;
+
+  // 🔥 PRIMARY RULE: if pnl exists → it's closed
+  if (t.pnl !== undefined && t.pnl !== null) {
+    return true;
+  }
+
   const side = String(t?.side || "").toUpperCase();
 
   return (
@@ -32,7 +43,9 @@ function isClosedTrade(t) {
     side === "LOCKED_FLOOR" ||
     side === "RUNNER_GIVEBACK" ||
     side === "MOMENTUM_WEAKENING" ||
-    side === "MANUAL_CLOSE_NOW"
+    side === "MANUAL_CLOSE_NOW" ||
+    // 🔥 fallback: SELL often acts as close in your system
+    side === "SELL"
   );
 }
 
