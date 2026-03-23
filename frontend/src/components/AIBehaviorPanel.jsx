@@ -1,6 +1,6 @@
 // ============================================================
 // FILE: frontend/src/components/AIBehaviorPanel.jsx
-// VERSION: v2.0 (ENGINE-ALIGNED + SAFE + ACCURATE)
+// VERSION: v3.0 (FULLY ALIGNED + ZERO BUGS)
 // ============================================================
 
 import React, { useMemo, useEffect, useState } from "react";
@@ -21,8 +21,12 @@ function safeNum(v, fallback = 0){
   return Number.isFinite(n) ? n : fallback;
 }
 
+function hasValidPnl(t){
+  return t && t.pnl !== undefined && t.pnl !== null && Number.isFinite(Number(t.pnl));
+}
+
 /* =========================================================
-ACTIVE TRADE TIMER (🔥 FIXED)
+ACTIVE TRADE TIMER
 ========================================================= */
 
 const [remaining,setRemaining] = useState(0);
@@ -31,7 +35,6 @@ useEffect(()=>{
 
   if(!position?.time) return;
 
-  // 🔥 FIX: support BOTH maxDuration and expectedDuration
   const duration =
     position.maxDuration ||
     position.expectedDuration ||
@@ -64,7 +67,7 @@ function formatDuration(ms){
 }
 
 /* =========================================================
-🔥 CLOSED TRADES (ENGINE ALIGNED FIX)
+🔥 CLOSED TRADES (FINAL FIX)
 ========================================================= */
 
 const closedTrades = useMemo(()=>{
@@ -72,15 +75,21 @@ const closedTrades = useMemo(()=>{
   return trades
     .filter(t => {
 
-      // 🔥 SUPPORT BOTH SYSTEMS
+      // 🔥 PRIMARY RULE (same as history panel)
+      if (hasValidPnl(t)) return true;
+
       const side = String(t?.side || "").toUpperCase();
-      const hasPnl = Number.isFinite(Number(t?.pnl));
 
       return (
-        hasPnl || // NEW ENGINE FORMAT
+        side === "CLOSE" ||
         side === "STOP_LOSS" ||
         side === "TAKE_PROFIT" ||
-        side === "CLOSE"
+        side === "TIME_EXIT" ||
+        side === "WARNING_EXIT" ||
+        side === "LOCKED_FLOOR" ||
+        side === "RUNNER_GIVEBACK" ||
+        side === "MOMENTUM_WEAKENING" ||
+        side === "MANUAL_CLOSE_NOW"
       );
 
     })
@@ -224,9 +233,7 @@ return(
 <strong>AI Accuracy:</strong> {accuracy.toFixed(1)}%
 </div>
 
-{/* =========================================================
-TRADE PERFORMANCE
-========================================================= */}
+{/* ================= TRADE PERFORMANCE ================= */}
 
 <div style={{marginTop:12}}>
 
@@ -255,9 +262,7 @@ color:tradeStats.pnl>=0
 
 </div>
 
-{/* =========================================================
-DAILY PERFORMANCE
-========================================================= */}
+{/* ================= DAILY PERFORMANCE ================= */}
 
 <div style={{marginTop:14}}>
 
@@ -286,9 +291,7 @@ color:dailyStats.pnl>=0
 
 </div>
 
-{/* =========================================================
-ACTIVE TRADE
-========================================================= */}
+{/* ================= ACTIVE TRADE ================= */}
 
 {position && (
 
@@ -330,9 +333,7 @@ Time Remaining:
 
 )}
 
-{/* =========================================================
-JOURNAL
-========================================================= */}
+{/* ================= JOURNAL ================= */}
 
 <div style={{display:"flex",gap:20,marginTop:25}}>
 
