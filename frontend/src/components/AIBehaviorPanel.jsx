@@ -1,6 +1,6 @@
 // ============================================================
 // FILE: frontend/src/components/AIBehaviorPanel.jsx
-// VERSION: v3.0 (FULLY ALIGNED + ZERO BUGS)
+// VERSION: v3.1 (PRODUCTION SAFE + HARDENED)
 // ============================================================
 
 import React, { useMemo, useEffect, useState } from "react";
@@ -22,11 +22,16 @@ function safeNum(v, fallback = 0){
 }
 
 function hasValidPnl(t){
-  return t && t.pnl !== undefined && t.pnl !== null && Number.isFinite(Number(t.pnl));
+  return t && Number.isFinite(Number(t?.pnl));
+}
+
+function safeFixed(v){
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : "0.00";
 }
 
 /* =========================================================
-ACTIVE TRADE TIMER
+ACTIVE TRADE TIMER (FIXED DRIFT)
 ========================================================= */
 
 const [remaining,setRemaining] = useState(0);
@@ -34,6 +39,8 @@ const [remaining,setRemaining] = useState(0);
 useEffect(()=>{
 
   if(!position?.time) return;
+
+  let mounted = true;
 
   const duration =
     position.maxDuration ||
@@ -44,20 +51,24 @@ useEffect(()=>{
 
   const update = () => {
 
+    if(!mounted) return;
+
     const elapsed = Date.now() - position.time;
     const left = Math.max(duration - elapsed,0);
 
     setRemaining(left);
-
   };
 
   update();
 
   const timer = setInterval(update,1000);
 
-  return ()=>clearInterval(timer);
+  return ()=>{
+    mounted = false;
+    clearInterval(timer);
+  };
 
-},[position]);
+},[position?.time, position?.maxDuration, position?.expectedDuration]);
 
 function formatDuration(ms){
   const s = Math.floor(ms/1000);
@@ -67,7 +78,7 @@ function formatDuration(ms){
 }
 
 /* =========================================================
-🔥 CLOSED TRADES (FINAL FIX)
+CLOSED TRADES
 ========================================================= */
 
 const closedTrades = useMemo(()=>{
@@ -75,43 +86,26 @@ const closedTrades = useMemo(()=>{
   return trades
     .filter(t => {
 
-      // 🔥 PRIMARY RULE (same as history panel)
       if (hasValidPnl(t)) return true;
 
       const side = String(t?.side || "").toUpperCase();
 
-      return (
-        side === "CLOSE" ||
-        side === "STOP_LOSS" ||
-        side === "TAKE_PROFIT" ||
-        side === "TIME_EXIT" ||
-        side === "WARNING_EXIT" ||
-        side === "LOCKED_FLOOR" ||
-        side === "RUNNER_GIVEBACK" ||
-        side === "MOMENTUM_WEAKENING" ||
-        side === "MANUAL_CLOSE_NOW"
-      );
+      return [
+        "CLOSE",
+        "STOP_LOSS",
+        "TAKE_PROFIT",
+        "TIME_EXIT",
+        "WARNING_EXIT",
+        "LOCKED_FLOOR",
+        "RUNNER_GIVEBACK",
+        "MOMENTUM_WEAKENING",
+        "MANUAL_CLOSE_NOW"
+      ].includes(side);
 
     })
     .sort((a,b)=>(safeNum(b.time)-safeNum(a.time)));
 
 },[trades]);
-
-/* =========================================================
-WIN / LOSS
-========================================================= */
-
-const winningTrades = useMemo(()=>{
-  return closedTrades.filter(
-    t => safeNum(t?.pnl) > 0
-  );
-},[closedTrades]);
-
-const losingTrades = useMemo(()=>{
-  return closedTrades.filter(
-    t => safeNum(t?.pnl) <= 0
-  );
-},[closedTrades]);
 
 /* =========================================================
 TRADE STATS
@@ -144,16 +138,17 @@ const tradeStats = useMemo(()=>{
 },[closedTrades]);
 
 /* =========================================================
-DAILY STATS
+DAILY STATS (TIME SAFE)
 ========================================================= */
 
 const dailyStats = useMemo(()=>{
 
-  const today = new Date().toDateString();
+  const now = Date.now();
+  const startOfDay = new Date().setHours(0,0,0,0);
 
   const todayTrades = closedTrades.filter(t=>{
-    if(!t?.time) return false;
-    return new Date(t.time).toDateString() === today;
+    const time = safeNum(t?.time);
+    return time >= startOfDay && time <= now;
   });
 
   let wins=0;
@@ -161,14 +156,10 @@ const dailyStats = useMemo(()=>{
   let pnl=0;
 
   todayTrades.forEach(t=>{
-
     const p = safeNum(t?.pnl);
-
     pnl += p;
-
     if(p > 0) wins++;
     else losses++;
-
   });
 
   return{
@@ -181,20 +172,25 @@ const dailyStats = useMemo(()=>{
 },[closedTrades]);
 
 /* =========================================================
-AI CONFIDENCE
+AI CONFIDENCE (SAFE)
 ========================================================= */
 
 const avgConfidence = useMemo(()=>{
 
   if(!decisions?.length) return 0;
 
-  const total =
-    decisions.reduce(
-      (s,d)=>s + safeNum(d?.confidence),
-      0
-    );
+  let count = 0;
+  let total = 0;
 
-  return (total / decisions.length) * 100;
+  decisions.forEach(d=>{
+    const c = safeNum(d?.confidence, null);
+    if(c !== null){
+      total += c;
+      count++;
+    }
+  });
+
+  return count ? (total / count) * 100 : 0;
 
 },[decisions]);
 
@@ -203,12 +199,19 @@ ACCURACY
 ========================================================= */
 
 const accuracy = useMemo(()=>{
-
-  if(!tradeStats.total) return 0;
-
-  return (tradeStats.wins / tradeStats.total) * 100;
-
+  return tradeStats.total
+    ? (tradeStats.wins / tradeStats.total) * 100
+    : 0;
 },[tradeStats]);
+
+/* =========================================================
+VALID POSITION CHECK
+========================================================= */
+
+const hasPosition =
+  position &&
+  Number.isFinite(Number(position?.entry)) &&
+  Number.isFinite(Number(position?.qty));
 
 /* =========================================================
 UI
@@ -252,11 +255,9 @@ Losses: {tradeStats.losses}
 <div>
 Total PnL:
 <span style={{
-color:tradeStats.pnl>=0
-  ? "#22c55e"
-  : "#ef4444"
+color:tradeStats.pnl>=0 ? "#22c55e" : "#ef4444"
 }}>
- {" "} ${tradeStats.pnl.toFixed(2)}
+ {" "} ${safeFixed(tradeStats.pnl)}
 </span>
 </div>
 
@@ -281,11 +282,9 @@ Losses Today: {dailyStats.losses}
 <div>
 Daily PnL:
 <span style={{
-color:dailyStats.pnl>=0
-  ? "#22c55e"
-  : "#ef4444"
+color:dailyStats.pnl>=0 ? "#22c55e" : "#ef4444"
 }}>
- {" "} ${dailyStats.pnl.toFixed(2)}
+ {" "} ${safeFixed(dailyStats.pnl)}
 </span>
 </div>
 
@@ -293,7 +292,7 @@ color:dailyStats.pnl>=0
 
 {/* ================= ACTIVE TRADE ================= */}
 
-{position && (
+{hasPosition && (
 
 <div style={{
 marginTop:20,
@@ -316,10 +315,10 @@ border:"1px solid rgba(255,255,255,.05)"
 <div>Position Size: {safeNum(position.qty)}</div>
 
 <div>Capital Used: $
-{(
+{safeFixed(
   position.capitalUsed ||
   (safeNum(position.entry) * safeNum(position.qty))
-).toFixed(2)}
+)}
 </div>
 
 <div>
@@ -332,26 +331,6 @@ Time Remaining:
 </div>
 
 )}
-
-{/* ================= JOURNAL ================= */}
-
-<div style={{display:"flex",gap:20,marginTop:25}}>
-
-<div style={{flex:1}}>
-<h4 style={{color:"#22c55e"}}>Winning Trades</h4>
-{winningTrades.slice(0,10).map((t,i)=>(
-  <div key={i}>+{safeNum(t.pnl).toFixed(2)}</div>
-))}
-</div>
-
-<div style={{flex:1}}>
-<h4 style={{color:"#ef4444"}}>Losing Trades</h4>
-{losingTrades.slice(0,10).map((t,i)=>(
-  <div key={i}>{safeNum(t.pnl).toFixed(2)}</div>
-))}
-</div>
-
-</div>
 
 </div>
 
