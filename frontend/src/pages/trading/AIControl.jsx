@@ -1,5 +1,5 @@
 // ============================================================
-// 🔒 AUTOSHIELD COMMAND — v5.0 (SYNCED & SAFETY-LOCK)
+// 🔒 AUTOSHIELD COMMAND — v5.1 (BUILD-FIXED & SYNCED)
 // FILE: AIControl.jsx - FULL REPLACEMENT
 // ============================================================
 
@@ -33,10 +33,12 @@ export default function AIControl() {
         fetch(`${API_BASE}/api/paper/status`, { headers })
       ]);
 
-      const [cfgData, statusData] = await Promise.all([resConfig.json(), resStatus.json()]);
+      const cfgData = await resConfig.json();
+      const statusData = await resStatus.json();
 
       if (cfgData.ok) setConfig(cfgData.config);
-      setEngineHealth(statusData.engine?.toUpperCase() || "OFFLINE");
+      // Fixed: safer navigation for engine status
+      setEngineHealth(statusData?.engine?.toUpperCase() || statusData?.status?.toUpperCase() || "OFFLINE");
     } catch (err) {
       setEngineHealth("OFFLINE");
     }
@@ -44,7 +46,7 @@ export default function AIControl() {
 
   useEffect(() => {
     loadAll();
-    const timer = setInterval(loadAll, 10000); // 10s heartbeat
+    const timer = setInterval(loadAll, 10000);
     return () => clearInterval(timer);
   }, []);
 
@@ -73,17 +75,16 @@ export default function AIControl() {
   return (
     <div style={styles.wrapper}>
       <header style={styles.header}>
-        <h1 style={{ fontSize: "1.4rem", margin: 0 }}>🧠 AI COMMAND</h1>
-        <div style={{ ...styles.badge, color: engineHealth === "RUNNING" ? "#22c55e" : "#ef4444" }}>
-          ENGINE: {engineHealth}
+        <h1 style={{ fontSize: "1.2rem", margin: 0, letterSpacing: '2px' }}>🧠 AI COMMAND</h1>
+        <div style={{ ...styles.badge, color: engineHealth === "RUNNING" || engineHealth === "CONNECTED" ? "#22c55e" : "#ef4444" }}>
+          STATUS: {engineHealth}
         </div>
       </header>
 
       <div style={styles.mainCard}>
-        {/* TOP TOGGLES */}
         <div style={styles.toggleRow}>
           <div style={{ flex: 1 }}>
-            <label style={styles.label}>AI ENGINE STATUS</label>
+            <label style={styles.label}>AI ENGINE POWER</label>
             <button 
               onClick={() => updateField("enabled", !config.enabled)}
               style={btnStyle(config.enabled, config.enabled ? "#22c55e" : "#ef4444")}
@@ -93,7 +94,7 @@ export default function AIControl() {
           </div>
           
           <div style={{ flex: 1 }}>
-            <label style={styles.label}>OPERATING MODE</label>
+            <label style={styles.label}>OPERATING DOMAIN</label>
             <div style={styles.modeSwitch}>
               <button 
                 onClick={() => updateField("tradingMode", "paper")}
@@ -101,7 +102,7 @@ export default function AIControl() {
               >PAPER</button>
               <button 
                 onClick={() => {
-                  if (window.confirm("⚠️ ACTIVATE LIVE TRADING? THIS USES REAL CAPITAL.")) {
+                  if (window.confirm("⚠️ WARNING: Activate LIVE trading? Real capital at risk.")) {
                     updateField("tradingMode", "live");
                   }
                 }}
@@ -111,17 +112,16 @@ export default function AIControl() {
           </div>
         </div>
 
-        {/* RISK PARAMETERS */}
         <div style={styles.inputGrid}>
-          <InputBox label="MAX OPEN TRADES" value={config.maxTrades} 
+          <InputBox label="MAX TRADES" value={config.maxTrades} 
             onChange={(v) => updateField("maxTrades", parseInt(v) || 0)} />
-          <InputBox label="RISK PER TRADE %" value={config.riskPercent} step="0.1"
+          <InputBox label="RISK % / TRADE" value={config.riskPercent} step="0.1"
             onChange={(v) => updateField("riskPercent", parseFloat(v) || 0)} />
-          <InputBox label="POSITION MULTI" value={config.positionMultiplier} step="0.1"
+          <InputBox label="LEVERAGE MULTI" value={config.positionMultiplier} step="0.1"
             onChange={(v) => updateField("positionMultiplier", parseFloat(v) || 0)} />
           
           <div style={styles.inputWrap}>
-            <label style={styles.label}>STRATEGY AGGRESSION</label>
+            <label style={styles.label}>STRATEGY MODE</label>
             <select 
               value={config.strategyMode} 
               onChange={(e) => updateField("strategyMode", e.target.value)}
@@ -135,20 +135,15 @@ export default function AIControl() {
           </div>
         </div>
 
-        {/* CALC VIEW */}
         <div style={styles.summaryBox}>
-          <span>ESTIMATED MAX EXPOSURE:</span>
+          <span>MAX CAP EXPOSURE:</span>
           <span style={{ color: "#ef4444", fontWeight: "900" }}>
             {((config.riskPercent * config.positionMultiplier) * config.maxTrades).toFixed(2)}%
           </span>
         </div>
 
-        <button 
-          onClick={handleSave} 
-          disabled={saving}
-          style={styles.saveBtn}
-        >
-          {saving ? "SYNCING..." : "COMMIT CHANGES TO CORE"}
+        <button onClick={handleSave} disabled={saving} style={styles.saveBtn}>
+          {saving ? "SYNCING..." : "COMMIT TO CORE"}
         </button>
 
         {statusMsg && <div style={styles.status}>{statusMsg}</div>}
@@ -159,34 +154,35 @@ export default function AIControl() {
 
 /* ================= STYLES ================= */
 const styles = {
-  wrapper: { padding: "20px", color: "#f8fafc", fontFamily: "monospace", maxWidth: "800px", margin: "0 auto" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" },
-  badge: { fontSize: "0.7rem", fontWeight: "bold", background: "#0f172a", padding: "6px 12px", borderRadius: "20px", border: "1px solid #1e293b" },
-  mainCard: { background: "#0f172a", padding: "24px", borderRadius: "16px", border: "1px solid #1e293b", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" },
-  toggleRow: { display: "flex", gap: "20px", marginBottom: "30px", flexWrap: "wrap" },
-  label: { display: "block", fontSize: "0.65rem", color: "#64748b", fontWeight: "bold", marginBottom: "8px", letterSpacing: "1px" },
-  modeSwitch: { display: "flex", background: "#1e293b", padding: "4px", borderRadius: "8px" },
-  inputGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "20px", marginBottom: "30px" },
+  wrapper: { padding: "15px", color: "#f8fafc", fontFamily: "monospace", maxWidth: "600px", margin: "0 auto" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" },
+  badge: { fontSize: "0.6rem", background: "#0f172a", padding: "4px 10px", borderRadius: "4px", border: "1px solid #1e293b" },
+  mainCard: { background: "#0f172a", padding: "20px", borderRadius: "12px", border: "1px solid #1e293b" },
+  toggleRow: { display: "flex", gap: "15px", marginBottom: "20px", flexWrap: "wrap" },
+  label: { display: "block", fontSize: "0.6rem", color: "#64748b", marginBottom: "6px" },
+  modeSwitch: { display: "flex", background: "#1e293b", padding: "3px", borderRadius: "6px" },
+  inputGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px", marginBottom: "20px" },
   inputWrap: { display: "flex", flexDirection: "column" },
-  select: { background: "#1e293b", color: "#fff", border: "1px solid #334155", padding: "10px", borderRadius: "8px", outline: "none" },
-  summaryBox: { padding: "15px", background: "rgba(0,0,0,0.2)", borderRadius: "8px", border: "1px dashed #334155", display: "flex", justifyContent: "space-between", fontSize: "0.8rem", marginBottom: "20px" },
-  saveBtn: { width: "100%", padding: "16px", borderRadius: "12px", border: "none", background: "#3b82f6", color: "#fff", fontWeight: "900", cursor: "pointer", fontSize: "1rem" },
-  status: { textAlign: "center", marginTop: "15px", fontSize: "0.8rem", fontWeight: "bold" }
+  select: { background: "#1e293b", color: "#fff", border: "1px solid #334155", padding: "8px", borderRadius: "6px", outline: "none", fontSize: "0.8rem" },
+  summaryBox: { padding: "12px", background: "rgba(0,0,0,0.3)", borderRadius: "6px", border: "1px dashed #334155", display: "flex", justifyContent: "space-between", fontSize: "0.75rem", marginBottom: "15px" },
+  saveBtn: { width: "100%", padding: "14px", borderRadius: "8px", border: "none", background: "#3b82f6", color: "#fff", fontWeight: "bold", cursor: "pointer" },
+  status: { textAlign: "center", marginTop: "10px", fontSize: "0.75rem", color: "#3b82f6" }
 };
 
+// 🛠️ FIXED: Removed duplicate border key that killed the Vercel build
 const btnStyle = (active, color) => ({
-  width: "100%", padding: "12px", borderRadius: "8px", border: "none", cursor: "pointer",
+  width: "100%", padding: "10px", borderRadius: "6px", cursor: "pointer",
   background: active ? `${color}22` : "#1e293b",
   color: active ? color : "#64748b",
-  border: `1px solid ${active ? color : "#334155"}`,
-  fontWeight: "bold", fontSize: "0.8rem", transition: "all 0.2s"
+  border: `1px solid ${active ? color : "#334155"}`, // Single key now
+  fontWeight: "bold", fontSize: "0.75rem", transition: "all 0.2s"
 });
 
 const modeBtn = (active, color) => ({
-  flex: 1, padding: "8px", border: "none", borderRadius: "6px", cursor: "pointer",
+  flex: 1, padding: "6px", border: "none", borderRadius: "4px", cursor: "pointer",
   background: active ? color : "transparent",
   color: active ? "#fff" : "#64748b",
-  fontWeight: "bold", fontSize: "0.7rem", transition: "all 0.2s"
+  fontWeight: "bold", fontSize: "0.65rem"
 });
 
 function InputBox({ label, value, onChange, step = "1" }) {
@@ -194,7 +190,7 @@ function InputBox({ label, value, onChange, step = "1" }) {
     <div style={styles.inputWrap}>
       <label style={styles.label}>{label}</label>
       <input type="number" step={step} value={value} onChange={(e) => onChange(e.target.value)}
-        style={{ ...styles.select, fontSize: "1rem" }} />
+        style={{ ...styles.select, fontSize: "0.9rem" }} />
     </div>
   );
 }
