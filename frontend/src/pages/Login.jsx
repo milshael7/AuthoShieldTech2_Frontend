@@ -1,11 +1,11 @@
 // ============================================================
-// 🔒 AUTOSHIELD LOGIN — v35.0 (PATH-FIXED & SYNCED)
-// FILE: Login.jsx - FINAL REPLACEMENT
+// 🔒 AUTOSHIELD LOGIN — v35.0 (VERCEL-ALIGNED)
+// FILE: src/pages/Login.jsx
 // ============================================================
 
 import React, { useState } from "react";
-// ✅ FIXED: Changed "../../" to "../" to correctly resolve src/lib/
-import { api } from "../lib/api.js"; 
+// ✅ FIXED: api is now the default export. Removed curly braces.
+import api from "../lib/api.js"; 
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -21,7 +21,7 @@ export default function Login() {
     const routes = {
       admin: "/admin",
       manager: "/manager",
-      company: "/admin", // Mapping company role to admin layout if needed
+      company: "/admin", 
       small_company: "/manager",
       individual: "/user",
       user: "/user",
@@ -39,11 +39,12 @@ export default function Login() {
     setError("");
 
     try {
+      // Uses the hardened api.login method from v35.0 engine
       const result = await api.login(email, password);
 
       if (result.ok) {
         const targetPath = getDashboardPath(result.user);
-        // replace() is critical for Render stability to prevent session loops
+        // ✅ CRITICAL: Using replace() ensures the "Shell Layer" resets entirely
         window.location.replace(targetPath);
       } else {
         setError(result.error || "ACCESS DENIED: INVALID CREDENTIALS");
@@ -60,10 +61,10 @@ export default function Login() {
     <div style={styles.wrapper}>
       <div style={styles.card}>
         <div style={styles.header}>
-          <h2 style={{ margin: 0, color: "#00ff88", letterSpacing: "2px" }}>
-            NEURAL ACCESS
+          <h2 style={{ margin: 0, color: "#00ff88", letterSpacing: "4px" }}>
+            🛡️ AUTOSHIELD
           </h2>
-          <p style={{ fontSize: "0.6rem", color: "#666", marginTop: 6, fontWeight: "bold" }}>
+          <p style={{ fontSize: "0.6rem", color: "#666", marginTop: 8, fontWeight: "bold", letterSpacing: "1px" }}>
             TERMINAL ENCRYPTED • v35.0
           </p>
         </div>
@@ -96,8 +97,8 @@ export default function Login() {
           </button>
 
           <div style={styles.footer}>
-            <span style={{ color: "#444", fontSize: "0.65rem" }}>
-              UNAUTHORIZED ACCESS IS LOGGED
+            <span style={{ color: "#333", fontSize: "0.6rem", letterSpacing: "1px" }}>
+              UNAUTHORIZED ACCESS IS LOGGED & TRACKED
             </span>
           </div>
         </form>
@@ -120,45 +121,47 @@ const styles = {
   card: {
     width: "100%",
     maxWidth: "360px",
-    background: "#111",
-    padding: "25px",
-    borderRadius: "4px",
-    border: "1px solid #222",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.5)"
+    background: "#0d0d0d",
+    padding: "30px",
+    borderRadius: "2px",
+    border: "1px solid #1a1a1a",
+    boxShadow: "0 20px 50px rgba(0,0,0,0.8)"
   },
-  header: { textAlign: "center", marginBottom: "25px" },
-  form: { display: "flex", flexDirection: "column", gap: "12px" },
+  header: { textAlign: "center", marginBottom: "30px" },
+  form: { display: "flex", flexDirection: "column", gap: "15px" },
   input: {
     background: "#000",
-    border: "1px solid #333",
+    border: "1px solid #222",
     color: "#00ff88",
-    padding: "12px",
+    padding: "14px",
     borderRadius: "2px",
-    fontSize: "0.85rem",
+    fontSize: "0.8rem",
     outline: "none",
-    fontFamily: "monospace"
+    fontFamily: "monospace",
+    transition: "border 0.2s"
   },
   button: {
     background: "#00ff88",
     color: "#000",
-    padding: "14px",
+    padding: "16px",
     borderRadius: "2px",
     border: "none",
     fontWeight: "bold",
     cursor: "pointer",
-    marginTop: "8px",
-    fontSize: "0.9rem",
-    textTransform: "uppercase"
+    marginTop: "10px",
+    fontSize: "0.85rem",
+    textTransform: "uppercase",
+    letterSpacing: "1px"
   },
   errorBox: {
-    background: "rgba(255, 0, 0, 0.1)",
+    background: "rgba(255, 0, 0, 0.05)",
     color: "#ff4444",
-    padding: "10px",
+    padding: "12px",
     borderRadius: "2px",
-    fontSize: "0.75rem",
+    fontSize: "0.7rem",
     textAlign: "center",
-    marginBottom: "15px",
-    border: "1px solid #440000"
+    marginBottom: "20px",
+    border: "1px solid #330000"
   },
-  footer: { textAlign: "center", marginTop: "15px" }
+  footer: { textAlign: "center", marginTop: "20px" }
 };
