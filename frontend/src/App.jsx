@@ -1,22 +1,21 @@
 // ==========================================================
-// 🔒 AUTOSHIELD CORE — v35.0 (OPTIMIZED & DE-DUPLICATED)
+// 🔒 AUTOSHIELD CORE — v35.0 (VERCEL-ALIGNED)
 // FILE: frontend/src/App.jsx
 // ==========================================================
 
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Routes, Route } from "react-router-dom";
 
 /* 🛠️ CORE UTILS & API */
-import { 
+// ✅ FIXED: api is now the default export. Named helpers stay in braces.
+import api, { 
   getSavedUser, 
   getToken, 
   setToken, 
-  saveUser, 
-  API_BASE 
+  saveUser 
 } from "./lib/api.js";
 
 /* 🏢 CONTEXT PROVIDERS */
-// Removed CompanyProvider (Now managed in main.jsx)
 import { ToolProvider } from "./pages/tools/ToolContext.jsx";
 import { SecurityProvider } from "./context/SecurityContext.jsx";
 import { TradingProvider } from "./context/TradingContext.jsx";
@@ -43,7 +42,6 @@ import AdminOverview from "./pages/admin/AdminOverview.jsx";
 import GlobalControl from "./pages/admin/GlobalControl.jsx";
 import TradingLayout from "./pages/trading/TradingLayout.jsx";
 import NotFound from "./pages/NotFound.jsx";
-// (Note: Keep your other imports like SOC, Threats, etc., as they were)
 
 /* =========================================================
    ROUTES ARCHITECTURE
@@ -70,7 +68,6 @@ function AppRoutes({ user, ready }) {
         <Route index element={<AdminOverview />} />
         <Route path="global" element={<GlobalControl />} />
         <Route path="trading/*" element={<TradingLayout />} />
-        {/* ... Other Admin Routes ... */}
       </Route>
 
       {/* MANAGER ENCLAVE */}
@@ -83,7 +80,6 @@ function AppRoutes({ user, ready }) {
         }
       >
         <Route index element={<AdminOverview />} /> 
-        {/* ... Other Manager Routes ... */}
       </Route>
 
       <Route path="*" element={<NotFound />} />
@@ -115,25 +111,16 @@ export default function App() {
           return;
         }
 
-        const res = await fetch(`${API_BASE}/api/auth/refresh`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        // ✅ REPLACED: Manual fetch with hardened api.request 
+        // This ensures headers and base URLs are always correct
+        const res = await api.status(); 
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.token && data?.user) {
-            setToken(data.token);
-            saveUser(data.user);
-            setUser(data.user);
-          } else {
-            setUser(storedUser);
-          }
+        if (res.ok && res.user) {
+            setUser(res.user);
+            saveUser(res.user);
         } else {
-          setUser(storedUser); 
+            // If the token is valid enough to get a 200, keep the session
+            setUser(storedUser);
         }
       } catch (err) {
         console.warn("Auth Boot Warning:", err.message);
@@ -151,10 +138,11 @@ export default function App() {
       <div style={{ 
         background: "#0a0a0a", color: "#00ff88", height: "100vh", 
         display: "flex", flexDirection: "column", alignItems: "center", 
-        justifyContent: "center", fontFamily: "monospace" 
+        justifyContent: "center", fontFamily: "monospace", textAlign: "center",
+        padding: "20px"
       }}>
-        <h1 style={{ fontSize: "2rem", marginBottom: "10px" }}>🛡️ AUTOSHIELD</h1>
-        <p style={{ color: "#666" }}>INITIALIZING STEALTH CORE...</p>
+        <h1 style={{ fontSize: "1.8rem", marginBottom: "10px", letterSpacing: "4px" }}>🛡️ AUTOSHIELD</h1>
+        <p style={{ color: "#444", fontSize: "0.7rem", fontWeight: "bold" }}>INITIALIZING STEALTH CORE • v35.0</p>
       </div>
     );
   }
@@ -163,13 +151,10 @@ export default function App() {
     <EventBusProvider>
       <AIDecisionProvider>
         <TradingProvider>
-          {/* CompanyProvider is now handled at the Root (main.jsx) */}
           <SecurityProvider>
             <ToolProvider user={user}>
-              {/* Headless Logic Engines */}
               <BrainAdapter />
               <AutoDevEngine />
-              
               <AppRoutes user={user} ready={ready} />
             </ToolProvider>
           </SecurityProvider>
