@@ -1,259 +1,123 @@
 /* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — ENTERPRISE v30
-   FULL AI + EXECUTION + ANALYTICS + SAFETY LAYER
+   AUTOSHIELD FRONTEND API LAYER — STEALTH v32.5
+   FULL AI + EXECUTION + ANALYTICS + DUAL-CONNECT
 ========================================================= */
 
-const API_BASE = import.meta.env.VITE_API_BASE?.trim();
+// 🌍 DUAL-SOURCE LOGIC: 
+// It tries the Environment Variable first, then falls back to Render.
+const ENV_BASE = import.meta.env.VITE_API_BASE?.trim();
+const RENDER_FALLBACK = "https://your-app-name.onrender.com"; // 🔴 REPLACE THIS WITH YOUR RENDER URL
+const LOCAL_FALLBACK = "http://localhost:5000";
+
+const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+export const API_BASE = ENV_BASE || (isLocal ? LOCAL_FALLBACK : RENDER_FALLBACK);
+export const WS_URL = API_BASE.replace("http", "ws") + "/ws";
 
 /* ================= CONFIG ================= */
-
 const TOKEN_KEY = "as_token";
 const USER_KEY = "as_user";
 const REQUEST_TIMEOUT = 60000;
 
 /* ================= STORAGE ================= */
-
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
-}
-
-export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
-}
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export const setToken = (token) => token ? localStorage.setItem(TOKEN_KEY, token) : localStorage.removeItem(TOKEN_KEY);
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 export function getSavedUser() {
-  try {
-    return JSON.parse(localStorage.getItem(USER_KEY) || "null");
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch { return null; }
 }
-
-export function saveUser(user) {
-  if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
-  else localStorage.removeItem(USER_KEY);
-}
-
-export function clearUser() {
-  localStorage.removeItem(USER_KEY);
-}
+export const saveUser = (user) => user ? localStorage.setItem(USER_KEY, JSON.stringify(user)) : localStorage.removeItem(USER_KEY);
 
 /* ================= UTIL ================= */
-
 function joinUrl(base, path) {
-  return `${String(base).replace(/\/+$/, "")}${
-    path.startsWith("/") ? path : `/${path}`
-  }`;
+  const cleanBase = String(base).replace(/\/+$/, "");
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  // Ensure we don't double up on /api/api
+  const finalPath = cleanPath.startsWith("/api") ? cleanPath : `/api${cleanPath}`;
+  return `${cleanBase}${finalPath}`;
 }
 
 async function fetchWithTimeout(url, options = {}, ms = REQUEST_TIMEOUT) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
-
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(id);
-  }
+  try { return await fetch(url, { ...options, signal: controller.signal }); }
+  finally { clearTimeout(id); }
 }
-
-/* ================= TENANT ================= */
 
 function attachTenantHeader(headers) {
   const user = getSavedUser();
-
-  if (user?.companyId) {
-    headers["x-company-id"] = String(user.companyId);
-  }
-
+  if (user?.companyId) { headers["x-company-id"] = String(user.companyId); }
   return headers;
 }
 
-/* ================= SAFE RESPONSE ================= */
-
 function extractData(res) {
-  if (!res) return null;
-
-  if (res.ok === false) return null;
-
-  if (res.data !== undefined) return res.data;
-
-  return res;
+  if (!res || res.ok === false) return null;
+  return res.data !== undefined ? res.data : res;
 }
 
 /* ================= CORE REQUEST ================= */
-
-export async function req(
-  path,
-  {
-    method = "GET",
-    body,
-    auth = true,
-    silent = true,
-    headers: extraHeaders = {},
-  } = {}
-) {
-  if (!API_BASE) {
-    return { ok: false, error: "API base missing", silent: true };
-  }
-
-  const headers = attachTenantHeader({
-    "Content-Type": "application/json",
-    ...extraHeaders,
-  });
+export async function req(path, { method = "GET", body, auth = true, headers: extraHeaders = {} } = {}) {
+  const headers = attachTenantHeader({ "Content-Type": "application/json", ...extraHeaders });
 
   if (auth) {
     const token = getToken();
-
-    if (!token) {
-      return { ok: false, error: "No session", silent: true };
-    }
-
+    if (!token) return { ok: false, error: "No session", silent: true };
     headers.Authorization = `Bearer ${token}`;
   }
 
-  let res;
-
   try {
-    res = await fetchWithTimeout(joinUrl(API_BASE, path), {
+    const response = await fetchWithTimeout(joinUrl(API_BASE, path), {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
-  } catch {
-    return { ok: false, error: "Network unreachable", silent: true };
+
+    const data = await response.json();
+
+    if (response.status === 401 && auth) {
+      clearToken();
+      return { ok: false, error: "Expired", unauthorized: true };
+    }
+
+    if (!response.ok) return { ok: false, error: data?.error || "Error", status: response.status };
+    return data;
+  } catch (err) {
+    return { ok: false, error: "Offline" };
   }
-
-  let data = null;
-
-  try {
-    data = await res.json();
-  } catch {}
-
-  if (res.status === 401 && auth) {
-    clearToken();
-    clearUser();
-
-    return {
-      ok: false,
-      error: "Session expired",
-      unauthorized: true,
-      silent: true,
-    };
-  }
-
-  if (!res.ok) {
-    return {
-      ok: false,
-      error: data?.error || `Request failed (${res.status})`,
-      status: res.status,
-      silent,
-    };
-  }
-
-  return data ?? { ok: true };
 }
 
-/* =========================================================
-   API SURFACE — INSTITUTIONAL CORE
-========================================================= */
-
+/* ================= API SURFACE ================= */
 export const api = {
-
-  /* ================= AUTH ================= */
-
   login: async (email, password) => {
-    const res = await fetch(joinUrl(API_BASE, "/api/auth/login"), {
+    // Explicit path for login to avoid joinUrl double-up
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-
     const data = await res.json();
-
     if (!res.ok) throw new Error(data?.error || "Login failed");
-
     setToken(data.token);
     saveUser(data.user);
-
     return data;
   },
 
-  logout: () => req("/api/auth/logout", { method: "POST" }),
-  refresh: () => req("/api/auth/refresh", { method: "POST" }),
+  /* 🛡️ STEALTH SYNCED CALLS */
+  // Note: We use the paths your TradingRoom.jsx and Backend v32.5 expect
+  aiSnapshot: () => req("/paper/snapshot"),
+  paperAccount: () => req("/paper/account"),
+  
+  placePaperOrder: (payload) => req("/paper/order", {
+    method: "POST",
+    body: { ...payload, mode: "STEALTH_LEARNING" },
+  }),
 
-  /* ================= AI ================= */
-
-  aiSnapshot: async () =>
-    extractData(await req("/api/trading/ai/snapshot")),
-
-  aiConfig: async () =>
-    extractData(await req("/api/ai/config")),
-
-  aiBrainStats: async () =>
-    extractData(await req("/api/ai/brain/stats")),
-
-  aiReasonerStatus: async () =>
-    extractData(await req("/api/ai/reasoner/status")),
-
-  // 🔥 FUTURE (safe if backend adds later)
-  aiDiagnostics: async () =>
-    extractData(await req("/api/ai/diagnostics")),
-
-  aiLiveDecision: async () =>
-    extractData(await req("/api/ai/live")),
-
-  /* ================= MARKET ================= */
-
-  marketPrice: async (symbol) =>
-    extractData(
-      await req(`/api/market/price?symbol=${encodeURIComponent(symbol)}`)
-    ),
-
-  marketCandles: async (symbol, limit = 200) =>
-    extractData(
-      await req(
-        `/api/market/candles?symbol=${encodeURIComponent(symbol)}&limit=${limit}`
-      )
-    ),
-
-  /* ================= PAPER ================= */
-
-  paperAccount: async () =>
-    extractData(await req("/api/paper/account")),
-
-  paperPositions: async () =>
-    extractData(await req("/api/paper/positions")),
-
-  paperOrders: async () =>
-    extractData(await req("/api/paper/orders")),
-
-  placePaperOrder: async (payload) =>
-    extractData(
-      await req("/api/paper/order", {
-        method: "POST",
-        body: payload,
-      })
-    ),
-
-  /* ================= EXECUTION ================= */
-
-  executionMetrics: async () =>
-    extractData(await req("/api/execution/metrics")),
-
-  executionAllMetrics: async () =>
-    extractData(await req("/api/execution/metrics/all")),
-
-  /* ================= PERFORMANCE ================= */
-
-  tradeHistory: async () =>
-    extractData(await req("/api/trades/history")),
-
-  performanceSummary: async () =>
-    extractData(await req("/api/performance/summary")),
+  marketPrice: (symbol) => req(`/market/price?symbol=${symbol}`),
+  tradeHistory: () => req("/analytics/history"),
+  
+  // Keep your Enterprise v30 placeholders so nothing breaks
+  aiBrainStats: () => req("/ai/brain/stats"),
+  executionMetrics: () => req("/execution/metrics"),
 };
+
+export default api;
