@@ -1,47 +1,47 @@
-// frontend/src/App.jsx
-// App — Auth Boot Quieted
-// FIX: Trading websocket provider added
-// FIX: Threats page route added
+// ==========================================================
+// 🔒 AUTOSHIELD CORE — v35.0 (STEALTH SYNCED & HARDENED)
+// FILE: frontend/src/App.jsx
+// ==========================================================
 
 import React, { useEffect, useState, useRef } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import {
-  getSavedUser,
-  getToken,
-  setToken,
-  saveUser,
+/* 🛠️ CORE UTILS & API */
+import { 
+  getSavedUser, 
+  getToken, 
+  setToken, 
+  saveUser, 
+  API_BASE 
 } from "./lib/api.js";
 
+/* 🏢 CONTEXT PROVIDERS */
 import { CompanyProvider } from "./context/CompanyContext";
 import { ToolProvider } from "./pages/tools/ToolContext.jsx";
 import { SecurityProvider } from "./context/SecurityContext.jsx";
-
-/* NEW */
 import { TradingProvider } from "./context/TradingContext.jsx";
-
 import { EventBusProvider } from "./core/EventBus.jsx";
 import { AIDecisionProvider } from "./core/AIDecisionBus.jsx";
 
+/* 🧠 ENGINE ADAPTERS */
 import BrainAdapter from "./core/BrainAdapter.jsx";
 import AutoDevEngine from "./core/AutoDevEngine.jsx";
 
+/* 🛡️ GATEKEEPER */
 import PlatformGate from "./components/PlatformGate.jsx";
 
-/* LAYOUTS */
+/* 🏗️ LAYOUTS */
 import AdminLayout from "./layouts/AdminLayout.jsx";
 import ManagerLayout from "./layouts/ManagerLayout.jsx";
-import CompanyLayout from "./layouts/CompanyLayout.jsx";
-import SmallCompanyLayout from "./layouts/SmallCompanyLayout.jsx";
 import UserLayout from "./layouts/UserLayout.jsx";
 
-/* PUBLIC */
+/* 🌐 PUBLIC PAGES */
 import Landing from "./pages/public/Landing.jsx";
 import Pricing from "./pages/public/Pricing.jsx";
 import Signup from "./pages/public/Signup.jsx";
 import Login from "./pages/Login.jsx";
 
-/* SHARED */
+/* 📊 SHARED MODULES */
 import Intelligence from "./pages/Intelligence.jsx";
 import SOC from "./pages/SOC.jsx";
 import Assets from "./pages/Assets.jsx";
@@ -52,7 +52,7 @@ import Notifications from "./pages/Notifications.jsx";
 import Threats from "./pages/Threats.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
-/* ADMIN */
+/* 🔑 ADMIN MODULES */
 import AdminOverview from "./pages/admin/AdminOverview.jsx";
 import GlobalControl from "./pages/admin/GlobalControl.jsx";
 import AdminCompanies from "./pages/admin/AdminCompanies.jsx";
@@ -62,35 +62,32 @@ import AdminCompanyRoom from "./pages/admin/AdminCompanyRoom.jsx";
 import CorporateEntities from "./pages/admin/CorporateEntities.jsx";
 import UserGovernance from "./pages/admin/UserGovernance.jsx";
 
-/* MANAGER */
+/* 👔 MANAGER MODULES */
 import ManagerCommand from "./pages/manager/ManagerCommand.jsx";
 
-/* USER */
-import UserIndex from "./pages/user/index.jsx";
-import UserReports from "./pages/user/Reports.jsx";
-import Managed from "./pages/user/Managed.jsx";
-import Autoprotect from "./pages/user/Autoprotect.jsx";
-
-/* SECURITY */
+/* 🛡️ SECURITY MODULES */
 import SecurityOverview from "./components/security/SecurityOverview.jsx";
 import RiskMonitor from "./pages/RiskMonitor.jsx";
 import SessionMonitor from "./pages/SessionMonitor.jsx";
 import DeviceIntegrityPanel from "./pages/DeviceIntegrityPanel.jsx";
 
-/* TRADING */
+/* 📈 TRADING MODULES */
 import TradingLayout from "./pages/trading/TradingLayout.jsx";
 
-/* ================= ROUTES ================= */
+/* =========================================================
+   ROUTES ARCHITECTURE
+========================================================= */
 
 function AppRoutes({ user, ready }) {
   return (
     <Routes>
+      {/* PUBLIC */}
       <Route path="/" element={<Landing />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/login" element={<Login />} />
 
-      {/* ADMIN */}
+      {/* ADMIN ENCLAVE */}
       <Route
         path="/admin/*"
         element={
@@ -122,7 +119,7 @@ function AppRoutes({ user, ready }) {
         <Route path="trading/*" element={<TradingLayout />} />
       </Route>
 
-      {/* MANAGER */}
+      {/* MANAGER ENCLAVE */}
       <Route
         path="/manager/*"
         element={
@@ -147,14 +144,14 @@ function AppRoutes({ user, ready }) {
   );
 }
 
-/* ================= MAIN APP ================= */
+/* =========================================================
+   MAIN APPLICATION BOOTSTRAP
+========================================================= */
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
-
   const bootedRef = useRef(false);
-  const base = import.meta.env.VITE_API_BASE?.replace(/\/+$/, "");
 
   useEffect(() => {
     if (bootedRef.current) return;
@@ -171,7 +168,8 @@ export default function App() {
           return;
         }
 
-        const res = await fetch(`${base}/api/auth/refresh`, {
+        // Refresh session on boot
+        const res = await fetch(`${API_BASE}/api/auth/refresh`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -179,22 +177,20 @@ export default function App() {
           },
         });
 
-        if (!res.ok) {
-          setUser(storedUser);
-          setReady(true);
-          return;
-        }
-
-        const data = await res.json();
-
-        if (data?.token && data?.user) {
-          setToken(data.token);
-          saveUser(data.user);
-          setUser(data.user);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.token && data?.user) {
+            setToken(data.token);
+            saveUser(data.user);
+            setUser(data.user);
+          } else {
+            setUser(storedUser);
+          }
         } else {
-          setUser(storedUser);
+          setUser(storedUser); // Fallback to local storage if offline
         }
-      } catch {
+      } catch (err) {
+        console.warn("Auth Boot Warning:", err.message);
         setUser(getSavedUser());
       } finally {
         setReady(true);
@@ -202,30 +198,43 @@ export default function App() {
     }
 
     bootAuth();
-  }, [base]);
+  }, []);
 
   if (!ready) {
-    return <div style={{ padding: 40 }}>Initializing platform…</div>;
+    return (
+      <div style={{ 
+        background: "#0a0a0a", 
+        color: "#00ff88", 
+        height: "100vh", 
+        display: "flex", 
+        flexDirection: "column",
+        alignItems: "center", 
+        justifyContent: "center", 
+        fontFamily: "monospace" 
+      }}>
+        <h1 style={{ fontSize: "2rem", marginBottom: "10px" }}>🛡️ AUTOSHIELD</h1>
+        <p style={{ color: "#666" }}>INITIALIZING STEALTH CORE...</p>
+      </div>
+    );
   }
 
   return (
-    <EventBusProvider>
-      <AIDecisionProvider>
-        <BrainAdapter />
-        <AutoDevEngine />
-
-        <TradingProvider>
-          <CompanyProvider>
-            <ToolProvider user={user}>
+    <BrowserRouter>
+      <EventBusProvider>
+        <AIDecisionProvider>
+          <TradingProvider>
+            <CompanyProvider>
               <SecurityProvider>
-                <BrowserRouter>
+                <ToolProvider user={user}>
+                  <BrainAdapter />
+                  <AutoDevEngine />
                   <AppRoutes user={user} ready={ready} />
-                </BrowserRouter>
+                </ToolProvider>
               </SecurityProvider>
-            </ToolProvider>
-          </CompanyProvider>
-        </TradingProvider>
-      </AIDecisionProvider>
-    </EventBusProvider>
+            </CompanyProvider>
+          </TradingProvider>
+        </AIDecisionProvider>
+      </EventBusProvider>
+    </BrowserRouter>
   );
 }
