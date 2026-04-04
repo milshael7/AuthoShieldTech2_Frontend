@@ -1,6 +1,6 @@
 // ============================================================
-// 🔒 PROTECTED STEALTH INTEL — v5.0 (LIVE-PULSE HARDENED)
-// FILE: AIBehaviorPanel.jsx - SYNCED WITH BACKEND v32.5
+// 🔒 AUTOSHIELD INTEL — v5.1 (CPU OPTIMIZED)
+// FILE: AIBehaviorPanel.jsx - REAL-TIME ANALYTICS
 // ============================================================
 
 import React, { useMemo, useEffect, useState } from "react";
@@ -22,7 +22,7 @@ export default function AIBehaviorPanel({
     maximumFractionDigits: 2 
   });
 
-  /* ================= ⏲️ STEALTH TIMER (CPU OPTIMIZED) ================= */
+  /* ================= ⏲️ STEALTH TIMER (MEMORY LEAK PROTECTION) ================= */
   const [remaining, setRemaining] = useState(0);
 
   useEffect(() => {
@@ -31,53 +31,58 @@ export default function AIBehaviorPanel({
         return;
     }
     
-    // Fallback duration if the backend doesn't specify (15 mins default)
+    // 15 min default fallback
     const duration = safeNum(position.maxDuration || position.expectedDuration || 900000);
 
     const tick = () => {
-      const elapsed = Date.now() - new Date(position.time).getTime();
-      const left = Math.max(duration - elapsed, 0);
-      setRemaining(left);
+      const entryTime = new Date(position.time).getTime();
+      if (isNaN(entryTime)) return;
+      
+      const elapsed = Date.now() - entryTime;
+      setRemaining(Math.max(duration - elapsed, 0));
     };
 
-    tick(); // Initial call
+    tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [position]);
+  }, [position?.time, position?.maxDuration]); // Only reset if trade data actually changes
 
   const formatDuration = (ms) => {
     const s = Math.floor(ms / 1000);
+    if (s <= 0) return "EXPIRING...";
     return `${Math.floor(s / 60)}m ${s % 60}s`;
   };
 
   /* ================= 📊 LIVE INTELLIGENCE MAPPING ================= */
   const intel = useMemo(() => {
-    // 1. Get the Absolute Latest Decision (The "Pulse")
     const latest = decisions.length > 0 ? decisions[decisions.length - 1] : null;
     
-    // Mapping backend 'score' or 'confidence' to 0-100%
     const rawConf = latest ? (latest.confidence || latest.combinedScore || latest.score || 0) : 0;
     const displayConf = rawConf <= 1 ? rawConf * 100 : rawConf;
 
-    // 2. Performance Stats
-    const closed = trades.filter(t => t.pnl !== undefined && t.pnl !== null);
+    // Optimized PNL loop for low-end mobile CPUs
     let totalPnl = 0;
     let wins = 0;
+    let closedCount = 0;
     
-    closed.forEach(t => {
-      const p = safeNum(t.pnl);
-      totalPnl += p;
-      if (p > 0) wins++;
-    });
+    for (let i = 0; i < trades.length; i++) {
+      const t = trades[i];
+      if (t.pnl !== undefined && t.pnl !== null) {
+        const p = safeNum(t.pnl);
+        totalPnl += p;
+        if (p > 0) wins++;
+        closedCount++;
+      }
+    }
 
     return {
       currentAction: latest?.action || "OBSERVING",
       confidence: displayConf,
-      winRate: closed.length > 0 ? (wins / closed.length) * 100 : 0,
+      winRate: closedCount > 0 ? (wins / closedCount) * 100 : 0,
       totalPnl,
-      totalTrades: closed.length,
+      totalTrades: closedCount,
       wins,
-      losses: closed.length - wins
+      losses: closedCount - wins
     };
   }, [trades, decisions]);
 
@@ -85,19 +90,18 @@ export default function AIBehaviorPanel({
   return (
     <div style={{
       background: "#0f172a",
-      padding: "16px",
-      borderRadius: "12px",
+      padding: "14px",
+      borderRadius: "10px",
       border: "1px solid #1e293b",
       color: "#f8fafc",
-      marginTop: "16px",
+      marginTop: "12px",
       fontFamily: "monospace"
     }}>
-      {/* HEADER: LIVE BRAIN SIGNAL */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
         <div>
-          <div style={{ fontSize: "0.65rem", color: "#64748b", fontWeight: "bold" }}>AI ENGINE SIGNAL</div>
+          <div style={{ fontSize: "0.6rem", color: "#64748b", fontWeight: "bold" }}>AI SIGNAL</div>
           <div style={{ 
-            fontSize: "1rem", 
+            fontSize: "0.9rem", 
             fontWeight: "bold", 
             color: intel.currentAction === "BUY" ? "#22c55e" : intel.currentAction === "SELL" ? "#ef4444" : "#f59e0b" 
           }}>
@@ -106,45 +110,38 @@ export default function AIBehaviorPanel({
         </div>
         
         <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: "0.65rem", color: "#64748b", fontWeight: "bold" }}>CONFIDENCE</div>
-            <div style={{ 
-                fontSize: "1.2rem", 
-                fontWeight: "900", 
-                color: intel.confidence > 75 ? "#22c55e" : "#3b82f6" 
-            }}>
+            <div style={{ fontSize: "0.6rem", color: "#64748b", fontWeight: "bold" }}>CONFIDENCE</div>
+            <div style={{ fontSize: "1.1rem", fontWeight: "900", color: intel.confidence > 75 ? "#22c55e" : "#3b82f6" }}>
                 {intel.confidence.toFixed(0)}%
             </div>
         </div>
       </div>
 
-      {/* STATS GRID */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
         <StatTile label="WIN RATE" value={`${intel.winRate.toFixed(1)}%`} color="#3b82f6" />
-        <StatTile label="NET PNL" value={`$${fmt(intel.totalPnl)}`} color={intel.totalPnl >= 0 ? "#22c55e" : "#ef4444"} />
+        <StatTile label="PNL" value={`$${fmt(intel.totalPnl)}`} color={intel.totalPnl >= 0 ? "#22c55e" : "#ef4444"} />
       </div>
 
-      {/* FOOTER INFO */}
-      <div style={{ marginTop: "12px", display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#475569" }}>
-        <span>TRADES: {intel.totalTrades}</span>
-        <span>WINS: <span style={{ color: "#22c55e" }}>{intel.wins}</span> / LOSS: <span style={{ color: "#ef4444" }}>{intel.losses}</span></span>
+      <div style={{ marginTop: "10px", display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "#475569" }}>
+        <span>TOTAL: {intel.totalTrades}</span>
+        <span>W: <span style={{ color: "#22c55e" }}>{intel.wins}</span> / L: <span style={{ color: "#ef4444" }}>{intel.losses}</span></span>
       </div>
 
-      {/* LIVE POSITION MONITOR (Floating Overlay Style) */}
       {position && (
         <div style={{
-          marginTop: "16px",
-          padding: "12px",
-          background: "linear-gradient(135deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9))",
-          borderRadius: "8px",
-          borderLeft: "4px solid #3b82f6"
+          marginTop: "12px",
+          padding: "10px",
+          background: "rgba(30,41,59,0.5)",
+          borderRadius: "6px",
+          borderLeft: "3px solid #3b82f6"
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "0.7rem", color: "#3b82f6", fontWeight: "bold" }}>LIVE TRADE ACTIVE</span>
-            <span style={{ fontSize: "0.8rem", color: "#fbbf24" }}>{formatDuration(remaining)}</span>
+            <span style={{ fontSize: "0.65rem", color: "#3b82f6", fontWeight: "bold" }}>ACTIVE TRADE</span>
+            <span style={{ fontSize: "0.75rem", color: "#fbbf24" }}>{formatDuration(remaining)}</span>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px", fontSize: "0.85rem" }}>
-            <span style={{ color: "#94a3b8" }}>Entry: <span style={{ color: "#fff" }}>${fmt(position.entry)}</span></span>
-            <span style={{ color: "#94a3b8" }}>Size: <span style={{ color: "#fff" }}>{position.qty}</span></span>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px", fontSize: "0.75rem" }}>
+            <span>Entry: ${fmt(position.entry)}</span>
+            <span>Size: {position.qty}</span>
           </div>
         </div>
       )}
@@ -154,9 +151,9 @@ export default function AIBehaviorPanel({
 
 function StatTile({ label, value, color }) {
   return (
-    <div style={{ background: "#1e293b", padding: "10px", borderRadius: "8px", border: "1px solid #334155" }}>
-      <div style={{ fontSize: "0.6rem", color: "#64748b", marginBottom: "2px" }}>{label}</div>
-      <div style={{ fontSize: "1rem", fontWeight: "bold", color }}>{value}</div>
+    <div style={{ background: "#1e293b", padding: "8px", borderRadius: "6px", border: "1px solid #334155" }}>
+      <div style={{ fontSize: "0.55rem", color: "#64748b", marginBottom: "2px" }}>{label}</div>
+      <div style={{ fontSize: "0.9rem", fontWeight: "bold", color }}>{value}</div>
     </div>
   );
 }
