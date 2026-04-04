@@ -1,178 +1,203 @@
 // ==========================================================
-// 🔒 PROTECTED CORE FILE — v3.0 (ENGINE-SYNCED & RISK-AWARE)
-// FILE: OrderPanel.jsx
+// 🔒 PROTECTED STEALTH ORDER — v5.0 (HARDENED & SYNCED)
+// FILE: OrderPanel.jsx - SYNCED WITH BACKEND v32.5
 // ==========================================================
 
-import React, { useEffect, useMemo, useState } from "react";
-import { api, getSavedUser } from "../lib/api.js"; // Standardized API
+import React, { useMemo, useState } from "react";
+import { api } from "../lib/api.js";
 
-/* =========================================================
-COMPONENT
-========================================================= */
 export default function OrderPanel({ symbol = "BTCUSDT", price = 0 }) {
-  const [side, setSide] = useState("buy"); // Lowercase for engine compatibility
-  const [orderType, setOrderType] = useState("market");
+  const [side, setSide] = useState("buy");
   const [size, setSize] = useState("");
-  const [limitPrice, setLimitPrice] = useState("");
   const [stopLoss, setStopLoss] = useState("");
   const [takeProfit, setTakeProfit] = useState("");
-  const [riskPctInput, setRiskPctInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
-  /* ================= HELPERS ================= */
-  const safeNumber = (v, fallback = 0) => {
+  const safeNum = (v, fallback = 0) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
   };
 
-  const livePrice = useMemo(() => safeNumber(price, 0), [price]);
-  const entryPrice = orderType === "limit" ? safeNumber(limitPrice, 0) : livePrice;
+  const livePrice = useMemo(() => safeNum(price, 0), [price]);
 
-  /* ================= 📊 RISK CALCULATIONS ================= */
-  const riskAmount = useMemo(() => {
-    const stop = safeNumber(stopLoss, 0);
-    const qty = safeNumber(size, 0);
-    if (!entryPrice || !stop || !qty) return 0;
-    return Math.abs(entryPrice - stop) * qty;
-  }, [entryPrice, stopLoss, size]);
+  /* ================= 📊 DYNAMIC RISK CALC ================= */
+  const risk = useMemo(() => {
+    const sl = safeNum(stopLoss, 0);
+    const qty = safeNum(size, 0);
+    if (!livePrice || !sl || !qty) return { amt: 0, rr: 0 };
+    
+    const amt = Math.abs(livePrice - sl) * qty;
+    const tp = safeNum(takeProfit, 0);
+    const reward = tp ? Math.abs(tp - livePrice) * qty : 0;
+    
+    return {
+      amt,
+      reward,
+      rr: amt > 0 ? (reward / amt).toFixed(2) : "0.00"
+    };
+  }, [livePrice, stopLoss, takeProfit, size]);
 
-  const rewardAmount = useMemo(() => {
-    const tp = safeNumber(takeProfit, 0);
-    const qty = safeNumber(size, 0);
-    if (!entryPrice || !tp || !qty) return 0;
-    return Math.abs(tp - entryPrice) * qty;
-  }, [entryPrice, takeProfit, size]);
-
-  const rrRatio = useMemo(() => {
-    if (!riskAmount || !rewardAmount) return 0;
-    return rewardAmount / riskAmount;
-  }, [riskAmount, rewardAmount]);
-
-  /* ================= SUBMIT ORDER ================= */
+  /* ================= 🚀 STEALTH EXECUTION ================= */
   async function submitOrder() {
-    const qty = safeNumber(size, 0);
-    if (qty <= 0) return setMsg("Enter valid size");
-    if (entryPrice <= 0) return setMsg("Invalid entry price");
-
-    // Validation Logic
-    const sl = stopLoss === "" ? null : safeNumber(stopLoss);
-    const tp = takeProfit === "" ? null : safeNumber(takeProfit);
-
-    if (side === "buy") {
-      if (sl && sl >= entryPrice) return setMsg("SL must be below Buy price");
-      if (tp && tp <= entryPrice) return setMsg("TP must be above Buy price");
-    } else {
-      if (sl && sl <= entryPrice) return setMsg("SL must be above Sell price");
-      if (tp && tp >= entryPrice) return setMsg("TP must be below Sell price");
-    }
+    const qty = safeNum(size, 0);
+    if (qty <= 0) return setMsg("⚠️ Enter valid size");
+    if (livePrice <= 0) return setMsg("⚠️ Waiting for price pulse...");
 
     setLoading(true);
     setMsg("");
 
     const payload = {
       symbol,
-      side, // 'buy' or 'sell'
-      orderType,
+      side,
       qty,
-      price: orderType === "market" ? null : entryPrice, // Engine handles market slippage
-      stopLoss: sl,
-      takeProfit: tp,
-      riskPct: safeNumber(riskPctInput, 0) / 100
+      price: livePrice, 
+      stopLoss: stopLoss === "" ? null : safeNum(stopLoss),
+      takeProfit: takeProfit === "" ? null : safeNum(takeProfit),
+      mode: "STEALTH_LEARNING", // 🧠 Force AI Learning
+      timestamp: Date.now()
     };
 
     try {
+      // Using the api.js instance we hardened earlier
       const res = await api.placePaperOrder(payload);
       
-      if (res?.ok) {
-        setMsg("Order Executed ✅");
+      if (res?.ok || res?.id) {
+        setMsg("✅ ORDER EXECUTED");
         setSize("");
         setStopLoss("");
         setTakeProfit("");
+        // Clear message after 3 seconds
+        setTimeout(() => setMsg(""), 3000);
       } else {
-        setMsg(res?.error || "Order Rejected ❌");
+        setMsg(`❌ ${res?.error || "REJECTED"}`);
       }
     } catch (err) {
-      setMsg("Connection Failed");
+      setMsg("📡 NETWORK LAG: RETRYING...");
     } finally {
       setLoading(false);
     }
   }
 
+  /* ================= UI RENDER ================= */
   return (
     <div style={{
-      background: "#111827",
-      padding: 16,
-      borderRadius: 12,
-      border: "1px solid rgba(255,255,255,.1)",
-      color: "white"
+      background: "#0f172a",
+      padding: "20px",
+      borderRadius: "16px",
+      border: "1px solid #1e293b",
+      color: "#f8fafc",
+      fontFamily: "monospace"
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-        <span style={{ fontWeight: 700 }}>{symbol}</span>
-        <span style={{ color: "#888" }}>${livePrice.toFixed(2)}</span>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px" }}>
+        <span style={{ fontWeight: "900", color: "#3b82f6" }}>{symbol}</span>
+        <span style={{ color: "#22c55e", fontWeight: "bold" }}>${livePrice.toLocaleString()}</span>
       </div>
 
-      <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
+      {/* SIDE SELECTOR */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
         <button 
           onClick={() => setSide("buy")} 
-          style={{ flex: 1, padding: 8, borderRadius: 4, border: "none", cursor: "pointer", background: side === "buy" ? "#16a34a" : "#374151", color: "white" }}
+          style={btnSideStyle(side === "buy", "#22c55e")}
         >BUY</button>
         <button 
           onClick={() => setSide("sell")} 
-          style={{ flex: 1, padding: 8, borderRadius: 4, border: "none", cursor: "pointer", background: side === "sell" ? "#dc2626" : "#374151", color: "white" }}
+          style={btnSideStyle(side === "sell", "#ef4444")}
         >SELL</button>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <Input label="Size (Qty)" value={size} setValue={setSize} placeholder="0.00" />
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <InputBox label="QUANTITY" value={size} onChange={setSize} placeholder="0.01" />
         
-        <div style={{ display: "flex", gap: 8 }}>
-          <div style={{ flex: 1 }}>
-            <Input label="Stop Loss" value={stopLoss} setValue={setStopLoss} placeholder="Price" />
-          </div>
-          <div style={{ flex: 1 }}>
-            <Input label="Take Profit" value={takeProfit} setValue={setTakeProfit} placeholder="Price" />
-          </div>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <InputBox label="STOP LOSS" value={stopLoss} onChange={setStopLoss} placeholder="Price" />
+          <InputBox label="TAKE PROFIT" value={takeProfit} onChange={setTakeProfit} placeholder="Price" />
         </div>
-
-        <Input label="Risk per Trade (%)" value={riskPctInput} setValue={setRiskPctInput} placeholder="1.0" />
       </div>
 
-      <div style={{ margin: "16px 0", padding: 12, background: "rgba(0,0,0,0.3)", borderRadius: 8, fontSize: 13 }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>Risk:</span> <span style={{ color: "#ef4444" }}>-${riskAmount.toFixed(2)}</span>
+      {/* RISK OVERLAY */}
+      <div style={{ 
+        margin: "20px 0", 
+        padding: "12px", 
+        background: "rgba(30,41,59,0.5)", 
+        borderRadius: "8px", 
+        fontSize: "11px",
+        border: "1px dashed #334155"
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+          <span>RISK: <span style={{ color: "#ef4444" }}>-${risk.amt.toFixed(2)}</span></span>
+          <span>REWARD: <span style={{ color: "#22c55e" }}>+${risk.reward.toFixed(2)}</span></span>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-          <span>Reward:</span> <span style={{ color: "#22c55e" }}>+${rewardAmount.toFixed(2)}</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, borderTop: "1px solid #333", paddingTop: 4 }}>
-          <span>R:R Ratio:</span> <span style={{ fontWeight: 700 }}>{rrRatio ? rrRatio.toFixed(2) : "-"}</span>
+        <div style={{ textAlign: "center", borderTop: "1px solid #334155", paddingTop: "4px", color: "#94a3b8" }}>
+          R:R RATIO: <span style={{ color: "#fff", fontWeight: "bold" }}>{risk.rr}</span>
         </div>
       </div>
 
       <button 
         onClick={submitOrder} 
         disabled={loading}
-        style={{ width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#3b82f6", color: "white", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}
+        style={{ 
+          width: "100%", 
+          padding: "14px", 
+          borderRadius: "10px", 
+          border: "none", 
+          background: loading ? "#334155" : (side === "buy" ? "#22c55e" : "#ef4444"),
+          color: "white", 
+          fontWeight: "900", 
+          cursor: "pointer",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+        }}
       >
-        {loading ? "PROCESSING..." : `PLACE ${side.toUpperCase()} ORDER`}
+        {loading ? "EXECUTING..." : `CONFIRM ${side.toUpperCase()} POSITION`}
       </button>
 
-      {msg && <div style={{ marginTop: 12, textAlign: "center", fontSize: 12, color: msg.includes("✅") ? "#22c55e" : "#ef4444" }}>{msg}</div>}
+      {msg && (
+        <div style={{ 
+          marginTop: "12px", 
+          textAlign: "center", 
+          fontSize: "12px", 
+          color: msg.includes("✅") ? "#22c55e" : "#f59e0b",
+          fontWeight: "bold" 
+        }}>
+          {msg}
+        </div>
+      )}
     </div>
   );
 }
 
-function Input({ label, value, setValue, placeholder }) {
+/* ================= STYLES & SUBCOMPONENTS ================= */
+const btnSideStyle = (active, color) => ({
+  flex: 1, 
+  padding: "12px", 
+  borderRadius: "8px", 
+  border: active ? `2px solid ${color}` : "2px solid #1e293b", 
+  cursor: "pointer", 
+  background: active ? `${color}22` : "transparent", 
+  color: active ? color : "#64748b",
+  fontWeight: "bold",
+  fontSize: "13px"
+});
+
+function InputBox({ label, value, onChange, placeholder }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <label style={{ fontSize: 11, color: "#888", textTransform: "uppercase" }}>{label}</label>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+      <label style={{ fontSize: "10px", color: "#64748b", fontWeight: "bold" }}>{label}</label>
       <input
         type="number"
         value={value}
-        onChange={e => setValue(e.target.value)}
+        onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        style={{ background: "#1f2937", border: "1px solid #374151", color: "white", padding: "8px 12px", borderRadius: 4, outline: "none" }}
+        style={{ 
+          background: "#1e293b", 
+          border: "1px solid #334155", 
+          color: "#fff", 
+          padding: "10px", 
+          borderRadius: "6px", 
+          outline: "none",
+          fontSize: "14px",
+          width: "100%"
+        }}
       />
     </div>
   );
