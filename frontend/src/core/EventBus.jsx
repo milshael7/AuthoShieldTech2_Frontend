@@ -1,53 +1,46 @@
-// frontend/src/core/EventBus.jsx
 // ======================================================
-// GLOBAL PLATFORM EVENT BUS — QUIET MODE v18 (SEALED)
-// DETERMINISTIC • BACKPRESSURE-AWARE • NO SELF-ECHO
-// THREAT-FIRST • ENTERPRISE-STABLE • FAIL-SILENT
-// SINGLE-SOURCE SIGNAL FLOW
+// 📡 GLOBAL PLATFORM EVENT BUS — v35.0 (HARDENED)
+// FILE: src/core/EventBus.jsx
+// DETERMINISTIC • BACKPRESSURE-AWARE • FAIL-SILENT
 // ======================================================
 
-import { createContext, useContext, useRef, useCallback } from "react";
+import React, { createContext, useContext, useRef, useCallback, useMemo } from "react";
 
 const EventBusContext = createContext(null);
 
 /* ================= CONFIG ================= */
-
-// absolute safety caps (hard guarantees)
 const MAX_LISTENERS_PER_EVENT = 20;
 const MAX_EMITS_PER_EVENT_PER_SEC = 10;
 
-// events explicitly allowed higher frequency
-// (connectivity / advisory only — no state meaning)
+// High-frequency advisory whitelist
 const HIGH_FREQ_EVENTS = new Set([
   "security_ws_connected",
   "security_ws_disconnected",
+  "market_tick",
 ]);
 
 /* ================= PROVIDER ================= */
-
 export function EventBusProvider({ children }) {
-  const listenersRef = useRef(Object.create(null));
-  const emitWindowRef = useRef(Object.create(null)); // event → { count, ts }
+  // Use a single master ref for listeners to avoid object overhead
+  const listenersRef = useRef({});
+  const emitWindowRef = useRef({}); // event → { count, ts }
 
   /* ================= EMIT GUARD ================= */
-
   const canEmit = useCallback((event) => {
     const now = Date.now();
     const win = emitWindowRef.current[event];
 
-    // initialize or reset window
+    // Reset window every second
     if (!win || now - win.ts >= 1000) {
       emitWindowRef.current[event] = { count: 1, ts: now };
       return true;
     }
 
-    // high-frequency whitelist (still counted, never blocked)
     if (HIGH_FREQ_EVENTS.has(event)) {
       win.count += 1;
       return true;
     }
 
-    // enforce per-second cap
     if (win.count >= MAX_EMITS_PER_EVENT_PER_SEC) {
       return false;
     }
@@ -56,76 +49,58 @@ export function EventBusProvider({ children }) {
     return true;
   }, []);
 
-  /* ================= EMIT ================= */
-
-  const emit = useCallback(
-    (event, payload) => {
-      const listeners = listenersRef.current[event];
-      if (!listeners || listeners.length === 0) return;
-      if (!canEmit(event)) return;
-
-      // snapshot prevents mutation / re-entrancy issues
-      const snapshot = listeners.slice();
-
-      for (const cb of snapshot) {
-        try {
-          cb(payload);
-        } catch {
-          // 🔇 FAIL-SILENT by design
-        }
-      }
-    },
-    [canEmit]
-  );
-
-  /* ================= ON ================= */
-
+  /* ================= CORE METHODS ================= */
   const on = useCallback((event, callback) => {
     if (!listenersRef.current[event]) {
       listenersRef.current[event] = [];
     }
 
     const list = listenersRef.current[event];
-
-    // hard cap listener growth (prevents leaks & storms)
-    if (list.length >= MAX_LISTENERS_PER_EVENT) {
-      return () => {};
-    }
+    if (list.length >= MAX_LISTENERS_PER_EVENT) return () => {};
 
     list.push(callback);
 
+    // Return cleanup function
     return () => {
-      const arr = listenersRef.current[event];
-      if (!arr) return;
-      listenersRef.current[event] = arr.filter(
-        (cb) => cb !== callback
-      );
+      const currentList = listenersRef.current[event];
+      if (currentList) {
+        listenersRef.current[event] = currentList.filter(cb => cb !== callback);
+      }
     };
   }, []);
 
-  /* ================= ONCE ================= */
+  const emit = useCallback((event, payload) => {
+    const listeners = listenersRef.current[event];
+    if (!listeners || listeners.length === 0 || !canEmit(event)) return;
 
-  const once = useCallback(
-    (event, callback) => {
-      const unsubscribe = on(event, (payload) => {
-        unsubscribe();
-        try {
-          callback(payload);
-        } catch {
-          // 🔇 silent
-        }
-      });
-    },
-    [on]
-  );
+    // Snapshot to prevent mutation during loop
+    const snapshot = [...listeners];
+    for (const cb of snapshot) {
+      try {
+        cb(payload);
+      } catch (err) {
+        // 🔇 Fail-silent: Internal bus errors must not crash the UI
+      }
+    }
+  }, [canEmit]);
 
-  /* ================= CONTEXT ================= */
+  const once = useCallback((event, callback) => {
+    const unsubscribe = on(event, (payload) => {
+      unsubscribe();
+      try {
+        callback(payload);
+      } catch (err) {
+        // 🔇 Silent
+      }
+    });
+  }, [on]);
 
-  const bus = {
+  /* ================= CONTEXT VALUE ================= */
+  const bus = useMemo(() => ({
     emit,
     on,
     once,
-  };
+  }), [emit, on, once]);
 
   return (
     <EventBusContext.Provider value={bus}>
@@ -135,13 +110,8 @@ export function EventBusProvider({ children }) {
 }
 
 /* ================= HOOK ================= */
-
 export function useEventBus() {
   const ctx = useContext(EventBusContext);
-  if (!ctx) {
-    throw new Error(
-      "useEventBus must be used inside EventBusProvider"
-    );
-  }
+  if (!ctx) throw new Error("useEventBus must be used inside EventBusProvider");
   return ctx;
 }
