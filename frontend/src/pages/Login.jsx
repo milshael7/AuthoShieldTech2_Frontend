@@ -1,10 +1,11 @@
 // ============================================================
-// 🔒 AUTOSHIELD LOGIN — v5.2 (PATH-FIXED & SYNCED)
+// 🔒 AUTOSHIELD LOGIN — v35.0 (PATH-FIXED & SYNCED)
 // FILE: Login.jsx - FINAL REPLACEMENT
 // ============================================================
 
 import React, { useState } from "react";
-import { api } from "../../lib/api.js"; // FIXED: Corrected path for nested folders
+// ✅ FIXED: Changed "../../" to "../" to correctly resolve src/lib/
+import { api } from "../lib/api.js"; 
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -14,44 +15,42 @@ export default function Login() {
 
   // 🛡️ ROLE-BASED ROUTING ENGINE
   const getDashboardPath = (user) => {
-    if (!user) return "/user";
+    if (!user) return "/";
     const role = String(user.role || "").toLowerCase();
     
     const routes = {
       admin: "/admin",
       manager: "/manager",
-      company: "/company",
-      small_company: "/small-company",
+      company: "/admin", // Mapping company role to admin layout if needed
+      small_company: "/manager",
       individual: "/user",
       user: "/user",
-      trader: "/user" 
+      trader: "/admin/trading" 
     };
     
-    // If the backend sends a specific dashboard preference, use it
-    return user.dashboardPath || routes[role] || "/user";
+    return user.dashboardPath || routes[role] || "/";
   };
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!email || !password) return setError("Please enter credentials");
+    if (!email || !password) return setError("IDENTITY & KEY REQUIRED");
     
     setLoading(true);
     setError("");
 
     try {
-      // 🚀 api.login handles the lowercase trim and storage internally
       const result = await api.login(email, password);
 
       if (result.ok) {
         const targetPath = getDashboardPath(result.user);
-        // replace() is better for mobile—it prevents the "Back" button loop
+        // replace() is critical for Render stability to prevent session loops
         window.location.replace(targetPath);
       } else {
-        // Show the specific error from Render (e.g., "Invalid Password")
-        setError(result.error || "Access Denied");
+        setError(result.error || "ACCESS DENIED: INVALID CREDENTIALS");
       }
     } catch (err) {
-      setError("Network Timeout: Check Server Status");
+      console.error("Login Error:", err);
+      setError("UPLINK TIMEOUT: ENGINE UNREACHABLE");
     } finally {
       setLoading(false);
     }
@@ -61,11 +60,11 @@ export default function Login() {
     <div style={styles.wrapper}>
       <div style={styles.card}>
         <div style={styles.header}>
-          <h2 style={{ margin: 0, color: "#3b82f6", letterSpacing: "2px" }}>
+          <h2 style={{ margin: 0, color: "#00ff88", letterSpacing: "2px" }}>
             NEURAL ACCESS
           </h2>
-          <p style={{ fontSize: "0.6rem", color: "#64748b", marginTop: 6, fontWeight: "bold" }}>
-            TERMINAL ENCRYPTED • v5.2
+          <p style={{ fontSize: "0.6rem", color: "#666", marginTop: 6, fontWeight: "bold" }}>
+            TERMINAL ENCRYPTED • v35.0
           </p>
         </div>
 
@@ -97,8 +96,8 @@ export default function Login() {
           </button>
 
           <div style={styles.footer}>
-            <span style={{ color: "#475569", fontSize: "0.65rem" }}>
-              FORGOT KEY? CONTACT SYSTEM ADMIN
+            <span style={{ color: "#444", fontSize: "0.65rem" }}>
+              UNAUTHORIZED ACCESS IS LOGGED
             </span>
           </div>
         </form>
@@ -107,58 +106,59 @@ export default function Login() {
   );
 }
 
-/* ================= STYLES (MOBILE OPTIMIZED) ================= */
+/* ================= STYLES (STEALTH THEME) ================= */
 const styles = {
   wrapper: {
     minHeight: "100vh",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "#020617",
+    background: "#0a0a0a",
     padding: "20px",
     fontFamily: "monospace"
   },
   card: {
     width: "100%",
     maxWidth: "360px",
-    background: "#0f172a",
+    background: "#111",
     padding: "25px",
-    borderRadius: "12px",
-    border: "1px solid #1e293b",
-    boxShadow: "0 20px 40px rgba(0,0,0,0.6)"
+    borderRadius: "4px",
+    border: "1px solid #222",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.5)"
   },
   header: { textAlign: "center", marginBottom: "25px" },
   form: { display: "flex", flexDirection: "column", gap: "12px" },
   input: {
-    background: "#1e293b",
-    border: "1px solid #334155",
-    color: "#fff",
+    background: "#000",
+    border: "1px solid #333",
+    color: "#00ff88",
     padding: "12px",
-    borderRadius: "6px",
+    borderRadius: "2px",
     fontSize: "0.85rem",
     outline: "none",
-    transition: "border-color 0.2s"
+    fontFamily: "monospace"
   },
   button: {
-    background: "#3b82f6",
-    color: "#fff",
+    background: "#00ff88",
+    color: "#000",
     padding: "14px",
-    borderRadius: "6px",
+    borderRadius: "2px",
     border: "none",
-    fontWeight: "900",
+    fontWeight: "bold",
     cursor: "pointer",
     marginTop: "8px",
-    fontSize: "0.9rem"
+    fontSize: "0.9rem",
+    textTransform: "uppercase"
   },
   errorBox: {
-    background: "rgba(239, 68, 68, 0.1)",
-    color: "#ef4444",
-    padding: "8px",
-    borderRadius: "4px",
+    background: "rgba(255, 0, 0, 0.1)",
+    color: "#ff4444",
+    padding: "10px",
+    borderRadius: "2px",
     fontSize: "0.75rem",
     textAlign: "center",
     marginBottom: "15px",
-    border: "1px solid rgba(239, 68, 68, 0.3)"
+    border: "1px solid #440000"
   },
   footer: { textAlign: "center", marginTop: "15px" }
 };
