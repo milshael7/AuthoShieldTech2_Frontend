@@ -1,10 +1,10 @@
 // ============================================================
-// 🔒 AUTOSHIELD CONTEXT — v5.1 (BUILD-FIXED & SYNCED)
+// 🔒 AUTOSHIELD CONTEXT — v5.2 (FINAL VERCEL SYNC)
 // MODULE: Trading Context (Realtime Data Layer)
 // ============================================================
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { getToken, getSavedUser, API_BASE } from "../lib/api.js"; // FIXED: Removed WS_URL
+import { getToken, getSavedUser, API_BASE } from "../lib/api.js"; 
 
 const TradingContext = createContext(null);
 
@@ -16,14 +16,14 @@ const safeNum = (v, fallback = 0) => {
 
 /**
  * 🛠️ DUAL-SYNC WS BUILDER
- * Manually constructs the WS URL from the API_BASE.
+ * Manually constructs the WS URL from the API_BASE to bypass import errors.
  */
 function buildWsUrl(channel) {
   const token = getToken();
   if (!token || !API_BASE) return null;
 
   try {
-    // Convert https://... to wss://... or http://... to ws://...
+    // Standardize URL to websocket protocol
     const wsBase = API_BASE.replace(/^http/, "ws");
     const url = new URL(`${wsBase}/ws`);
     
@@ -51,14 +51,15 @@ export function TradingProvider({ children }) {
   const marketWsRef = useRef(null);
   const paperWsRef = useRef(null);
 
-  /* ================= IMMUTABLE UPDATE HELPERS ================= */
+  /* ================= MEMORY-OPTIMIZED UPDATER ================= */
   const updateList = (prev, items, keyFn) => {
     const newItems = Array.isArray(items) ? items : [items];
     const next = [...prev];
     newItems.forEach(item => {
-      if (!next.some(x => keyFn(x) === keyFn(item))) next.push(item);
+      const key = keyFn(item);
+      if (!next.some(x => keyFn(x) === key)) next.push(item);
     });
-    return next.slice(-100); // Tighter limit for older phone RAM
+    return next.slice(-80); // Lowered to 80 for smoother mobile performance
   };
 
   /* ================= CONNECTION LOGIC ================= */
@@ -77,8 +78,8 @@ export function TradingProvider({ children }) {
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-          const btcPrice = safeNum(msg?.data?.BTCUSDT?.price || msg?.price);
-          if (btcPrice) setPrice(btcPrice);
+          const btcPrice = safeNum(msg?.data?.BTCUSDT?.price || msg?.price || msg?.data?.price);
+          if (btcPrice && active) setPrice(btcPrice);
         } catch {}
       };
 
@@ -86,7 +87,7 @@ export function TradingProvider({ children }) {
       ws.onclose = () => {
         if (!active) return;
         setMarketStatus("reconnecting");
-        marketRetry = setTimeout(connectMarket, 10000); // 10s wait for Render spin-up
+        marketRetry = setTimeout(connectMarket, 10000); 
       };
     }
 
@@ -99,13 +100,14 @@ export function TradingProvider({ children }) {
       setPaperStatus("connecting");
 
       ws.onmessage = (e) => {
+        if (!active) return;
         try {
           const msg = JSON.parse(e.data);
           const data = msg.snapshot || msg.data;
           if (data) {
             setSnapshot(data);
-            if (data.intelligence) setDecisions(p => updateList(p, data.intelligence, d => d.ts));
-            if (data.trades) setTrades(p => updateList(p, data.trades, t => t.ts));
+            if (data.intelligence) setDecisions(p => updateList(p, data.intelligence, d => d.ts || d.time));
+            if (data.trades) setTrades(p => updateList(p, data.trades, t => t.ts || t.time));
           }
         } catch {}
       };
