@@ -1,11 +1,10 @@
 // ============================================================
-// 🔒 PROTECTED STEALTH CONTEXT — v5.0 (FULL REPLACEMENT)
+// 🔒 AUTOSHIELD CONTEXT — v5.1 (BUILD-FIXED & SYNCED)
 // MODULE: Trading Context (Realtime Data Layer)
-// SYNCED WITH API v32.5 & BACKEND v32.5
 // ============================================================
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { getToken, getSavedUser, WS_URL } from "../lib/api.js";
+import { getToken, getSavedUser, API_BASE } from "../lib/api.js"; // FIXED: Removed WS_URL
 
 const TradingContext = createContext(null);
 
@@ -17,23 +16,26 @@ const safeNum = (v, fallback = 0) => {
 
 /**
  * 🛠️ DUAL-SYNC WS BUILDER
- * Uses the WS_URL from api.js to ensure we follow the active server.
+ * Manually constructs the WS URL from the API_BASE.
  */
 function buildWsUrl(channel) {
   const token = getToken();
-  if (!token || !WS_URL) return null;
+  if (!token || !API_BASE) return null;
 
   try {
-    const url = new URL(WS_URL);
-    const qs = new URLSearchParams({ channel, token });
+    // Convert https://... to wss://... or http://... to ws://...
+    const wsBase = API_BASE.replace(/^http/, "ws");
+    const url = new URL(`${wsBase}/ws`);
+    
+    url.searchParams.set("channel", channel);
+    url.searchParams.set("token", token);
     
     const user = getSavedUser();
-    if (user?.companyId) qs.set("companyId", String(user.companyId));
-    if (user?.id) qs.set("userId", String(user.id));
+    if (user?.companyId) url.searchParams.set("companyId", String(user.companyId));
+    if (user?.id) url.searchParams.set("userId", String(user.id));
 
-    return `${WS_URL}?${qs.toString()}`;
+    return url.toString();
   } catch (e) {
-    console.error("WS URL Build Error:", e.message);
     return null;
   }
 }
@@ -50,21 +52,13 @@ export function TradingProvider({ children }) {
   const paperWsRef = useRef(null);
 
   /* ================= IMMUTABLE UPDATE HELPERS ================= */
-  const tradeKey = (t) => `${t.time || t.ts}|${t.side}|${t.price}|${t.qty}`;
-  const decisionKey = (d) => `${d.time || d.ts}|${d.action || d.side}|${d.combinedScore || d.confidence}`;
-
   const updateList = (prev, items, keyFn) => {
     const newItems = Array.isArray(items) ? items : [items];
     const next = [...prev];
-    
     newItems.forEach(item => {
-      const key = keyFn(item);
-      if (!next.some(x => keyFn(x) === key)) {
-        next.push(item);
-      }
+      if (!next.some(x => keyFn(x) === keyFn(item))) next.push(item);
     });
-
-    return next.slice(-200); // Optimized for older phone memory
+    return next.slice(-100); // Tighter limit for older phone RAM
   };
 
   /* ================= CONNECTION LOGIC ================= */
@@ -80,27 +74,19 @@ export function TradingProvider({ children }) {
       marketWsRef.current = ws;
       setMarketStatus("connecting");
 
-      ws.onopen = () => {
-        if(active) {
-          setMarketStatus("connected");
-          console.log("🟢 Market Engine Linked");
-        }
-      };
-
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-          // Handle both v9.0 and v32.5 data formats
-          const btcData = msg?.data?.BTCUSDT || msg?.data || {};
-          const btcPrice = safeNum(btcData.price || btcData.close);
+          const btcPrice = safeNum(msg?.data?.BTCUSDT?.price || msg?.price);
           if (btcPrice) setPrice(btcPrice);
         } catch {}
       };
 
+      ws.onopen = () => active && setMarketStatus("connected");
       ws.onclose = () => {
         if (!active) return;
-        setMarketStatus("disconnected");
-        marketRetry = setTimeout(connectMarket, 5000); // Relaxed for Render stability
+        setMarketStatus("reconnecting");
+        marketRetry = setTimeout(connectMarket, 10000); // 10s wait for Render spin-up
       };
     }
 
@@ -112,43 +98,23 @@ export function TradingProvider({ children }) {
       paperWsRef.current = ws;
       setPaperStatus("connecting");
 
-      ws.onopen = () => {
-        if(active) {
-          setPaperStatus("connected");
-          console.log("🛡️ Paper/Stealth Engine Linked");
-        }
-      };
-
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-          
-          // SYNC: Handle Backend Snapshot
           const data = msg.snapshot || msg.data;
           if (data) {
             setSnapshot(data);
-            
-            // Map 'intelligence' or 'decisions'
-            const brainData = data.intelligence || data.decisions;
-            if (brainData) {
-              setDecisions(prev => updateList(prev, brainData, decisionKey));
-            }
-
-            // Map 'history' or 'trades'
-            const historyData = data.history || data.trades;
-            if (historyData) {
-              setTrades(prev => updateList(prev, historyData, tradeKey));
-            }
+            if (data.intelligence) setDecisions(p => updateList(p, data.intelligence, d => d.ts));
+            if (data.trades) setTrades(p => updateList(p, data.trades, t => t.ts));
           }
-        } catch (err) {
-          console.warn("Paper WS Parse Error", err);
-        }
+        } catch {}
       };
 
+      ws.onopen = () => active && setPaperStatus("connected");
       ws.onclose = () => {
         if (!active) return;
-        setPaperStatus("disconnected");
-        paperRetry = setTimeout(connectPaper, 5000);
+        setPaperStatus("reconnecting");
+        paperRetry = setTimeout(connectPaper, 10000);
       };
     }
 
