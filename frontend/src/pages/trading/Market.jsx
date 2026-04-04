@@ -1,304 +1,159 @@
 // ==========================================================
-// 🔒 CLEAN MARKET TERMINAL (ALIGNED SYSTEM)
-// FILE: frontend/src/pages/Market.jsx
-// VERSION: v2.0 (STABLE + REALTIME SAFE)
+// 🔒 AUTOSHIELD TERMINAL — v5.0 (CORE SYNCED)
+// FILE: Market.jsx - HIGH-PERFORMANCE RECONSTRUCTION
 // ==========================================================
 
-import React, { useEffect, useRef, useState } from "react";
-import TerminalChart from "../../components/TerminalChart";
-import { getToken } from "../../lib/api.js";
-import "../../styles/terminal.css";
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import TVChart from "../../components/TVChart"; // Pointing to our v5.0 Chart
+import OrderPanel from "../../components/OrderPanel"; // Pointing to our v5.0 Panel
+import { getToken, API_BASE } from "../../lib/api.js";
 
-/* ========================================================= */
-
-const SYMBOL_GROUPS = {
-  Crypto: ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
-  Forex: ["EURUSD", "GBPUSD"],
-  Indices: ["SPX", "NASDAQ"],
-  Commodities: ["GOLD"],
-};
-
-const ALL_SYMBOLS = Object.values(SYMBOL_GROUPS).flat();
-
-const CANDLE_SECONDS = 60;
-const MAX_CANDLES = 500;
-
-const API_BASE =
-  (import.meta.env.VITE_API_BASE || "").replace(/\/+$/, "");
-
-/* ========================================================= */
+const SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "EURUSD", "GBPUSD", "XAUUSD"];
+const TICK_BUFFER_MS = 250; // Throttle UI updates to 4fps for older phone CPUs
 
 export default function Market() {
-
-  const wsRef = useRef(null);
-  const reconnectRef = useRef(null);
-  const aliveRef = useRef(true);
-
-  const symbolRef = useRef(ALL_SYMBOLS[0]);
-  const lastCandleRef = useRef(null);
-
-  const [symbol, setSymbol] = useState(ALL_SYMBOLS[0]);
-  const [price, setPrice] = useState(null);
+  const [symbol, setSymbol] = useState(SYMBOLS[0]);
+  const [price, setPrice] = useState(0);
   const [candles, setCandles] = useState([]);
+  const [connection, setConnection] = useState("DISCONNECTED");
 
-  const [trades, setTrades] = useState([]);
-  const [position, setPosition] = useState(null);
+  // Refs for high-frequency data (prevents React render loops)
+  const lastPriceRef = useRef(0);
+  const candleRef = useRef([]);
+  const wsRef = useRef(null);
+  const throttleRef = useRef(null);
 
-  /* =========================================================
-  UTIL
-  ========================================================= */
-
-  function safeNum(v) {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  /* =========================================================
-  CANDLES
-  ========================================================= */
-
-  function updateCandles(priceNow) {
-
-    if (!Number.isFinite(priceNow)) return;
+  /* ================= 🕯️ CANDLE ENGINE (STEALTH) ================= */
+  const processTick = useCallback((newPrice) => {
+    if (!newPrice || newPrice === lastPriceRef.current) return;
+    lastPriceRef.current = newPrice;
 
     const now = Math.floor(Date.now() / 1000);
-    const candleTime =
-      Math.floor(now / CANDLE_SECONDS) * CANDLE_SECONDS;
+    const candleTime = Math.floor(now / 60) * 60; // 1m candles
 
-    setCandles(prev => {
+    let current = [...candleRef.current];
+    let last = current[current.length - 1];
 
-      const last = lastCandleRef.current;
+    if (!last || last.time !== candleTime) {
+      const next = { time: candleTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
+      current = [...current.slice(-199), next];
+    } else {
+      last.high = Math.max(last.high, newPrice);
+      last.low = Math.min(last.low, newPrice);
+      last.close = newPrice;
+      current[current.length - 1] = { ...last };
+    }
 
-      let next;
-      let nextLast;
+    candleRef.current = current;
 
-      if (!last || last.time !== candleTime) {
+    // THROTTLE: Only update state every 250ms to save battery/CPU
+    if (!throttleRef.current) {
+      throttleRef.current = setTimeout(() => {
+        setPrice(lastPriceRef.current);
+        setCandles([...candleRef.current]);
+        throttleRef.current = null;
+      }, TICK_BUFFER_MS);
+    }
+  }, []);
 
-        nextLast = {
-          time: candleTime,
-          open: priceNow,
-          high: priceNow,
-          low: priceNow,
-          close: priceNow
-        };
-
-        next = [...prev.slice(-MAX_CANDLES), nextLast];
-
-      } else {
-
-        nextLast = {
-          ...last,
-          high: Math.max(last.high, priceNow),
-          low: Math.min(last.low, priceNow),
-          close: priceNow
-        };
-
-        next = [...prev];
-        next[next.length - 1] = nextLast;
-      }
-
-      lastCandleRef.current = nextLast;
-      return next;
-    });
-  }
-
-  /* =========================================================
-  BACKEND FALLBACK (SAFE)
-  ========================================================= */
-
-  async function loadSnapshot(){
-
-    try{
-
-      const res = await fetch(
-        `${API_BASE}/api/paper/status`,
-        { headers: { Authorization: `Bearer ${getToken()}` } }
-      );
-
-      const data = await res.json();
-
-      const snap = data?.snapshot || {};
-
-      if (Array.isArray(snap?.trades)) {
-        setTrades(snap.trades.slice(-200));
-      }
-
-      setPosition(snap?.position || null);
-
-    }catch{}
-
-  }
-
-  /* =========================================================
-  WEBSOCKET
-  ========================================================= */
-
-  function connectWS(){
-
-    if (!API_BASE || !aliveRef.current) return;
-
+  /* ================= 📡 WEBSOCKET CORE ================= */
+  useEffect(() => {
     const token = getToken();
-    if (!token) return;
+    if (!token || !API_BASE) return;
 
-    try{
+    const wsUrl = API_BASE.replace("http", "ws") + `/ws?token=${token}`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
 
-      const url = new URL(API_BASE);
-      const protocol =
-        url.protocol === "https:" ? "wss:" : "ws:";
-
-      const ws = new WebSocket(
-        `${protocol}//${url.host}/ws?channel=paper&token=${encodeURIComponent(token)}`
-      );
-
-      wsRef.current = ws;
-
-      ws.onmessage = (msg)=>{
-
-        if (!aliveRef.current) return;
-
-        try{
-
-          const data = JSON.parse(msg.data);
-
-          /* ================= PRICE ================= */
-
-          if (data?.channel === "market") {
-
-            const market = data?.data?.[symbolRef.current];
-            const priceNow = safeNum(market?.price);
-
-            if (priceNow !== null) {
-              setPrice(priceNow);
-              updateCandles(priceNow);
-            }
-          }
-
-          /* ================= ENGINE ================= */
-
-          if (data?.channel === "paper") {
-
-            if (data?.snapshot) {
-
-              const snap = data.snapshot;
-
-              setPosition(snap?.position || null);
-
-              if (Array.isArray(snap?.trades)) {
-                setTrades(prev => mergeTrades(prev, snap.trades));
-              }
-            }
-
-            if (data?.trade) {
-              setTrades(prev => mergeTrades(prev, [data.trade]));
-            }
-          }
-
-        }catch{}
-
-      };
-
-      ws.onclose = () => {
-
-        if (!aliveRef.current) return;
-
-        reconnectRef.current = setTimeout(() => {
-          connectWS();
-        }, 3000);
-
-      };
-
-    }catch{}
-
-  }
-
-  /* =========================================================
-  MERGE (PREVENT DUPES)
-  ========================================================= */
-
-  function mergeTrades(prev, incoming){
-
-    const map = new Map();
-
-    prev.forEach(t => map.set(t.time + t.side, t));
-    incoming.forEach(t => map.set(t.time + t.side, t));
-
-    return Array.from(map.values()).slice(-200);
-  }
-
-  /* =========================================================
-  LIFECYCLE
-  ========================================================= */
-
-  useEffect(()=>{
-    symbolRef.current = symbol;
-  },[symbol]);
-
-  useEffect(()=>{
-
-    aliveRef.current = true;
-
-    connectWS();
-    loadSnapshot();
-
-    const fallback = setInterval(loadSnapshot,5000);
-
-    return ()=>{
-
-      aliveRef.current = false;
-
-      if (wsRef.current) wsRef.current.close();
-      if (reconnectRef.current) clearTimeout(reconnectRef.current);
-
-      clearInterval(fallback);
-
+    ws.onopen = () => setConnection("CONNECTED");
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        // Handle direct market data
+        if (msg.type === "TICK" && msg.symbol === symbol) {
+          processTick(msg.price);
+        }
+        // Handle generic backend updates
+        if (msg.channel === "market" && msg.data?.[symbol]) {
+          processTick(msg.data[symbol].price);
+        }
+      } catch (err) { /* Silent fail for corrupted ticks */ }
     };
 
-  },[]);
+    ws.onclose = () => {
+      setConnection("RECONNECTING...");
+      setTimeout(() => window.location.reload(), 5000); // Hard reset for stability
+    };
 
-  /* =========================================================
-  UI
-  ========================================================= */
+    return () => ws.close();
+  }, [symbol, processTick]);
 
+  /* ================= UI LAYOUT ================= */
   return (
-    <div className="terminalRoot">
-
-      <header className="tvTopBar">
-
-        <div className="tvTopLeft">
-          <select
-            className="tvSelect"
-            value={symbol}
-            onChange={(e)=>setSymbol(e.target.value)}
-          >
-            {Object.entries(SYMBOL_GROUPS).map(([group,list])=>(
-              <optgroup key={group} label={group}>
-                {list.map(s=>(
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-
-        <div className="tvTopRight">
-          <div style={{fontWeight:600}}>
-            {symbol} — {price ? price.toLocaleString() : "Loading"}
+    <div style={styles.container}>
+      {/* 1. TOP NAV / SYMBOL PICKER */}
+      <div style={styles.topBar}>
+        <select 
+          value={symbol} 
+          onChange={(e) => {
+            setSymbol(e.target.value);
+            candleRef.current = []; // Clear chart on switch
+          }}
+          style={styles.select}
+        >
+          {SYMBOLS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        
+        <div style={styles.priceDisplay}>
+          <div style={styles.priceValue}>${price.toLocaleString()}</div>
+          <div style={{ ...styles.status, color: connection === "CONNECTED" ? "#22c55e" : "#f59e0b" }}>
+            ● {connection}
           </div>
         </div>
+      </div>
 
-      </header>
+      {/* 2. CHART AREA */}
+      <div style={styles.chartWrap}>
+        <TVChart symbol={symbol} candles={candles} last={price} height={380} />
+      </div>
 
-      <main className="tvChartArea">
-
-        <TerminalChart
-          candles={candles}
-          trades={trades}
-          position={position}
-          height={520}
-        />
-
-      </main>
-
+      {/* 3. EXECUTION AREA */}
+      <div style={styles.orderWrap}>
+        <OrderPanel symbol={symbol} price={price} />
+      </div>
     </div>
   );
 }
+
+const styles = {
+  container: {
+    background: "#0a0e14",
+    minHeight: "100vh",
+    color: "#fff",
+    fontFamily: "monospace",
+    display: "flex",
+    flexDirection: "column",
+  },
+  topBar: {
+    padding: "15px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottom: "1px solid #1e293b",
+    background: "#0f172a"
+  },
+  select: {
+    background: "#1e293b",
+    color: "#3b82f6",
+    border: "1px solid #334155",
+    padding: "8px",
+    borderRadius: "6px",
+    fontWeight: "bold",
+    outline: "none"
+  },
+  priceDisplay: { textAlign: "right" },
+  priceValue: { fontSize: "1.2rem", fontWeight: "900", color: "#fff" },
+  status: { fontSize: "0.6rem", fontWeight: "bold", marginTop: "2px" },
+  chartWrap: { padding: "10px", flex: 1 },
+  orderWrap: { padding: "10px", borderTop: "1px solid #1e293b", background: "#0f172a" }
+};
