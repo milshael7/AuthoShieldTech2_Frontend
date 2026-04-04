@@ -1,162 +1,165 @@
+// ============================================================
+// 🔒 AUTOSHIELD LOGIN — v5.0 (SYNCED & HARDENED)
+// FILE: Login.jsx - FULL REPLACEMENT
+// ============================================================
+
 import React, { useState } from "react";
-import { api, setToken, saveUser } from "../lib/api.js";
+import { api } from "../lib/api.js";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState("login"); // login | reset
-  const [resetEmail, setResetEmail] = useState("");
-  const [resetPass, setResetPass] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  async function submit(e) {
+  // Helper for role-based routing
+  const getDashboardPath = (role) => {
+    const r = String(role || "").toLowerCase();
+    const routes = {
+      admin: "/admin",
+      manager: "/manager",
+      company: "/company",
+      small_company: "/small-company",
+      individual: "/user",
+      user: "/user", // Added standard fallback
+      trader: "/user" // Added trader fallback
+    };
+    return routes[r] || "/user"; // Default to /user instead of /
+  };
+
+  async function handleSubmit(e) {
     e.preventDefault();
+    if (!email || !password) return setError("Missing fields");
+    
     setLoading(true);
+    setError("");
 
     try {
+      // 🚀 The api.login handles setToken and saveUser internally now
       const result = await api.login(email, password);
 
-      const token = result?.token;
-      const user = result?.user;
-
-      if (!token || !user) {
-        throw new Error("Invalid login response from server");
+      if (result.ok) {
+        const targetPath = getDashboardPath(result.user?.role);
+        // Using replace prevents the user from "Backing" into the login screen
+        window.location.replace(targetPath);
+      } else {
+        setError(result.error || "Invalid Credentials");
       }
-
-      setToken(token);
-      saveUser(user);
-
-      // 🔥 Full platform rehydrate
-      window.location.replace(redirectByRole(user.role));
     } catch (err) {
-      alert(err?.message || "Login failed");
+      setError("Connection Timed Out");
     } finally {
       setLoading(false);
     }
   }
 
-  function redirectByRole(role) {
-    const r = String(role || "").toLowerCase();
-
-    if (r === "admin") return "/admin";
-    if (r === "manager") return "/manager";
-    if (r === "company") return "/company";
-    if (r === "small_company") return "/small-company";
-    if (r === "individual") return "/user";
-
-    return "/";
-  }
-
-  async function reset(e) {
-    e.preventDefault();
-
-    try {
-      await api.resetPassword(resetEmail, resetPass);
-      alert("Password updated. You can now sign in.");
-      setMode("login");
-    } catch (err) {
-      alert(err?.message || "Reset failed");
-    }
-  }
-
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#0a0f1c",
-        padding: 16,
-      }}
-    >
-      <div style={{ width: "100%", maxWidth: 420 }}>
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>
-            {mode === "login" ? "Sign in" : "Reset password"}
+    <div style={styles.wrapper}>
+      <div style={styles.card}>
+        <div style={styles.header}>
+          <h2 style={{ margin: 0, color: "#3b82f6" }}>
+            {mode === "login" ? "NEURAL ACCESS" : "RECOVERY MODE"}
           </h2>
-
-          {mode === "login" ? (
-            <form onSubmit={submit}>
-              <input
-                placeholder="Email"
-                value={email}
-                autoComplete="email"
-                onChange={(e) => setEmail(e.target.value)}
-              />
-
-              <div style={{ height: 12 }} />
-
-              <input
-                type="password"
-                placeholder="Password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-
-              <div style={{ height: 16 }} />
-
-              <button type="submit" disabled={loading} style={{ width: "100%" }}>
-                {loading ? "Signing in…" : "Sign in"}
-              </button>
-
-              <div style={{ height: 14 }} />
-
-              <small>
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setMode("reset");
-                  }}
-                >
-                  Reset password
-                </a>
-              </small>
-            </form>
-          ) : (
-            <form onSubmit={reset}>
-              <input
-                placeholder="Email"
-                value={resetEmail}
-                autoComplete="email"
-                onChange={(e) => setResetEmail(e.target.value)}
-              />
-
-              <div style={{ height: 12 }} />
-
-              <input
-                type="password"
-                placeholder="New password"
-                autoComplete="new-password"
-                value={resetPass}
-                onChange={(e) => setResetPass(e.target.value)}
-              />
-
-              <div style={{ height: 16 }} />
-
-              <button type="submit" style={{ width: "100%" }}>
-                Set new password
-              </button>
-
-              <div style={{ height: 14 }} />
-
-              <small>
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setMode("login");
-                  }}
-                >
-                  Back to sign in
-                </a>
-              </small>
-            </form>
-          )}
+          <p style={{ fontSize: "0.7rem", color: "#64748b", marginTop: 4 }}>
+            AUTOSHIELD TERMINAL v32.5
+          </p>
         </div>
+
+        {error && <div style={styles.errorBox}>{error}</div>}
+
+        <form onSubmit={handleSubmit} style={styles.form}>
+          <input
+            type="email"
+            placeholder="Identity (Email)"
+            value={email}
+            autoComplete="email"
+            required
+            onChange={(e) => setEmail(e.target.value)}
+            style={styles.input}
+          />
+
+          <input
+            type="password"
+            placeholder="Access Key (Password)"
+            value={password}
+            autoComplete="current-password"
+            required
+            onChange={(e) => setPassword(e.target.value)}
+            style={styles.input}
+          />
+
+          <button type="submit" disabled={loading} style={styles.button}>
+            {loading ? "ESTABLISHING UPLINK..." : "ENTER TERMINAL"}
+          </button>
+
+          <div style={styles.footer}>
+            <a 
+              href="#" 
+              onClick={(e) => { e.preventDefault(); alert("Contact Admin for manual reset."); }}
+              style={styles.link}
+            >
+              FORGOT ACCESS KEY?
+            </a>
+          </div>
+        </form>
       </div>
     </div>
   );
 }
+
+/* ================= STYLES ================= */
+const styles = {
+  wrapper: {
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "#020617", // Deeper black for high contrast
+    padding: "20px",
+    fontFamily: "monospace"
+  },
+  card: {
+    width: "100%",
+    maxWidth: "380px",
+    background: "#0f172a",
+    padding: "30px",
+    borderRadius: "16px",
+    border: "1px solid #1e293b",
+    boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)"
+  },
+  header: { textAlign: "center", marginBottom: "30px" },
+  form: { display: "flex", flexDirection: "column", gap: "15px" },
+  input: {
+    background: "#1e293b",
+    border: "1px solid #334155",
+    color: "#fff",
+    padding: "14px",
+    borderRadius: "8px",
+    fontSize: "0.9rem",
+    outline: "none"
+  },
+  button: {
+    background: "#3b82f6",
+    color: "#fff",
+    padding: "16px",
+    borderRadius: "8px",
+    border: "none",
+    fontWeight: "bold",
+    cursor: "pointer",
+    letterSpacing: "1px",
+    marginTop: "10px",
+    transition: "opacity 0.2s"
+  },
+  errorBox: {
+    background: "rgba(239, 68, 68, 0.1)",
+    color: "#ef4444",
+    padding: "10px",
+    borderRadius: "6px",
+    fontSize: "0.8rem",
+    textAlign: "center",
+    marginBottom: "20px",
+    border: "1px solid rgba(239, 68, 68, 0.2)"
+  },
+  footer: { textAlign: "center", marginTop: "20px" },
+  link: { color: "#64748b", fontSize: "0.7rem", textDecoration: "none" }
+};
