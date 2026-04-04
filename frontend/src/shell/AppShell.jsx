@@ -1,27 +1,16 @@
-/* =========================================================
-   AutoShield Tech — Application Shell
-   INSTITUTIONAL SCROLL ARCHITECTURE
-   Global Enforcement Layer Enabled
-   ========================================================= */
+// =========================================================
+// 🔒 AUTOSHIELD TECH — APPLICATION SHELL (v35.0 HARDENED)
+// FILE: src/shell/AppShell.jsx
+// =========================================================
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import BackgroundLayer from "../components/BackgroundLayer.jsx";
 import BrandMark from "../components/BrandMark.jsx";
 import TopHeader from "../components/TopHeader.jsx";
 import "../styles/background.css";
 
 /* =========================================================
-   GLOBAL ENFORCEMENT EVENT BUS
-   (Listens to api.js dispatches)
-========================================================= */
-
-function listenEnforcement(callback) {
-  window.addEventListener("as:enforcement", callback);
-  return () => window.removeEventListener("as:enforcement", callback);
-}
-
-/* =========================================================
-   SAFE WRAPPER
+   SAFE WRAPPER (PREVENTS UI FRAGMENTATION)
 ========================================================= */
 
 class SafeRender extends React.Component {
@@ -34,8 +23,11 @@ class SafeRender extends React.Component {
     return { failed: true };
   }
 
-  componentDidCatch(error) {
-    console.error("Shell Layer Crash:", error);
+  componentDidCatch(error, info) {
+    // Only log critical failures, ignore handled 401s
+    if (!error.message?.includes('401')) {
+       console.error("🛡️ Shell Layer Recovery:", error, info);
+    }
   }
 
   render() {
@@ -45,171 +37,97 @@ class SafeRender extends React.Component {
 }
 
 /* =========================================================
-   ENFORCEMENT OVERLAY
+   ENFORCEMENT OVERLAY (STEALTH UI)
 ========================================================= */
 
 function EnforcementOverlay({ state, onClose }) {
   if (!state) return null;
 
-  const messages = {
-    SESSION_EXPIRED: {
-      title: "Session Expired",
-      message: "Your session has expired. Please log in again.",
-    },
-    FORBIDDEN: {
-      title: "Access Restricted",
-      message: "You do not have permission to perform this action.",
-    },
-    RATE_LIMITED: {
-      title: "Rate Limit Triggered",
-      message: "Too many requests. Please wait and try again.",
-    },
-  };
-
-  const content = messages[state] || {
-    title: "Security Enforcement",
-    message: "Action blocked by platform security policy.",
-  };
+  const content = useMemo(() => {
+    const messages = {
+      SESSION_EXPIRED: {
+        title: "SESSION EXPIRED",
+        message: "Identity verification required. Re-authenticating...",
+        color: "#ff4444"
+      },
+      FORBIDDEN: {
+        title: "ACCESS RESTRICTED",
+        message: "Security clearance insufficient for this sector.",
+        color: "#fbbf24"
+      },
+      RATE_LIMITED: {
+        title: "THROTTLE ACTIVE",
+        message: "High-frequency request detected. Standing by.",
+        color: "#3b82f6"
+      },
+    };
+    return messages[state] || { title: "SECURITY ALERT", message: "Policy enforcement triggered.", color: "#00ff88" };
+  }, [state]);
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        background: "rgba(0,0,0,0.85)",
-        backdropFilter: "blur(6px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 40,
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 520,
-          width: "100%",
-          background: "#111827",
-          borderRadius: 12,
-          padding: 32,
-          color: "#ffffff",
-          textAlign: "center",
-        }}
-      >
-        <h2 style={{ marginBottom: 14 }}>{content.title}</h2>
-        <p style={{ opacity: 0.8 }}>{content.message}</p>
-
-        <button
-          style={{
-            marginTop: 24,
-            padding: "8px 18px",
-            borderRadius: 6,
-            background: "#2563eb",
-            color: "white",
-            border: "none",
-            cursor: "pointer",
-          }}
-          onClick={onClose}
-        >
-          Acknowledge
-        </button>
+    <div style={styles.overlay}>
+      <div style={styles.modal}>
+        <h2 style={{ color: content.color, margin: "0 0 10px 0", fontSize: "1.2rem" }}>{content.title}</h2>
+        <p style={{ opacity: 0.7, fontSize: "0.9rem" }}>{content.message}</p>
+        <button style={styles.button} onClick={onClose}>ACKNOWLEDGE</button>
       </div>
     </div>
   );
 }
 
 /* =========================================================
-   APP SHELL
+   MAIN APP SHELL
 ========================================================= */
 
 export default function AppShell({ children }) {
   const [enforcementState, setEnforcementState] = useState(null);
 
   useEffect(() => {
-    return listenEnforcement((e) => {
+    // Listen for dispatches from the hardened api.js
+    const handleEnforcement = (e) => {
       const type = e.detail;
       setEnforcementState(type);
 
       if (type === "SESSION_EXPIRED") {
         setTimeout(() => {
           window.location.replace("/login");
-        }, 1500);
+        }, 2000);
       }
-    });
+    };
+
+    window.addEventListener("as:enforcement", handleEnforcement);
+    return () => window.removeEventListener("as:enforcement", handleEnforcement);
   }, []);
 
   return (
-    <div
-      className="app-shell"
-      style={{
-        minHeight: "100vh",
-        width: "100%",
-        backgroundColor: "#0B0E14",
-        position: "relative",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      {/* ================= BACKGROUND ================= */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 0,
-          pointerEvents: "none",
-        }}
-      >
+    <div className="app-shell" style={styles.shellContainer}>
+      
+      {/* 🌌 BACKGROUND & BRANDING LAYERS */}
+      <div aria-hidden="true" style={styles.fixedLayer}>
         <SafeRender>
           <BackgroundLayer />
         </SafeRender>
       </div>
 
-      {/* ================= BRAND WATERMARK ================= */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 1,
-          pointerEvents: "none",
-        }}
-      >
+      <div aria-hidden="true" style={styles.fixedLayer}>
         <SafeRender>
           <BrandMark />
         </SafeRender>
       </div>
 
-      {/* ================= GLOBAL HEADER ================= */}
-      <div
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-          width: "100%",
-          background: "rgba(11,14,20,0.85)",
-          backdropFilter: "blur(10px)",
-        }}
-      >
+      {/* 📡 GLOBAL HEADER */}
+      <header style={styles.stickyHeader}>
         <SafeRender>
           <TopHeader />
         </SafeRender>
-      </div>
+      </header>
 
-      {/* ================= APPLICATION CONTENT ================= */}
-      <div
-        className="app-shell-content"
-        style={{
-          position: "relative",
-          zIndex: 10,
-          width: "100%",
-          flex: 1,
-        }}
-      >
+      {/* 🏗️ MAIN CONTENT AREA */}
+      <main className="app-shell-content" style={styles.mainContent}>
         {children}
-      </div>
+      </main>
 
-      {/* ================= GLOBAL ENFORCEMENT ================= */}
+      {/* 🛡️ SECURITY OVERLAY */}
       <EnforcementOverlay
         state={enforcementState}
         onClose={() => setEnforcementState(null)}
@@ -217,3 +135,68 @@ export default function AppShell({ children }) {
     </div>
   );
 }
+
+/* ================= STYLES ================= */
+const styles = {
+  shellContainer: {
+    minHeight: "100vh",
+    width: "100%",
+    backgroundColor: "#0B0E14",
+    display: "flex",
+    flexDirection: "column",
+    fontFamily: "monospace"
+  },
+  fixedLayer: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 0,
+    pointerEvents: "none"
+  },
+  stickyHeader: {
+    position: "sticky",
+    top: 0,
+    zIndex: 50,
+    width: "100%",
+    background: "rgba(11,14,20,0.9)",
+    backdropFilter: "blur(12px)",
+    borderBottom: "1px solid #1f2937"
+  },
+  mainContent: {
+    position: "relative",
+    zIndex: 10,
+    width: "100%",
+    flex: 1
+  },
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 9999,
+    background: "rgba(0,0,0,0.9)",
+    backdropFilter: "blur(8px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20
+  },
+  modal: {
+    maxWidth: 400,
+    width: "100%",
+    background: "#0f172a",
+    borderRadius: 4,
+    padding: 30,
+    color: "#ffffff",
+    textAlign: "center",
+    border: "1px solid #1e293b"
+  },
+  button: {
+    marginTop: 25,
+    padding: "10px 20px",
+    borderRadius: 2,
+    background: "transparent",
+    color: "#fff",
+    border: "1px solid #334155",
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: "0.8rem"
+  }
+};
