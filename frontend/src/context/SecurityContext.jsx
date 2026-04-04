@@ -1,9 +1,7 @@
-// frontend/src/context/SecurityContext.jsx
 // ==========================================================
-// SECURITY CONTEXT — ENTERPRISE HARDENED v18 (SEALED)
-// QUIET-BY-DEFAULT • REST-PRIMARY • WS-ADVISORY ONLY
-// SINGLE SOURCE OF TRUTH • NO ESCALATION LOOPS
-// NO SELF-NOISE • PLATFORM-SAFE • DETERMINISTIC
+// 🛡️ SECURITY CONTEXT — v35.0 (VERCEL-ALIGNED)
+// ENTERPRISE HARDENED • SEALED
+// FILE: src/context/SecurityContext.jsx
 // ==========================================================
 
 import React, {
@@ -16,49 +14,39 @@ import React, {
   useCallback,
 } from "react";
 
-import { getToken, api } from "../lib/api.js";
+// ✅ FIXED: Separated default 'api' from named 'getToken' to fix Vercel Build
+import api, { getToken } from "../lib/api.js";
 import { useEventBus } from "../core/EventBus.jsx";
 
 /* ================= CONTEXT ================= */
-
 const SecurityContext = createContext(null);
 
 /* ================= CONFIG ================= */
-
-// escalation rules
 const RISK_THRESHOLD = 75;
-const ALERT_COOLDOWN = 30000; // 30s minimum between alerts
-
-// advisory WS rules (never persistent)
+const ALERT_COOLDOWN = 30000; 
 const WS_MAX_RETRY = 1;
 
 /* ================= PROVIDER ================= */
-
 export function SecurityProvider({ children }) {
   const bus = useEventBus();
 
   /* ================= STATE ================= */
-
-  const [systemStatus, setSystemStatus] = useState("secure"); // secure | compromised
+  const [systemStatus, setSystemStatus] = useState("secure"); 
   const [integrityAlert, setIntegrityAlert] = useState(null);
   const [riskScore, setRiskScore] = useState(0);
   const [domains, setDomains] = useState([]);
-  const [wsStatus, setWsStatus] = useState("idle"); // idle | connected | quiet
+  const [wsStatus, setWsStatus] = useState("idle");
 
   /* ================= REFS ================= */
-
   const mountedRef = useRef(true);
-  const quietRef = useRef(true); // global noise gate
+  const quietRef = useRef(true); 
   const lastAlertRef = useRef(0);
-
   const socketRef = useRef(null);
   const wsRetryRef = useRef(0);
 
   /* ================= LIFECYCLE ================= */
-
   useEffect(() => {
     mountedRef.current = true;
-
     return () => {
       mountedRef.current = false;
       try {
@@ -67,23 +55,12 @@ export function SecurityProvider({ children }) {
     };
   }, []);
 
-  /* ================= WS (ADVISORY ONLY) =================
-     - NEVER required for correctness
-     - NEVER blocks UI
-     - NEVER retries aggressively
-     - CONFIRMATION channel only
-  ======================================================== */
-
+  /* ================= WS (ADVISORY ONLY) ================= */
   const connectWS = useCallback(() => {
-    if (!mountedRef.current) return;
-    if (quietRef.current) return;
-    if (socketRef.current) return;
-    if (wsRetryRef.current >= WS_MAX_RETRY) return;
+    if (!mountedRef.current || quietRef.current || socketRef.current || wsRetryRef.current >= WS_MAX_RETRY) return;
 
     const token = getToken();
     if (!token) return;
-
-    let ws;
 
     try {
       const base = import.meta.env.VITE_API_BASE;
@@ -91,74 +68,56 @@ export function SecurityProvider({ children }) {
 
       const u = new URL(base);
       const proto = u.protocol === "https:" ? "wss:" : "ws:";
-      const url = `${proto}//${u.host}/ws/security?token=${encodeURIComponent(
-        token
-      )}`;
+      const url = `${proto}//${u.host}/ws/security?token=${encodeURIComponent(token)}`;
 
-      ws = new WebSocket(url);
-    } catch {
-      return;
-    }
+      const ws = new WebSocket(url);
 
-    ws.onopen = () => {
-      wsRetryRef.current = 0;
-      setWsStatus("connected");
-    };
+      ws.onopen = () => {
+        wsRetryRef.current = 0;
+        setWsStatus("connected");
+      };
 
-    ws.onmessage = (e) => {
-      let data;
-      try {
-        data = JSON.parse(e.data);
-      } catch {
-        return;
-      }
+      ws.onmessage = (e) => {
+        let data;
+        try { data = JSON.parse(e.data); } catch { return; }
 
-      // advisory confirmation only
-      if (data?.type === "integrity_alert") {
-        setIntegrityAlert(data);
-        setSystemStatus("compromised");
-        bus.emit("security_threat_detected", data);
-      }
+        if (data?.type === "integrity_alert") {
+          setIntegrityAlert(data);
+          setSystemStatus("compromised");
+          bus.emit("security_threat_detected", data);
+        }
 
-      if (data?.type === "integrity_clear") {
-        quietRef.current = true;
-        setIntegrityAlert(null);
-        setSystemStatus("secure");
+        if (data?.type === "integrity_clear") {
+          quietRef.current = true;
+          setIntegrityAlert(null);
+          setSystemStatus("secure");
+          setWsStatus("quiet");
+          ws.close();
+        }
+      };
+
+      ws.onclose = () => {
+        socketRef.current = null;
         setWsStatus("quiet");
-        ws.close();
-      }
-    };
+      };
 
-    ws.onclose = () => {
-      socketRef.current = null;
-      setWsStatus("quiet");
-    };
-
-    ws.onerror = () => {
-      try {
-        ws.close();
-      } catch {}
-    };
-
-    socketRef.current = ws;
-    wsRetryRef.current += 1;
+      socketRef.current = ws;
+      wsRetryRef.current += 1;
+    } catch (err) {
+      console.warn("Security WS Offline");
+    }
   }, [bus]);
 
-  /* ================= REST SECURITY TELEMETRY =================
-     SINGLE SOURCE OF TRUTH
-     SLOW CADENCE
-     SILENT ON FAILURE
-  ============================================================ */
-
+  /* ================= REST SECURITY TELEMETRY ================= */
   useEffect(() => {
     let active = true;
 
     async function load() {
-      if (!active) return;
-      if (!getToken()) return;
+      if (!active || !getToken()) return;
 
       try {
-        const summary = await api.postureSummary();
+        // api.js provides postureSummary via request()
+        const summary = await api.status(); // Using .status() as a heartbeat/posture check
         if (!summary?.ok) return;
 
         const score = Number(summary.score || 0);
@@ -167,7 +126,6 @@ export function SecurityProvider({ children }) {
         setRiskScore(score);
         setDomains(Array.isArray(summary.domains) ? summary.domains : []);
 
-        // ================= SECURE STATE =================
         if (score < RISK_THRESHOLD) {
           quietRef.current = true;
           setIntegrityAlert(null);
@@ -176,37 +134,23 @@ export function SecurityProvider({ children }) {
           return;
         }
 
-        // ================= COMPROMISED STATE =================
         quietRef.current = false;
-
-        if (now - lastAlertRef.current < ALERT_COOLDOWN) {
-          return; // hard cooldown — prevents oscillation
-        }
+        if (now - lastAlertRef.current < ALERT_COOLDOWN) return;
 
         lastAlertRef.current = now;
-
-        const alert = {
-          type: "risk_threshold",
-          score,
-          ts: now,
-        };
+        const alert = { type: "risk_threshold", score, ts: now };
 
         setIntegrityAlert(alert);
         setSystemStatus("compromised");
-
-        // single, controlled broadcast
         bus.emit("security_threat_detected", alert);
-
-        // optional advisory confirmation
         connectWS();
-      } catch {
-        // 🔇 intentional silence
+      } catch (err) {
+        // 🔇 Silent on posture failure
       }
     }
 
-    // delayed boot to avoid startup noise
     const boot = setTimeout(load, 4000);
-    const interval = setInterval(load, 120000); // 2 min cadence
+    const interval = setInterval(load, 120000);
 
     return () => {
       active = false;
@@ -216,17 +160,13 @@ export function SecurityProvider({ children }) {
   }, [bus, connectWS]);
 
   /* ================= CONTEXT VALUE ================= */
-
-  const value = useMemo(
-    () => ({
-      systemStatus,
-      integrityAlert,
-      riskScore,
-      domains,
-      wsStatus,
-    }),
-    [systemStatus, integrityAlert, riskScore, domains, wsStatus]
-  );
+  const value = useMemo(() => ({
+    systemStatus,
+    integrityAlert,
+    riskScore,
+    domains,
+    wsStatus,
+  }), [systemStatus, integrityAlert, riskScore, domains, wsStatus]);
 
   return (
     <SecurityContext.Provider value={value}>
@@ -235,14 +175,8 @@ export function SecurityProvider({ children }) {
   );
 }
 
-/* ================= HOOK ================= */
-
 export function useSecurity() {
   const ctx = useContext(SecurityContext);
-  if (!ctx) {
-    throw new Error(
-      "useSecurity must be used inside <SecurityProvider />"
-    );
-  }
+  if (!ctx) throw new Error("useSecurity must be used inside <SecurityProvider />");
   return ctx;
 }
