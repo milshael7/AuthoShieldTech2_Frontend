@@ -1,6 +1,6 @@
 // ============================================================
-// FILE: frontend/src/components/AIBehaviorPanel.jsx
-// VERSION: v3.1 (PRODUCTION SAFE + HARDENED)
+// 🔒 PROTECTED CORE FILE — v4.0 (INTELLIGENCE HARDENED)
+// FILE: AIBehaviorPanel.jsx
 // ============================================================
 
 import React, { useMemo, useEffect, useState } from "react";
@@ -8,332 +8,135 @@ import React, { useMemo, useEffect, useState } from "react";
 export default function AIBehaviorPanel({
   trades = [],
   decisions = [],
-  memory = null,
   position = null
 }) {
 
-/* =========================================================
-UTIL
-========================================================= */
-
-function safeNum(v, fallback = 0){
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function hasValidPnl(t){
-  return t && Number.isFinite(Number(t?.pnl));
-}
-
-function safeFixed(v){
-  const n = Number(v);
-  return Number.isFinite(n) ? n.toFixed(2) : "0.00";
-}
-
-/* =========================================================
-ACTIVE TRADE TIMER (FIXED DRIFT)
-========================================================= */
-
-const [remaining,setRemaining] = useState(0);
-
-useEffect(()=>{
-
-  if(!position?.time) return;
-
-  let mounted = true;
-
-  const duration =
-    position.maxDuration ||
-    position.expectedDuration ||
-    0;
-
-  if(!duration) return;
-
-  const update = () => {
-
-    if(!mounted) return;
-
-    const elapsed = Date.now() - position.time;
-    const left = Math.max(duration - elapsed,0);
-
-    setRemaining(left);
+  /* ================= HELPERS ================= */
+  const safeNum = (v, fallback = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
   };
 
-  update();
+  const safeFixed = (v) => safeNum(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const timer = setInterval(update,1000);
+  /* ================= ⏲️ ACTIVE TRADE TIMER ================= */
+  const [remaining, setRemaining] = useState(0);
 
-  return ()=>{
-    mounted = false;
-    clearInterval(timer);
+  useEffect(() => {
+    if (!position?.time) return;
+    
+    const duration = safeNum(position.maxDuration || position.expectedDuration);
+    if (!duration) return;
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - position.time;
+      setRemaining(Math.max(duration - elapsed, 0));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [position?.time, position?.maxDuration]);
+
+  const formatDuration = (ms) => {
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s / 60)}m ${s % 60}s`;
   };
 
-},[position?.time, position?.maxDuration, position?.expectedDuration]);
+  /* ================= 📊 SMART STATS ================= */
+  const stats = useMemo(() => {
+    // Filter for trades that actually have a result (PnL)
+    const closed = trades.filter(t => t.pnl !== undefined && t.pnl !== null);
+    
+    let totalPnl = 0;
+    let wins = 0;
+    
+    closed.forEach(t => {
+      const p = safeNum(t.pnl);
+      totalPnl += p;
+      if (p > 0) wins++;
+    });
 
-function formatDuration(ms){
-  const s = Math.floor(ms/1000);
-  const m = Math.floor(s/60);
-  const sec = s%60;
-  return `${m}m ${sec}s`;
+    const winRate = closed.length > 0 ? (wins / closed.length) * 100 : 0;
+
+    // Recent Confidence (Last 10 decisions for "Live" feel)
+    const recentDecisions = decisions.slice(-10);
+    const avgConf = recentDecisions.length > 0 
+      ? (recentDecisions.reduce((acc, d) => acc + safeNum(d.confidence || d.score), 0) / recentDecisions.length) * 100
+      : 0;
+
+    return {
+      totalTrades: closed.length,
+      wins,
+      losses: closed.length - wins,
+      totalPnl,
+      winRate,
+      avgConf
+    };
+  }, [trades, decisions]);
+
+  /* ================= UI ================= */
+  return (
+    <div style={{
+      background: "#111827",
+      padding: 20,
+      borderRadius: 12,
+      border: "1px solid rgba(255,255,255,.1)",
+      color: "white",
+      marginTop: 16
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h3 style={{ margin: 0, fontSize: "1.1rem" }}>AI Behavior Intelligence</h3>
+        <div style={{ 
+          padding: "4px 8px", 
+          borderRadius: 4, 
+          background: stats.avgConf > 70 ? "#065f46" : "#374151",
+          fontSize: "0.8rem" 
+        }}>
+          Confidence: {stats.avgConf.toFixed(0)}%
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <StatBox label="Win Rate" value={`${stats.winRate.toFixed(1)}%`} color="#3b82f6" />
+        <StatBox label="Total PnL" value={`$${safeFixed(stats.totalPnl)}`} color={stats.totalPnl >= 0 ? "#22c55e" : "#ef4444"} />
+      </div>
+
+      <div style={{ marginTop: 20, display: "flex", justifyContent: "space-between", fontSize: "0.9rem", color: "#9ca3af" }}>
+        <span>Trades: {stats.totalTrades}</span>
+        <span>Wins: <span style={{ color: "#22c55e" }}>{stats.wins}</span></span>
+        <span>Losses: <span style={{ color: "#ef4444" }}>{stats.losses}</span></span>
+      </div>
+
+      {/* ACTIVE TRADE MONITOR */}
+      {position && (
+        <div style={{
+          marginTop: 20,
+          padding: 16,
+          background: "rgba(59, 130, 246, 0.1)",
+          borderRadius: 8,
+          border: "1px solid rgba(59, 130, 246, 0.2)"
+        }}>
+          <div style={{ fontSize: "0.75rem", color: "#60a5fa", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
+            Live Engine Monitor
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+            <span>Time Remaining:</span>
+            <span style={{ color: "#fbbf24", fontFamily: "monospace" }}>{formatDuration(remaining)}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+            <span>Entry: ${safeNum(position.entry).toLocaleString()}</span>
+            <span>Size: {safeNum(position.qty)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
-/* =========================================================
-CLOSED TRADES
-========================================================= */
-
-const closedTrades = useMemo(()=>{
-
-  return trades
-    .filter(t => {
-
-      if (hasValidPnl(t)) return true;
-
-      const side = String(t?.side || "").toUpperCase();
-
-      return [
-        "CLOSE",
-        "STOP_LOSS",
-        "TAKE_PROFIT",
-        "TIME_EXIT",
-        "WARNING_EXIT",
-        "LOCKED_FLOOR",
-        "RUNNER_GIVEBACK",
-        "MOMENTUM_WEAKENING",
-        "MANUAL_CLOSE_NOW"
-      ].includes(side);
-
-    })
-    .sort((a,b)=>(safeNum(b.time)-safeNum(a.time)));
-
-},[trades]);
-
-/* =========================================================
-TRADE STATS
-========================================================= */
-
-const tradeStats = useMemo(()=>{
-
-  let wins=0;
-  let losses=0;
-  let pnl=0;
-
-  closedTrades.forEach(t=>{
-
-    const p = safeNum(t?.pnl);
-
-    pnl += p;
-
-    if(p > 0) wins++;
-    else losses++;
-
-  });
-
-  return{
-    wins,
-    losses,
-    pnl,
-    total:closedTrades.length
-  };
-
-},[closedTrades]);
-
-/* =========================================================
-DAILY STATS (TIME SAFE)
-========================================================= */
-
-const dailyStats = useMemo(()=>{
-
-  const now = Date.now();
-  const startOfDay = new Date().setHours(0,0,0,0);
-
-  const todayTrades = closedTrades.filter(t=>{
-    const time = safeNum(t?.time);
-    return time >= startOfDay && time <= now;
-  });
-
-  let wins=0;
-  let losses=0;
-  let pnl=0;
-
-  todayTrades.forEach(t=>{
-    const p = safeNum(t?.pnl);
-    pnl += p;
-    if(p > 0) wins++;
-    else losses++;
-  });
-
-  return{
-    trades:todayTrades.length,
-    wins,
-    losses,
-    pnl
-  };
-
-},[closedTrades]);
-
-/* =========================================================
-AI CONFIDENCE (SAFE)
-========================================================= */
-
-const avgConfidence = useMemo(()=>{
-
-  if(!decisions?.length) return 0;
-
-  let count = 0;
-  let total = 0;
-
-  decisions.forEach(d=>{
-    const c = safeNum(d?.confidence, null);
-    if(c !== null){
-      total += c;
-      count++;
-    }
-  });
-
-  return count ? (total / count) * 100 : 0;
-
-},[decisions]);
-
-/* =========================================================
-ACCURACY
-========================================================= */
-
-const accuracy = useMemo(()=>{
-  return tradeStats.total
-    ? (tradeStats.wins / tradeStats.total) * 100
-    : 0;
-},[tradeStats]);
-
-/* =========================================================
-VALID POSITION CHECK
-========================================================= */
-
-const hasPosition =
-  position &&
-  Number.isFinite(Number(position?.entry)) &&
-  Number.isFinite(Number(position?.qty));
-
-/* =========================================================
-UI
-========================================================= */
-
-return(
-
-<div style={{
-  background:"#111827",
-  padding:20,
-  borderRadius:12,
-  border:"1px solid rgba(255,255,255,.08)"
-}}>
-
-<h3>AI Behavior Intelligence</h3>
-
-<div style={{marginTop:10}}>
-<strong>Average AI Confidence:</strong> {avgConfidence.toFixed(1)}%
-</div>
-
-<div>
-<strong>AI Accuracy:</strong> {accuracy.toFixed(1)}%
-</div>
-
-{/* ================= TRADE PERFORMANCE ================= */}
-
-<div style={{marginTop:12}}>
-
-<strong>Trade Performance</strong>
-
-<div>Trades Closed: {tradeStats.total}</div>
-
-<div style={{color:"#22c55e"}}>
-Wins: {tradeStats.wins}
-</div>
-
-<div style={{color:"#ef4444"}}>
-Losses: {tradeStats.losses}
-</div>
-
-<div>
-Total PnL:
-<span style={{
-color:tradeStats.pnl>=0 ? "#22c55e" : "#ef4444"
-}}>
- {" "} ${safeFixed(tradeStats.pnl)}
-</span>
-</div>
-
-</div>
-
-{/* ================= DAILY PERFORMANCE ================= */}
-
-<div style={{marginTop:14}}>
-
-<strong>Daily Performance</strong>
-
-<div>Trades Today: {dailyStats.trades}</div>
-
-<div style={{color:"#22c55e"}}>
-Wins Today: {dailyStats.wins}
-</div>
-
-<div style={{color:"#ef4444"}}>
-Losses Today: {dailyStats.losses}
-</div>
-
-<div>
-Daily PnL:
-<span style={{
-color:dailyStats.pnl>=0 ? "#22c55e" : "#ef4444"
-}}>
- {" "} ${safeFixed(dailyStats.pnl)}
-</span>
-</div>
-
-</div>
-
-{/* ================= ACTIVE TRADE ================= */}
-
-{hasPosition && (
-
-<div style={{
-marginTop:20,
-padding:12,
-background:"#1f2937",
-borderRadius:8,
-border:"1px solid rgba(255,255,255,.05)"
-}}>
-
-<strong>Active Trade Monitor</strong>
-
-<div>Status: <span style={{color:"#22c55e"}}>LIVE</span></div>
-
-<div>Market: {position.symbol || "UNKNOWN"}</div>
-
-<div>Entry Price:
- {safeNum(position.entry).toLocaleString()}
-</div>
-
-<div>Position Size: {safeNum(position.qty)}</div>
-
-<div>Capital Used: $
-{safeFixed(
-  position.capitalUsed ||
-  (safeNum(position.entry) * safeNum(position.qty))
-)}
-</div>
-
-<div>
-Time Remaining:
-<span style={{marginLeft:6,color:"#38bdf8"}}>
-{formatDuration(remaining)}
-</span>
-</div>
-
-</div>
-
-)}
-
-</div>
-
-);
-
+function StatBox({ label, value, color }) {
+  return (
+    <div style={{ background: "#1f2937", padding: 12, borderRadius: 8, border: "1px solid #374151" }}>
+      <div style={{ fontSize: "0.75rem", color: "#9ca3af", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: "1.25rem", fontWeight: 700, color }}>{value}</div>
+    </div>
+  );
 }
