@@ -1,10 +1,12 @@
 // ============================================================
-// 🔒 AUTOSHIELD CONTEXT — v5.2 (FINAL VERCEL SYNC)
-// MODULE: Trading Context (Realtime Data Layer)
+// 🔒 AUTOSHIELD CONTEXT — v35.0 (VERCEL-SYNCED)
+// MODULE: Trading Context (Real-time Data Layer)
+// FILE: src/context/TradingContext.jsx
 // ============================================================
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { getToken, getSavedUser, API_BASE } from "../lib/api.js"; 
+// ✅ FIXED: api is default, named helpers stay in braces
+import api, { getToken, getSavedUser, WS_URL } from "../lib/api.js"; 
 
 const TradingContext = createContext(null);
 
@@ -15,17 +17,15 @@ const safeNum = (v, fallback = 0) => {
 };
 
 /**
- * 🛠️ DUAL-SYNC WS BUILDER
- * Manually constructs the WS URL from the API_BASE to bypass import errors.
+ * 🛠️ DUAL-SYNC WS BUILDER (v35.0 Optimized)
+ * Uses the pre-calculated WS_URL from api.js for consistency.
  */
 function buildWsUrl(channel) {
   const token = getToken();
-  if (!token || !API_BASE) return null;
+  if (!token || !WS_URL) return null;
 
   try {
-    // Standardize URL to websocket protocol
-    const wsBase = API_BASE.replace(/^http/, "ws");
-    const url = new URL(`${wsBase}/ws`);
+    const url = new URL(`${WS_URL}/ws`);
     
     url.searchParams.set("channel", channel);
     url.searchParams.set("token", token);
@@ -36,6 +36,7 @@ function buildWsUrl(channel) {
 
     return url.toString();
   } catch (e) {
+    console.error("WS URL Generation Failure:", e);
     return null;
   }
 }
@@ -59,7 +60,7 @@ export function TradingProvider({ children }) {
       const key = keyFn(item);
       if (!next.some(x => keyFn(x) === key)) next.push(item);
     });
-    return next.slice(-80); // Lowered to 80 for smoother mobile performance
+    return next.slice(-80); // Capped for Mobile/Render stability
   };
 
   /* ================= CONNECTION LOGIC ================= */
@@ -103,11 +104,13 @@ export function TradingProvider({ children }) {
         if (!active) return;
         try {
           const msg = JSON.parse(e.data);
-          const data = msg.snapshot || msg.data;
+          // Snapshot usually comes on first connection, data on subsequent ticks
+          const data = msg.snapshot || msg.data || msg; 
+          
           if (data) {
-            setSnapshot(data);
-            if (data.intelligence) setDecisions(p => updateList(p, data.intelligence, d => d.ts || d.time));
-            if (data.trades) setTrades(p => updateList(p, data.trades, t => t.ts || t.time));
+            if (data.balance || data.positions) setSnapshot(data);
+            if (data.intelligence) setDecisions(p => updateList(p, data.intelligence, d => d.ts || d.time || d.id));
+            if (data.trades) setTrades(p => updateList(p, data.trades, t => t.ts || t.time || t.id));
           }
         } catch {}
       };
@@ -120,15 +123,19 @@ export function TradingProvider({ children }) {
       };
     }
 
-    connectMarket();
-    connectPaper();
+    // Delay connection slightly to allow auth boot to finish
+    const bootTimer = setTimeout(() => {
+      connectMarket();
+      connectPaper();
+    }, 1000);
 
     return () => {
       active = false;
+      clearTimeout(bootTimer);
       clearTimeout(marketRetry);
       clearTimeout(paperRetry);
-      marketWsRef.current?.close();
-      paperWsRef.current?.close();
+      if (marketWsRef.current) marketWsRef.current.close();
+      if (paperWsRef.current) paperWsRef.current.close();
     };
   }, []);
 
@@ -139,4 +146,8 @@ export function TradingProvider({ children }) {
   return <TradingContext.Provider value={value}>{children}</TradingContext.Provider>;
 }
 
-export const useTrading = () => useContext(TradingContext);
+export const useTrading = () => {
+    const context = useContext(TradingContext);
+    if (!context) throw new Error("useTrading must be used within a TradingProvider");
+    return context;
+};
