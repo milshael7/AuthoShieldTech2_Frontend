@@ -1,6 +1,6 @@
 // ==========================================================
-// 🔒 PROTECTED CORE FILE — v3.0 (REAL ENGINE HARDENED)
-// FILE: TradingRoom.jsx
+// 🔒 PROTECTED STEALTH UI — v5.0 (FULL REPLACEMENT)
+// FILE: TradingRoom.jsx - SYNCED WITH BACKEND v32.5
 // ==========================================================
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -16,7 +16,7 @@ import { useTrading } from "../context/TradingContext.jsx";
 const SYMBOL = "BTCUSDT";
 
 export default function TradingRoom() {
-  /* ================= REAL ENGINE ================= */
+  /* ================= REAL ENGINE CONNECTION ================= */
   const {
     price: livePrice,
     snapshot,
@@ -30,7 +30,7 @@ export default function TradingRoom() {
   const [trades, setTrades] = useState([]);
   const [decisions, setDecisions] = useState([]);
   const [equity, setEquity] = useState(0);
-  const [loading, setLoading] = useState(false); // New: Loading State
+  const [loading, setLoading] = useState(false);
   
   const [capital, setCapital] = useState({
     total: 0,
@@ -51,14 +51,16 @@ export default function TradingRoom() {
     return Number.isFinite(n) ? n : fallback;
   };
 
-  const fmtMoney = (v) => safeNum(v, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtMoney = (v) => safeNum(v, 0).toLocaleString(undefined, { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  });
 
   /* ================= PRICE & CANDLE LOGIC ================= */
   useEffect(() => {
     if (!Number.isFinite(livePrice)) return;
     setPrice(livePrice);
     
-    // Use a 1-minute bucket for candles
     const now = Math.floor(Date.now() / 60000) * 60000;
     
     setCandles(prev => {
@@ -81,31 +83,38 @@ export default function TradingRoom() {
     });
   }, [livePrice]);
 
-  /* ================= SNAPSHOT APPLY ================= */
+  /* ================= STEALTH SNAPSHOT SYNC (FIXED) ================= */
   useEffect(() => {
     if (!snapshot) return;
 
+    // 🧠 STEALTH MAPPING: Maps backend 'intelligence' to frontend 'decisions'
+    const brainMemory = snapshot.intelligence || snapshot.decisions || [];
+    const tradeHistory = snapshot.history || snapshot.trades || [];
+
     setPosition(snapshot.position || null);
-    setTrades(Array.isArray(snapshot.trades) ? snapshot.trades.slice(-200) : []);
-    setDecisions(Array.isArray(snapshot.decisions) ? snapshot.decisions.slice(-200) : []);
-    setEquity(safeNum(snapshot.equity, 0));
+    setTrades(Array.isArray(tradeHistory) ? tradeHistory.slice(-200) : []);
+    setDecisions(Array.isArray(brainMemory) ? brainMemory.slice(-200) : []);
+    
+    // 💰 EQUITY MAPPING: Checks both names to prevent '0' balance errors
+    const currentEquity = safeNum(snapshot.equity || snapshot.balance, 0);
+    setEquity(currentEquity);
     
     setCapital({
-      total: safeNum(snapshot.totalCapital, 0),
-      available: safeNum(snapshot.availableCapital, 0),
-      locked: safeNum(snapshot.lockedCapital, 0)
+      total: currentEquity,
+      available: safeNum(snapshot.availableCapital || snapshot.available, 0),
+      locked: safeNum(snapshot.lockedCapital || snapshot.locked, 0)
     });
 
     if (snapshot.protection) setProtection(snapshot.protection);
   }, [snapshot]);
 
-  /* ================= ACTIONS ================= */
+  /* ================= ACTION HANDLER ================= */
   const handleAction = async (actionFn, params) => {
     if (loading) return;
     setLoading(true);
     try {
-      const res = await actionFn(params);
-      // If the API returns a snapshot in the data, update UI immediately
+      // Automatically ensures the correct symbol is passed to the backend
+      const res = await actionFn({ ...params, symbol: SYMBOL });
       if (res?.data?.snapshot) {
         setPosition(res.data.snapshot.position || null);
       }
@@ -117,62 +126,74 @@ export default function TradingRoom() {
   };
 
   const closeNow = () => handleAction(api.placePaperOrder, { 
-    symbol: SYMBOL, 
-    side: position?.side === 'buy' ? 'sell' : 'buy', // Dynamic flip
+    side: position?.side === 'buy' ? 'sell' : 'buy',
     qty: position?.qty,
     type: 'market',
     isClose: true 
   });
 
-  /* ================= DERIVED ================= */
+  /* ================= CALCULATIONS ================= */
   const pnl = useMemo(() => {
     if (!position || !price) return 0;
-    // Fix: Handle both Buy and Sell position directions
     const direction = position.side === "buy" ? 1 : -1;
     return (price - position.entry) * position.qty * direction;
   }, [position, price]);
 
-  const pnlColor = pnl >= 0 ? "#00c853" : "#ff3d00";
+  const pnlColor = pnl >= 0 ? "#00ff88" : "#ff4444";
 
-  /* ================= UI ================= */
+  /* ================= RENDER ================= */
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, padding: 16 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, padding: 16, background: "#0a0a0a", minHeight: "100vh", color: "#fff" }}>
       <div>
         <TerminalChart candles={candles} trades={trades} position={position} />
+        {/* These panels now receive 'decisions' which is mapped to 'intelligence' from the backend */}
         <AIBehaviorPanel trades={trades} decisions={decisions} position={position} />
         <AIPerformanceHistoryPanel trades={trades} />
       </div>
 
-      <div style={{ backgroundColor: "#1a1a1a", padding: 16, borderRadius: 8 }}>
+      <div style={{ backgroundColor: "#111", padding: 16, borderRadius: 12, border: "1px solid #222" }}>
         <OrderPanel symbol={SYMBOL} price={price} />
 
         <div style={{ marginTop: 24, display: "flex", gap: 8 }}>
           <button 
             onClick={closeNow} 
             disabled={!position || loading}
-            style={{ flex: 1, backgroundColor: loading ? "#333" : "#d32f2f", color: "white", padding: 10, border: "none", borderRadius: 4, cursor: "pointer" }}
+            style={{ 
+              flex: 1, 
+              backgroundColor: !position ? "#222" : loading ? "#444" : "#ff4444", 
+              color: "white", 
+              padding: "12px", 
+              border: "none", 
+              borderRadius: 8, 
+              cursor: position ? "pointer" : "not-allowed",
+              fontWeight: "bold"
+            }}
           >
-            {loading ? "Processing..." : "Market Close"}
+            {loading ? "PROCESSING..." : "MARKET CLOSE"}
           </button>
         </div>
 
-        <div style={{ marginTop: 24, borderTop: "1px solid #333", paddingTop: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ color: "#888" }}>Engine Status</span>
-            <span style={{ color: paperStatus === "online" ? "#00c853" : "#ff9100" }}>{paperStatus.toUpperCase()}</span>
+        <div style={{ marginTop: 24, borderTop: "1px solid #222", paddingTop: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+            <span style={{ color: "#666" }}>Engine Status</span>
+            <span style={{ color: paperStatus === "online" ? "#00ff88" : "#ff9100", fontWeight: "bold" }}>
+              {paperStatus ? paperStatus.toUpperCase() : "OFFLINE"}
+            </span>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ color: "#888" }}>Equity</span>
-            <span>${fmtMoney(equity)}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+            <span style={{ color: "#666" }}>Equity</span>
+            <span style={{ color: "#fff", fontSize: "1.1em" }}>${fmtMoney(equity)}</span>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ color: "#888" }}>PnL</span>
-            <span style={{ color: pnlColor, fontWeight: "bold" }}>${fmtMoney(pnl)}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+            <span style={{ color: "#666" }}>PnL</span>
+            <span style={{ color: pnlColor, fontWeight: "bold", fontSize: "1.1em" }}>
+              {pnl >= 0 ? "+" : ""}${fmtMoney(pnl)}
+            </span>
           </div>
         </div>
 
-        <div style={{ marginTop: 24, fontSize: "0.85rem", color: "#666" }}>
-          <div>Available: ${fmtMoney(capital.available)}</div>
+        <div style={{ marginTop: 24, fontSize: "0.8rem", color: "#444", borderTop: "1px solid #222", paddingTop: 12 }}>
+          <div style={{ marginBottom: 4 }}>Available: ${fmtMoney(capital.available)}</div>
           <div>Locked: ${fmtMoney(capital.locked)}</div>
         </div>
       </div>
