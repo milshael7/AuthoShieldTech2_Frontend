@@ -1,390 +1,200 @@
 // ============================================================
-// 🔒 CLEAN CORE — AI CONTROL ROOM (ALIGNED)
-// FILE: frontend/src/pages/trading/AIControl.jsx
-// VERSION: v2.0 (STABLE + SAFE + BACKEND SYNC)
+// 🔒 AUTOSHIELD COMMAND — v5.0 (SYNCED & SAFETY-LOCK)
+// FILE: AIControl.jsx - FULL REPLACEMENT
 // ============================================================
 
-import React, { useEffect, useState } from "react";
-import { getToken } from "../../lib/api.js";
+import React, { useEffect, useState, useMemo } from "react";
+import { getToken, API_BASE } from "../../lib/api.js";
 
-const API_BASE =
-  (import.meta.env.VITE_API_BASE || "").replace(/\/+$/, "");
+export default function AIControl() {
+  const [config, setConfig] = useState({
+    enabled: false,
+    tradingMode: "paper",
+    maxTrades: 5,
+    riskPercent: 1.5,
+    positionMultiplier: 1,
+    strategyMode: "Balanced"
+  });
 
-/* ========================================================= */
+  const [engineHealth, setEngineHealth] = useState("SYNCING");
+  const [saving, setSaving] = useState(false);
+  const [statusMsg, setStatusMsg] = useState("");
 
-export default function AIControl(){
+  const headers = useMemo(() => ({
+    "Authorization": `Bearer ${getToken()}`,
+    "Content-Type": "application/json"
+  }), []);
 
-  const [enabled,setEnabled] = useState(true);
-  const [tradingMode,setTradingMode] = useState("paper");
+  /* ================= 📡 DATA SYNC ================= */
+  const loadAll = async () => {
+    try {
+      const [resConfig, resStatus] = await Promise.all([
+        fetch(`${API_BASE}/api/ai/config`, { headers }),
+        fetch(`${API_BASE}/api/paper/status`, { headers })
+      ]);
 
-  const [maxTrades,setMaxTrades] = useState(5);
-  const [riskPercent,setRiskPercent] = useState(1.5);
-  const [positionMultiplier,setPositionMultiplier] = useState(1);
+      const [cfgData, statusData] = await Promise.all([resConfig.json(), resStatus.json()]);
 
-  const [strategyMode,setStrategyMode] = useState("Balanced");
-
-  const [engineHealth,setEngineHealth] = useState("CHECKING");
-
-  const [saving,setSaving] = useState(false);
-  const [statusMsg,setStatusMsg] = useState("");
-
-  /* =========================================================
-     INIT
-  ========================================================= */
-
-  useEffect(()=>{
-
-    loadAll();
-
-    const loop=setInterval(loadAll,8000);
-
-    return ()=>clearInterval(loop);
-
-  },[]);
-
-  async function loadAll(){
-    await Promise.all([
-      loadConfig(),
-      checkEngine()
-    ]);
-  }
-
-  /* =========================================================
-     ENGINE STATUS
-  ========================================================= */
-
-  async function checkEngine(){
-
-    try{
-
-      const res = await fetch(
-        `${API_BASE}/api/paper/status`,
-        { headers: authHeader() }
-      );
-
-      if(!res.ok){
-        setEngineHealth("OFFLINE");
-        return;
-      }
-
-      const data = await res.json();
-
-      const state = String(data?.engine || "").toUpperCase();
-
-      if(state === "RUNNING"){
-        setEngineHealth("RUNNING");
-      }
-      else if(state === "IDLE" || state === "STARTING"){
-        setEngineHealth("STARTING");
-      }
-      else{
-        setEngineHealth("OFFLINE");
-      }
-
-    }catch{
-
+      if (cfgData.ok) setConfig(cfgData.config);
+      setEngineHealth(statusData.engine?.toUpperCase() || "OFFLINE");
+    } catch (err) {
       setEngineHealth("OFFLINE");
-
     }
+  };
 
-  }
+  useEffect(() => {
+    loadAll();
+    const timer = setInterval(loadAll, 10000); // 10s heartbeat
+    return () => clearInterval(timer);
+  }, []);
 
-  /* =========================================================
-     LOAD CONFIG
-  ========================================================= */
+  /* ================= 🚀 ACTIONS ================= */
+  const updateField = (field, val) => setConfig(prev => ({ ...prev, [field]: val }));
 
-  async function loadConfig(){
-
-    try{
-
-      const res = await fetch(
-        `${API_BASE}/api/ai/config`,
-        { headers: authHeader() }
-      );
-
-      if(!res.ok) return;
-
-      const data = await res.json();
-
-      if(!data?.ok) return;
-
-      const cfg = data.config || {};
-
-      setEnabled(Boolean(cfg.enabled));
-      setTradingMode(cfg.tradingMode || "paper");
-
-      setMaxTrades(safeNum(cfg.maxTrades,5));
-      setRiskPercent(safeNum(cfg.riskPercent,1.5));
-      setPositionMultiplier(safeNum(cfg.positionMultiplier,1));
-
-      setStrategyMode(cfg.strategyMode || "Balanced");
-
-    }catch{}
-
-  }
-
-  /* =========================================================
-     SAVE CONFIG
-  ========================================================= */
-
-  async function saveConfig(){
-
+  const handleSave = async () => {
     setSaving(true);
     setStatusMsg("");
-
-    try{
-
-      const payload = {
-        enabled,
-        tradingMode,
-        maxTrades: clamp(maxTrades,1,50),
-        riskPercent: clamp(riskPercent,0.1,10),
-        positionMultiplier: clamp(positionMultiplier,0.1,10),
-        strategyMode
-      };
-
-      const res = await fetch(
-        `${API_BASE}/api/ai/config`,
-        {
-          method:"POST",
-          headers:{
-            ...authHeader(),
-            "Content-Type":"application/json"
-          },
-          body:JSON.stringify(payload)
-        }
-      );
-
+    try {
+      const res = await fetch(`${API_BASE}/api/ai/config`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(config)
+      });
       const data = await res.json();
-
-      if(res.ok && data?.ok){
-        setStatusMsg("✅ Configuration saved");
-      }else{
-        setStatusMsg(data?.error || "❌ Save failed");
-      }
-
-    }catch{
-
-      setStatusMsg("❌ Server unreachable");
-
+      setStatusMsg(data.ok ? "✅ CONFIG SYNCED" : "❌ SYNC ERROR");
+      setTimeout(() => setStatusMsg(""), 3000);
+    } catch (err) {
+      setStatusMsg("📡 CONNECTION FAILED");
     }
-
     setSaving(false);
+  };
 
-  }
-
-  /* =========================================================
-     MODE SWITCH
-  ========================================================= */
-
-  function switchMode(mode){
-
-    if(mode === tradingMode) return;
-
-    if(mode === "live"){
-
-      const confirmLive = window.confirm(
-        "⚠ WARNING: Enable LIVE trading with real capital?"
-      );
-
-      if(!confirmLive) return;
-
-      setStatusMsg("⚠ LIVE MODE ENABLED");
-
-    }else{
-
-      setStatusMsg("Paper mode active");
-
-    }
-
-    setTradingMode(mode);
-
-  }
-
-  /* =========================================================
-     CALCULATIONS
-  ========================================================= */
-
-  const estimatedRisk =
-    clamp(riskPercent * positionMultiplier,0,100).toFixed(2);
-
-  /* =========================================================
-     UI
-  ========================================================= */
-
-  return(
-
+  /* ================= UI RENDER ================= */
+  return (
     <div style={styles.wrapper}>
+      <header style={styles.header}>
+        <h1 style={{ fontSize: "1.4rem", margin: 0 }}>🧠 AI COMMAND</h1>
+        <div style={{ ...styles.badge, color: engineHealth === "RUNNING" ? "#22c55e" : "#ef4444" }}>
+          ENGINE: {engineHealth}
+        </div>
+      </header>
 
-      <h2>AI Control Room</h2>
-
-      <div style={styles.card}>
-
-        {/* ENGINE */}
-
-        <Row label="Engine">
-          <span style={{
-            color:
-              engineHealth==="RUNNING"
-                ? "#22c55e"
-                : engineHealth==="STARTING"
-                ? "#facc15"
-                : "#ef4444"
-          }}>
-            {engineHealth}
-          </span>
-        </Row>
-
-        {/* AI ENABLE */}
-
-        <Row label="AI Status">
-          <button
-            onClick={()=>setEnabled(!enabled)}
-            style={{
-              ...styles.btn,
-              background: enabled ? "#16a34a" : "#dc2626"
-            }}
-          >
-            {enabled ? "ACTIVE" : "PAUSED"}
-          </button>
-        </Row>
-
-        {/* MODE */}
-
-        <Row label="Trading Mode">
-          <button
-            onClick={()=>switchMode("paper")}
-            style={{
-              ...styles.btn,
-              background:
-                tradingMode==="paper"
-                  ? "#2563eb"
-                  : "#374151"
-            }}
-          >
-            PAPER
-          </button>
-
-          <button
-            onClick={()=>switchMode("live")}
-            style={{
-              ...styles.btn,
-              background:
-                tradingMode==="live"
-                  ? "#16a34a"
-                  : "#374151"
-            }}
-          >
-            LIVE
-          </button>
-        </Row>
-
-        <Control label="Max Trades" value={maxTrades} onChange={setMaxTrades}/>
-        <Control label="Risk %" value={riskPercent} step="0.1" onChange={setRiskPercent}/>
-        <Control label="Multiplier" value={positionMultiplier} step="0.1" onChange={setPositionMultiplier}/>
-
-        {/* STRATEGY */}
-
-        <Row label="Strategy">
-          <select
-            value={strategyMode}
-            onChange={e=>setStrategyMode(e.target.value)}
-          >
-            <option>Conservative</option>
-            <option>Balanced</option>
-            <option>Aggressive</option>
-          </select>
-        </Row>
-
-        <div style={{marginTop:10,opacity:.7}}>
-          Estimated Risk: {estimatedRisk}%
+      <div style={styles.mainCard}>
+        {/* TOP TOGGLES */}
+        <div style={styles.toggleRow}>
+          <div style={{ flex: 1 }}>
+            <label style={styles.label}>AI ENGINE STATUS</label>
+            <button 
+              onClick={() => updateField("enabled", !config.enabled)}
+              style={btnStyle(config.enabled, config.enabled ? "#22c55e" : "#ef4444")}
+            >
+              {config.enabled ? "ACTIVE & MONITORING" : "ENGINE PAUSED"}
+            </button>
+          </div>
+          
+          <div style={{ flex: 1 }}>
+            <label style={styles.label}>OPERATING MODE</label>
+            <div style={styles.modeSwitch}>
+              <button 
+                onClick={() => updateField("tradingMode", "paper")}
+                style={modeBtn(config.tradingMode === "paper", "#3b82f6")}
+              >PAPER</button>
+              <button 
+                onClick={() => {
+                  if (window.confirm("⚠️ ACTIVATE LIVE TRADING? THIS USES REAL CAPITAL.")) {
+                    updateField("tradingMode", "live");
+                  }
+                }}
+                style={modeBtn(config.tradingMode === "live", "#ef4444")}
+              >LIVE</button>
+            </div>
+          </div>
         </div>
 
-        <button
-          onClick={saveConfig}
+        {/* RISK PARAMETERS */}
+        <div style={styles.inputGrid}>
+          <InputBox label="MAX OPEN TRADES" value={config.maxTrades} 
+            onChange={(v) => updateField("maxTrades", parseInt(v) || 0)} />
+          <InputBox label="RISK PER TRADE %" value={config.riskPercent} step="0.1"
+            onChange={(v) => updateField("riskPercent", parseFloat(v) || 0)} />
+          <InputBox label="POSITION MULTI" value={config.positionMultiplier} step="0.1"
+            onChange={(v) => updateField("positionMultiplier", parseFloat(v) || 0)} />
+          
+          <div style={styles.inputWrap}>
+            <label style={styles.label}>STRATEGY AGGRESSION</label>
+            <select 
+              value={config.strategyMode} 
+              onChange={(e) => updateField("strategyMode", e.target.value)}
+              style={styles.select}
+            >
+              <option>Conservative</option>
+              <option>Balanced</option>
+              <option>Aggressive</option>
+              <option>Stealth Mode</option>
+            </select>
+          </div>
+        </div>
+
+        {/* CALC VIEW */}
+        <div style={styles.summaryBox}>
+          <span>ESTIMATED MAX EXPOSURE:</span>
+          <span style={{ color: "#ef4444", fontWeight: "900" }}>
+            {((config.riskPercent * config.positionMultiplier) * config.maxTrades).toFixed(2)}%
+          </span>
+        </div>
+
+        <button 
+          onClick={handleSave} 
           disabled={saving}
-          style={{...styles.btn,marginTop:20}}
+          style={styles.saveBtn}
         >
-          {saving ? "Saving..." : "Save"}
+          {saving ? "SYNCING..." : "COMMIT CHANGES TO CORE"}
         </button>
 
-        {statusMsg && (
-          <div style={{marginTop:10}}>
-            {statusMsg}
-          </div>
-        )}
-
+        {statusMsg && <div style={styles.status}>{statusMsg}</div>}
       </div>
-
-    </div>
-
-  );
-
-}
-
-/* =========================================================
-   SMALL COMPONENTS
-========================================================= */
-
-function Row({label,children}){
-  return(
-    <div style={{marginBottom:16}}>
-      <strong>{label}:</strong> {children}
     </div>
   );
 }
 
-function Control({label,value,onChange,step=1}){
-  return(
-    <div style={{marginBottom:16}}>
-      <label>{label}:</label>
-      <input
-        type="number"
-        value={value}
-        step={step}
-        onChange={e=>onChange(Number(e.target.value)||0)}
-        style={{marginLeft:10,width:100}}
-      />
-    </div>
-  );
-}
-
-/* ========================================================= */
-
-function authHeader(){
-  const token = getToken();
-  return token ? {Authorization:`Bearer ${token}`} : {};
-}
-
-function safeNum(v,f=0){
-  const n = Number(v);
-  return Number.isFinite(n) ? n : f;
-}
-
-function clamp(n,min,max){
-  return Math.max(min,Math.min(max,n));
-}
-
-/* ========================================================= */
-
+/* ================= STYLES ================= */
 const styles = {
-  wrapper:{
-    padding:24,
-    color:"#fff"
-  },
-  card:{
-    background:"#111827",
-    padding:20,
-    borderRadius:12,
-    border:"1px solid rgba(255,255,255,.08)",
-    maxWidth:700
-  },
-  btn:{
-    padding:"6px 14px",
-    border:"none",
-    color:"#fff",
-    borderRadius:6,
-    cursor:"pointer",
-    marginLeft:10
-  }
+  wrapper: { padding: "20px", color: "#f8fafc", fontFamily: "monospace", maxWidth: "800px", margin: "0 auto" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" },
+  badge: { fontSize: "0.7rem", fontWeight: "bold", background: "#0f172a", padding: "6px 12px", borderRadius: "20px", border: "1px solid #1e293b" },
+  mainCard: { background: "#0f172a", padding: "24px", borderRadius: "16px", border: "1px solid #1e293b", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" },
+  toggleRow: { display: "flex", gap: "20px", marginBottom: "30px", flexWrap: "wrap" },
+  label: { display: "block", fontSize: "0.65rem", color: "#64748b", fontWeight: "bold", marginBottom: "8px", letterSpacing: "1px" },
+  modeSwitch: { display: "flex", background: "#1e293b", padding: "4px", borderRadius: "8px" },
+  inputGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "20px", marginBottom: "30px" },
+  inputWrap: { display: "flex", flexDirection: "column" },
+  select: { background: "#1e293b", color: "#fff", border: "1px solid #334155", padding: "10px", borderRadius: "8px", outline: "none" },
+  summaryBox: { padding: "15px", background: "rgba(0,0,0,0.2)", borderRadius: "8px", border: "1px dashed #334155", display: "flex", justifyContent: "space-between", fontSize: "0.8rem", marginBottom: "20px" },
+  saveBtn: { width: "100%", padding: "16px", borderRadius: "12px", border: "none", background: "#3b82f6", color: "#fff", fontWeight: "900", cursor: "pointer", fontSize: "1rem" },
+  status: { textAlign: "center", marginTop: "15px", fontSize: "0.8rem", fontWeight: "bold" }
 };
+
+const btnStyle = (active, color) => ({
+  width: "100%", padding: "12px", borderRadius: "8px", border: "none", cursor: "pointer",
+  background: active ? `${color}22` : "#1e293b",
+  color: active ? color : "#64748b",
+  border: `1px solid ${active ? color : "#334155"}`,
+  fontWeight: "bold", fontSize: "0.8rem", transition: "all 0.2s"
+});
+
+const modeBtn = (active, color) => ({
+  flex: 1, padding: "8px", border: "none", borderRadius: "6px", cursor: "pointer",
+  background: active ? color : "transparent",
+  color: active ? "#fff" : "#64748b",
+  fontWeight: "bold", fontSize: "0.7rem", transition: "all 0.2s"
+});
+
+function InputBox({ label, value, onChange, step = "1" }) {
+  return (
+    <div style={styles.inputWrap}>
+      <label style={styles.label}>{label}</label>
+      <input type="number" step={step} value={value} onChange={(e) => onChange(e.target.value)}
+        style={{ ...styles.select, fontSize: "1rem" }} />
+    </div>
+  );
+}
