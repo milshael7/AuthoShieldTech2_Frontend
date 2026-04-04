@@ -1,53 +1,57 @@
 // ============================================================
-// 🔒 AUTOSHIELD LOGIN — v5.0 (SYNCED & HARDENED)
-// FILE: Login.jsx - FULL REPLACEMENT
+// 🔒 AUTOSHIELD LOGIN — v5.2 (PATH-FIXED & SYNCED)
+// FILE: Login.jsx - FINAL REPLACEMENT
 // ============================================================
 
 import React, { useState } from "react";
-import { api } from "../lib/api.js";
+import { api } from "../../lib/api.js"; // FIXED: Corrected path for nested folders
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState("login"); // login | reset
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Helper for role-based routing
-  const getDashboardPath = (role) => {
-    const r = String(role || "").toLowerCase();
+  // 🛡️ ROLE-BASED ROUTING ENGINE
+  const getDashboardPath = (user) => {
+    if (!user) return "/user";
+    const role = String(user.role || "").toLowerCase();
+    
     const routes = {
       admin: "/admin",
       manager: "/manager",
       company: "/company",
       small_company: "/small-company",
       individual: "/user",
-      user: "/user", // Added standard fallback
-      trader: "/user" // Added trader fallback
+      user: "/user",
+      trader: "/user" 
     };
-    return routes[r] || "/user"; // Default to /user instead of /
+    
+    // If the backend sends a specific dashboard preference, use it
+    return user.dashboardPath || routes[role] || "/user";
   };
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!email || !password) return setError("Missing fields");
+    if (!email || !password) return setError("Please enter credentials");
     
     setLoading(true);
     setError("");
 
     try {
-      // 🚀 The api.login handles setToken and saveUser internally now
+      // 🚀 api.login handles the lowercase trim and storage internally
       const result = await api.login(email, password);
 
       if (result.ok) {
-        const targetPath = getDashboardPath(result.user?.role);
-        // Using replace prevents the user from "Backing" into the login screen
+        const targetPath = getDashboardPath(result.user);
+        // replace() is better for mobile—it prevents the "Back" button loop
         window.location.replace(targetPath);
       } else {
-        setError(result.error || "Invalid Credentials");
+        // Show the specific error from Render (e.g., "Invalid Password")
+        setError(result.error || "Access Denied");
       }
     } catch (err) {
-      setError("Connection Timed Out");
+      setError("Network Timeout: Check Server Status");
     } finally {
       setLoading(false);
     }
@@ -57,11 +61,11 @@ export default function Login() {
     <div style={styles.wrapper}>
       <div style={styles.card}>
         <div style={styles.header}>
-          <h2 style={{ margin: 0, color: "#3b82f6" }}>
-            {mode === "login" ? "NEURAL ACCESS" : "RECOVERY MODE"}
+          <h2 style={{ margin: 0, color: "#3b82f6", letterSpacing: "2px" }}>
+            NEURAL ACCESS
           </h2>
-          <p style={{ fontSize: "0.7rem", color: "#64748b", marginTop: 4 }}>
-            AUTOSHIELD TERMINAL v32.5
+          <p style={{ fontSize: "0.6rem", color: "#64748b", marginTop: 6, fontWeight: "bold" }}>
+            TERMINAL ENCRYPTED • v5.2
           </p>
         </div>
 
@@ -70,7 +74,7 @@ export default function Login() {
         <form onSubmit={handleSubmit} style={styles.form}>
           <input
             type="email"
-            placeholder="Identity (Email)"
+            placeholder="IDENTITY (EMAIL)"
             value={email}
             autoComplete="email"
             required
@@ -80,7 +84,7 @@ export default function Login() {
 
           <input
             type="password"
-            placeholder="Access Key (Password)"
+            placeholder="ACCESS KEY"
             value={password}
             autoComplete="current-password"
             required
@@ -89,17 +93,13 @@ export default function Login() {
           />
 
           <button type="submit" disabled={loading} style={styles.button}>
-            {loading ? "ESTABLISHING UPLINK..." : "ENTER TERMINAL"}
+            {loading ? "AUTHENTICATING..." : "INITIATE UPLINK"}
           </button>
 
           <div style={styles.footer}>
-            <a 
-              href="#" 
-              onClick={(e) => { e.preventDefault(); alert("Contact Admin for manual reset."); }}
-              style={styles.link}
-            >
-              FORGOT ACCESS KEY?
-            </a>
+            <span style={{ color: "#475569", fontSize: "0.65rem" }}>
+              FORGOT KEY? CONTACT SYSTEM ADMIN
+            </span>
           </div>
         </form>
       </div>
@@ -107,59 +107,58 @@ export default function Login() {
   );
 }
 
-/* ================= STYLES ================= */
+/* ================= STYLES (MOBILE OPTIMIZED) ================= */
 const styles = {
   wrapper: {
     minHeight: "100vh",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "#020617", // Deeper black for high contrast
+    background: "#020617",
     padding: "20px",
     fontFamily: "monospace"
   },
   card: {
     width: "100%",
-    maxWidth: "380px",
+    maxWidth: "360px",
     background: "#0f172a",
-    padding: "30px",
-    borderRadius: "16px",
+    padding: "25px",
+    borderRadius: "12px",
     border: "1px solid #1e293b",
-    boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)"
+    boxShadow: "0 20px 40px rgba(0,0,0,0.6)"
   },
-  header: { textAlign: "center", marginBottom: "30px" },
-  form: { display: "flex", flexDirection: "column", gap: "15px" },
+  header: { textAlign: "center", marginBottom: "25px" },
+  form: { display: "flex", flexDirection: "column", gap: "12px" },
   input: {
     background: "#1e293b",
     border: "1px solid #334155",
     color: "#fff",
-    padding: "14px",
-    borderRadius: "8px",
-    fontSize: "0.9rem",
-    outline: "none"
+    padding: "12px",
+    borderRadius: "6px",
+    fontSize: "0.85rem",
+    outline: "none",
+    transition: "border-color 0.2s"
   },
   button: {
     background: "#3b82f6",
     color: "#fff",
-    padding: "16px",
-    borderRadius: "8px",
+    padding: "14px",
+    borderRadius: "6px",
     border: "none",
-    fontWeight: "bold",
+    fontWeight: "900",
     cursor: "pointer",
-    letterSpacing: "1px",
-    marginTop: "10px",
-    transition: "opacity 0.2s"
+    marginTop: "8px",
+    fontSize: "0.9rem"
   },
   errorBox: {
     background: "rgba(239, 68, 68, 0.1)",
     color: "#ef4444",
-    padding: "10px",
-    borderRadius: "6px",
-    fontSize: "0.8rem",
+    padding: "8px",
+    borderRadius: "4px",
+    fontSize: "0.75rem",
     textAlign: "center",
-    marginBottom: "20px",
-    border: "1px solid rgba(239, 68, 68, 0.2)"
+    marginBottom: "15px",
+    border: "1px solid rgba(239, 68, 68, 0.3)"
   },
-  footer: { textAlign: "center", marginTop: "20px" },
-  link: { color: "#64748b", fontSize: "0.7rem", textDecoration: "none" }
+  footer: { textAlign: "center", marginTop: "15px" }
 };
