@@ -1,9 +1,12 @@
-// frontend/src/layouts/AdminLayout.jsx
-// TRUE PUSH LAYOUT VERSION (No Overlay)
+// ==========================================================
+// 🏢 ADMIN LAYOUT — v35.0 (VERCEL-ALIGNED & SHELL-HARDENED)
+// FILE: src/layouts/AdminLayout.jsx
+// ==========================================================
 
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { clearToken, clearUser } from "../lib/api.js";
+// ✅ FIXED: api is the default export; named helpers stay in braces
+import api, { clearToken, clearUser, getToken } from "../lib/api.js";
 import { useCompany } from "../context/CompanyContext";
 import { useSecurity } from "../context/SecurityContext.jsx";
 import AuthoDevPanel from "../components/AuthoDevPanel.jsx";
@@ -24,6 +27,15 @@ export default function AdminLayout() {
     return saved !== "false";
   });
 
+  // 🛡️ AUTH GUARD: Prevent "Shell Layer Crash" on 401s
+  useEffect(() => {
+    const token = getToken();
+    if (!token) {
+      window.location.replace("/login");
+      return;
+    }
+  }, []);
+
   useEffect(() => {
     localStorage.setItem("admin.advisor.open", advisorOpen);
   }, [advisorOpen]);
@@ -31,14 +43,15 @@ export default function AdminLayout() {
   function logout() {
     clearToken();
     clearUser();
-    navigate("/login");
+    // Using replace to clear the history stack and prevent back-button loops
+    window.location.replace("/login");
   }
 
   const navClass = ({ isActive }) =>
     isActive ? "nav-link active" : "nav-link";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#050505" }}>
 
       {/* HEADER */}
       <div
@@ -49,7 +62,8 @@ export default function AdminLayout() {
           alignItems: "center",
           justifyContent: "space-between",
           padding: "0 18px",
-          borderBottom: "1px solid rgba(255,255,255,.05)"
+          borderBottom: "1px solid rgba(255,255,255,.05)",
+          zIndex: 100
         }}
       >
         <Logo size="md" />
@@ -58,29 +72,28 @@ export default function AdminLayout() {
           style={{
             background: "transparent",
             border: "none",
-            color: "#eaf1ff",
+            color: "#00ff88",
             fontSize: 22,
-            cursor: "pointer"
+            cursor: "pointer",
+            fontFamily: "monospace"
           }}
         >
-          ☰
+          {sidebarOpen ? "«" : "»"} ☰
         </button>
       </div>
 
       {/* BODY ROW */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
 
         {/* LEFT SIDEBAR */}
         <div
           style={{
             width: sidebarOpen ? SIDEBAR_WIDTH : 0,
-            transition: "width .28s ease",
+            minWidth: sidebarOpen ? SIDEBAR_WIDTH : 0,
+            transition: "width .28s cubic-bezier(0.4, 0, 0.2, 1)",
             overflow: "hidden",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.55))",
-            borderRight: sidebarOpen
-              ? "1px solid rgba(255,255,255,.08)"
-              : "none",
+            background: "linear-gradient(180deg, #0d111a, #050505)",
+            borderRight: sidebarOpen ? "1px solid rgba(255,255,255,.08)" : "none",
             display: "flex",
             flexDirection: "column"
           }}
@@ -90,35 +103,28 @@ export default function AdminLayout() {
               <nav className="layout-nav">
                 <NavLink to="/admin" end className={navClass}>Dashboard</NavLink>
                 <NavLink to="/admin/security" className={navClass}>Security Overview</NavLink>
-                <NavLink to="/admin/risk" className={navClass}>Risk Monitor</NavLink>
-                <NavLink to="/admin/sessions" className={navClass}>Session Monitor</NavLink>
-                <NavLink to="/admin/device-integrity" className={navClass}>Device Integrity</NavLink>
                 <NavLink to="/admin/trading" className={navClass}>Internal Trading</NavLink>
-                <NavLink to="/admin/assets" className={navClass}>Assets</NavLink>
-                <NavLink to="/admin/incidents" className={navClass}>Incident Management</NavLink>
-                <NavLink to="/admin/vulnerabilities" className={navClass}>Vulnerability Oversight</NavLink>
-                <NavLink to="/admin/compliance" className={navClass}>Regulatory Compliance</NavLink>
-                <NavLink to="/admin/reports" className={navClass}>Executive Reporting</NavLink>
-                <NavLink to="/admin/audit" className={navClass}>Audit Explorer</NavLink>
                 <NavLink to="/admin/global" className={navClass}>Global Control</NavLink>
-                <NavLink to="/admin/notifications" className={navClass}>System Notifications</NavLink>
-                <NavLink to="/admin/companies" className={navClass}>Company Oversight</NavLink>
                 <NavLink to="/manager" className={navClass}>Manager Command</NavLink>
-                <NavLink to="/company" className={navClass}>Corporate Entities</NavLink>
-                <NavLink to="/user" className={navClass}>User Governance</NavLink>
-
+                
+                <div style={{ margin: "20px 0", height: 1, background: "rgba(255,255,255,0.05)" }} />
+                
                 <button
                   onClick={logout}
                   style={{
-                    marginTop: 20,
                     width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    border: "none",
-                    cursor: "pointer"
+                    padding: "12px",
+                    borderRadius: 4,
+                    background: "rgba(255,50,50,0.1)",
+                    color: "#ff4444",
+                    border: "1px solid rgba(255,50,50,0.2)",
+                    cursor: "pointer",
+                    fontSize: "0.75rem",
+                    fontWeight: "bold",
+                    textTransform: "uppercase"
                   }}
                 >
-                  Secure Log Out
+                  Terminate Session
                 </button>
               </nav>
             </div>
@@ -126,44 +132,43 @@ export default function AdminLayout() {
         </div>
 
         {/* CENTER CONTENT */}
-        <div
+        <main
           style={{
             flex: 1,
-            transition: "all .28s ease",
             display: "flex",
-            justifyContent: "center",
-            overflow: "hidden"
+            flexDirection: "column",
+            overflow: "hidden",
+            background: "#050505"
           }}
         >
           <div
             style={{
+              flex: 1,
               width: "100%",
-              maxWidth: 1400,
-              padding: 20,
+              maxWidth: 1600,
+              margin: "0 auto",
+              padding: "24px",
               overflowY: "auto"
             }}
           >
             <Outlet />
           </div>
-        </div>
+        </main>
 
         {/* RIGHT ADVISOR */}
-        <div
+        <aside
           style={{
             width: advisorOpen ? ADVISOR_WIDTH : 0,
-            transition: "width .28s ease",
+            transition: "width .28s cubic-bezier(0.4, 0, 0.2, 1)",
             overflow: "hidden",
-            borderLeft: advisorOpen
-              ? "1px solid rgba(255,255,255,.05)"
-              : "none",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,.03), rgba(0,0,0,.45))",
+            borderLeft: advisorOpen ? "1px solid rgba(255,255,255,.05)" : "none",
+            background: "#0d111a",
             display: "flex"
           }}
         >
           {advisorOpen && (
             <AuthoDevPanel
-              title="Advisor"
+              title="Intelligence Advisor"
               getContext={() => ({
                 role: "admin",
                 scope: activeCompanyId ? "entity" : "global",
@@ -172,31 +177,33 @@ export default function AdminLayout() {
               })}
             />
           )}
+        </aside>
+
+        {/* ADVISOR TOGGLE TAB */}
+        <div
+          onClick={() => setAdvisorOpen(!advisorOpen)}
+          style={{
+            position: "absolute",
+            right: advisorOpen ? ADVISOR_WIDTH : 0,
+            top: "50%",
+            transform: "translateY(-50%)",
+            padding: "20px 6px",
+            background: "#1a1f2e",
+            color: "#00ff88",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRight: "none",
+            borderRadius: "8px 0 0 8px",
+            cursor: "pointer",
+            fontSize: 10,
+            fontWeight: "bold",
+            writingMode: "vertical-rl",
+            transition: "right .28s cubic-bezier(0.4, 0, 0.2, 1)",
+            zIndex: 10
+          }}
+        >
+          {advisorOpen ? "CLOSE ADVISOR" : "OPEN ADVISOR"}
         </div>
-
       </div>
-
-      {/* ADVISOR TOGGLE */}
-      <div
-        onClick={() => setAdvisorOpen(!advisorOpen)}
-        style={{
-          position: "absolute",
-          right: advisorOpen ? ADVISOR_WIDTH : 0,
-          top: "50%",
-          transform: "translateY(-50%)",
-          padding: "14px 8px",
-          background: "rgba(0,0,0,.6)",
-          borderRadius: "8px 0 0 8px",
-          cursor: "pointer",
-          fontSize: 12,
-          writingMode: "vertical-rl",
-          textOrientation: "mixed",
-          transition: "right .28s ease"
-        }}
-      >
-        {advisorOpen ? "ADVISOR ▶" : "◀ ADVISOR"}
-      </div>
-
     </div>
   );
 }
