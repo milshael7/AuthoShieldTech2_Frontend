@@ -1,5 +1,5 @@
 // ==========================================================
-// 🔒 AUTOSHIELD API CORE — v5.3 (VERCEL + RENDER SAFE)
+// 🔒 AUTOSHIELD API CORE — v35.0 (HARDENED & SHELL-SAFE)
 // FILE: src/lib/api.js
 // ==========================================================
 
@@ -11,7 +11,7 @@ const isBrowser = typeof window !== "undefined";
 const hostname = isBrowser ? window.location.hostname : "";
 const isLocal = hostname === "localhost" || hostname === "127.0.0.1";
 
-// 🌍 PUBLIC EXPORTS FOR CONTEXT & COMPONENTS
+// 🌍 PUBLIC EXPORTS
 export const API_BASE = ENV_BASE || (isLocal ? LOCAL_FALLBACK : RENDER_FALLBACK);
 export const WS_URL = API_BASE.replace(/^http/, "ws");
 
@@ -59,7 +59,7 @@ function getUrl(path) {
   return `${API_BASE}${finalPath}`;
 }
 
-/* ================= CORE REQUEST ================= */
+/* ================= CORE REQUEST (CRASH-PROOF) ================= */
 async function request(path, options = {}) {
   const token = getToken();
   const user = getSavedUser();
@@ -71,45 +71,39 @@ async function request(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  const config = {
-    ...options,
-    headers,
-  };
-
-  if (config.body && typeof config.body !== "string") {
-    config.body = JSON.stringify(config.body);
-  }
-
   try {
-    const response = await fetch(getUrl(path), config);
+    const response = await fetch(getUrl(path), { ...options, headers });
 
+    // 🛡️ Unauthorized Check: Clears stale data without crashing UI
     if (response.status === 401) {
       clearAuth();
-      return { ok: false, error: "Session Expired" };
+      return { ok: false, error: "Unauthorized", status: 401 };
     }
 
+    const contentType = response.headers.get("content-type");
     let data = null;
-    try {
+    
+    if (contentType && contentType.includes("application/json")) {
       data = await response.json();
-    } catch {
-      data = null;
     }
 
     if (!response.ok) {
       return {
         ok: false,
-        error: data?.error || data?.message || "Request failed",
+        status: response.status,
+        error: data?.error || data?.message || `Engine Error ${response.status}`,
       };
     }
 
     return data ?? { ok: true };
-  } catch {
-    return { ok: false, error: "Network Error" };
+  } catch (err) {
+    console.error("📡 UPLINK FAILURE:", err.message);
+    return { ok: false, error: "Network Error: Engine Unreachable" };
   }
 }
 
 /* ================= API SURFACE ================= */
-export const api = {
+const api = {
   login: async (email, password) => {
     try {
       const res = await fetch(getUrl("/auth/login"), {
@@ -122,17 +116,10 @@ export const api = {
       });
 
       let data = null;
-      try {
-        data = await res.json();
-      } catch {
-        data = null;
-      }
+      try { data = await res.json(); } catch { data = null; }
 
       if (!res.ok) {
-        return {
-          ok: false,
-          error: data?.error || "Invalid Credentials",
-        };
+        return { ok: false, error: data?.error || "Access Denied" };
       }
 
       if (data?.token) setToken(data.token);
@@ -144,18 +131,20 @@ export const api = {
     }
   },
 
+  // DATA FETCHING
   status: () => request("/paper/status"),
   snapshot: () => request("/paper/snapshot"),
+  getBrain: () => request("/ai/brain"),
+  getAnalytics: () => request("/analytics/trading"),
+  getHistory: () => request("/analytics/history"),
 
+  // TRADING ACTIONS
   placeOrder: (payload) =>
     request("/paper/order", {
       method: "POST",
       body: { ...payload, mode: "STEALTH" },
     }),
-
-  getBrain: () => request("/ai/brain"),
-  getAnalytics: () => request("/analytics/trading"),
-  getHistory: () => request("/analytics/history"),
 };
 
+// 🛡️ SINGLE DEFAULT EXPORT FOR VERCEL STABILITY
 export default api;
