@@ -1,123 +1,106 @@
-/* =========================================================
-   AUTOSHIELD FRONTEND API LAYER — STEALTH v32.5
-   FULL AI + EXECUTION + ANALYTICS + DUAL-CONNECT
-========================================================= */
+// ==========================================================
+// 🔒 AUTOSHIELD API CORE — v5.0 (RENDER-HARDENED)
+// FILE: api.js - THE SINGLE SOURCE OF TRUTH
+// ==========================================================
 
-// 🌍 DUAL-SOURCE LOGIC: 
-// It tries the Environment Variable first, then falls back to Render.
-const ENV_BASE = import.meta.env.VITE_API_BASE?.trim();
-const RENDER_FALLBACK = "https://your-app-name.onrender.com"; // 🔴 REPLACE THIS WITH YOUR RENDER URL
+const ENV_BASE = import.meta.env.VITE_API_BASE?.trim()?.replace(/\/+$/, "");
+const RENDER_FALLBACK = "https://your-app-name.onrender.com"; // 🔴 DOUBLE CHECK THIS URL
 const LOCAL_FALLBACK = "http://localhost:5000";
 
 const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 export const API_BASE = ENV_BASE || (isLocal ? LOCAL_FALLBACK : RENDER_FALLBACK);
-export const WS_URL = API_BASE.replace("http", "ws") + "/ws";
 
-/* ================= CONFIG ================= */
+/* ================= STORAGE KEYS ================= */
 const TOKEN_KEY = "as_token";
 const USER_KEY = "as_user";
-const REQUEST_TIMEOUT = 60000;
 
-/* ================= STORAGE ================= */
-export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export const getToken = () => {
+  const t = localStorage.getItem(TOKEN_KEY);
+  return (t && t !== "undefined" && t !== "null") ? t : null;
+};
+
 export const setToken = (token) => token ? localStorage.setItem(TOKEN_KEY, token) : localStorage.removeItem(TOKEN_KEY);
-export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
-
-export function getSavedUser() {
-  try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch { return null; }
-}
 export const saveUser = (user) => user ? localStorage.setItem(USER_KEY, JSON.stringify(user)) : localStorage.removeItem(USER_KEY);
+export const getSavedUser = () => {
+  try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch { return null; }
+};
 
-/* ================= UTIL ================= */
-function joinUrl(base, path) {
-  const cleanBase = String(base).replace(/\/+$/, "");
+/* ================= URL ENGINE (FIXED) ================= */
+function getUrl(path) {
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
-  // Ensure we don't double up on /api/api
+  // If the path already has /api, don't add it again.
   const finalPath = cleanPath.startsWith("/api") ? cleanPath : `/api${cleanPath}`;
-  return `${cleanBase}${finalPath}`;
-}
-
-async function fetchWithTimeout(url, options = {}, ms = REQUEST_TIMEOUT) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), ms);
-  try { return await fetch(url, { ...options, signal: controller.signal }); }
-  finally { clearTimeout(id); }
-}
-
-function attachTenantHeader(headers) {
-  const user = getSavedUser();
-  if (user?.companyId) { headers["x-company-id"] = String(user.companyId); }
-  return headers;
-}
-
-function extractData(res) {
-  if (!res || res.ok === false) return null;
-  return res.data !== undefined ? res.data : res;
+  return `${API_BASE}${finalPath}`;
 }
 
 /* ================= CORE REQUEST ================= */
-export async function req(path, { method = "GET", body, auth = true, headers: extraHeaders = {} } = {}) {
-  const headers = attachTenantHeader({ "Content-Type": "application/json", ...extraHeaders });
-
-  if (auth) {
-    const token = getToken();
-    if (!token) return { ok: false, error: "No session", silent: true };
-    headers.Authorization = `Bearer ${token}`;
-  }
+async function request(path, options = {}) {
+  const token = getToken();
+  const user = getSavedUser();
+  
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token && { "Authorization": `Bearer ${token}` }),
+    ...(user?.companyId && { "x-company-id": String(user.companyId) }),
+    ...options.headers
+  };
 
   try {
-    const response = await fetchWithTimeout(joinUrl(API_BASE, path), {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+    const response = await fetch(getUrl(path), {
+      ...options,
+      headers
     });
 
-    const data = await response.json();
-
-    if (response.status === 401 && auth) {
-      clearToken();
-      return { ok: false, error: "Expired", unauthorized: true };
+    if (response.status === 401) {
+      setToken(null); // Auto-logout on expiry
+      return { ok: false, error: "Session Expired" };
     }
 
-    if (!response.ok) return { ok: false, error: data?.error || "Error", status: response.status };
-    return data;
+    const data = await response.json();
+    return response.ok ? data : { ok: false, error: data?.error || "Request failed" };
   } catch (err) {
-    return { ok: false, error: "Offline" };
+    return { ok: false, error: "Network Error" };
   }
 }
 
 /* ================= API SURFACE ================= */
 export const api = {
+  // 🔐 LOGIN FIX: Standardized to avoid credential mismatch
   login: async (email, password) => {
-    // Explicit path for login to avoid joinUrl double-up
-    const res = await fetch(`${API_BASE}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || "Login failed");
-    setToken(data.token);
-    saveUser(data.user);
-    return data;
+    try {
+      const res = await fetch(getUrl("/auth/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          email: email.trim().toLowerCase(), 
+          password 
+        }),
+      });
+      
+      const data = await res.json();
+      if (!res.ok) return { ok: false, error: data?.error || "Invalid Credentials" };
+      
+      setToken(data.token);
+      saveUser(data.user);
+      return { ok: true, ...data };
+    } catch (err) {
+      return { ok: false, error: "Server Offline" };
+    }
   },
 
-  /* 🛡️ STEALTH SYNCED CALLS */
-  // Note: We use the paths your TradingRoom.jsx and Backend v32.5 expect
-  aiSnapshot: () => req("/paper/snapshot"),
-  paperAccount: () => req("/paper/account"),
+  // 📈 TRADING ENGINE SYNC
+  status: () => request("/paper/status"),
+  snapshot: () => request("/paper/snapshot"),
   
-  placePaperOrder: (payload) => req("/paper/order", {
+  placeOrder: (payload) => request("/paper/order", {
     method: "POST",
-    body: { ...payload, mode: "STEALTH_LEARNING" },
+    body: { ...payload, mode: "STEALTH" },
   }),
 
-  marketPrice: (symbol) => req(`/market/price?symbol=${symbol}`),
-  tradeHistory: () => req("/analytics/history"),
-  
-  // Keep your Enterprise v30 placeholders so nothing breaks
-  aiBrainStats: () => req("/ai/brain/stats"),
-  executionMetrics: () => req("/execution/metrics"),
+  // 🧠 AI & ANALYTICS
+  getBrain: () => request("/ai/brain"),
+  getAnalytics: () => request("/analytics/trading"),
+  getHistory: () => request("/analytics/history"),
 };
 
 export default api;
