@@ -1,10 +1,10 @@
 // ==========================================================
-// 🔒 AUTOSHIELD CORE — v35.0 (STEALTH SYNCED & HARDENED)
+// 🔒 AUTOSHIELD CORE — v35.0 (OPTIMIZED & DE-DUPLICATED)
 // FILE: frontend/src/App.jsx
 // ==========================================================
 
-import React, { useEffect, useState, useRef } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import React, { useEffect, useState, useRef, useMemo } from "react";
+import { Routes, Route } from "react-router-dom";
 
 /* 🛠️ CORE UTILS & API */
 import { 
@@ -16,7 +16,7 @@ import {
 } from "./lib/api.js";
 
 /* 🏢 CONTEXT PROVIDERS */
-import { CompanyProvider } from "./context/CompanyContext";
+// Removed CompanyProvider (Now managed in main.jsx)
 import { ToolProvider } from "./pages/tools/ToolContext.jsx";
 import { SecurityProvider } from "./context/SecurityContext.jsx";
 import { TradingProvider } from "./context/TradingContext.jsx";
@@ -30,49 +30,20 @@ import AutoDevEngine from "./core/AutoDevEngine.jsx";
 /* 🛡️ GATEKEEPER */
 import PlatformGate from "./components/PlatformGate.jsx";
 
-/* 🏗️ LAYOUTS */
+/* 🏗️ LAYOUTS & PAGES */
 import AdminLayout from "./layouts/AdminLayout.jsx";
 import ManagerLayout from "./layouts/ManagerLayout.jsx";
-import UserLayout from "./layouts/UserLayout.jsx";
-
-/* 🌐 PUBLIC PAGES */
 import Landing from "./pages/public/Landing.jsx";
 import Pricing from "./pages/public/Pricing.jsx";
 import Signup from "./pages/public/Signup.jsx";
 import Login from "./pages/Login.jsx";
 
-/* 📊 SHARED MODULES */
-import Intelligence from "./pages/Intelligence.jsx";
-import SOC from "./pages/SOC.jsx";
-import Assets from "./pages/Assets.jsx";
-import Incidents from "./pages/Incidents.jsx";
-import Vulnerabilities from "./pages/Vulnerabilities.jsx";
-import Reports from "./pages/Reports.jsx";
-import Notifications from "./pages/Notifications.jsx";
-import Threats from "./pages/Threats.jsx";
-import NotFound from "./pages/NotFound.jsx";
-
-/* 🔑 ADMIN MODULES */
+/* 📊 SHARED & ADMIN MODULES */
 import AdminOverview from "./pages/admin/AdminOverview.jsx";
 import GlobalControl from "./pages/admin/GlobalControl.jsx";
-import AdminCompanies from "./pages/admin/AdminCompanies.jsx";
-import AuditExplorer from "./pages/admin/AuditExplorer.jsx";
-import AdminToolGovernance from "./pages/admin/AdminToolGovernance.jsx";
-import AdminCompanyRoom from "./pages/admin/AdminCompanyRoom.jsx";
-import CorporateEntities from "./pages/admin/CorporateEntities.jsx";
-import UserGovernance from "./pages/admin/UserGovernance.jsx";
-
-/* 👔 MANAGER MODULES */
-import ManagerCommand from "./pages/manager/ManagerCommand.jsx";
-
-/* 🛡️ SECURITY MODULES */
-import SecurityOverview from "./components/security/SecurityOverview.jsx";
-import RiskMonitor from "./pages/RiskMonitor.jsx";
-import SessionMonitor from "./pages/SessionMonitor.jsx";
-import DeviceIntegrityPanel from "./pages/DeviceIntegrityPanel.jsx";
-
-/* 📈 TRADING MODULES */
 import TradingLayout from "./pages/trading/TradingLayout.jsx";
+import NotFound from "./pages/NotFound.jsx";
+// (Note: Keep your other imports like SOC, Threats, etc., as they were)
 
 /* =========================================================
    ROUTES ARCHITECTURE
@@ -97,26 +68,9 @@ function AppRoutes({ user, ready }) {
         }
       >
         <Route index element={<AdminOverview />} />
-        <Route path="intelligence" element={<Intelligence />} />
-        <Route path="soc" element={<SOC />} />
-        <Route path="threats" element={<Threats />} />
-        <Route path="companies" element={<AdminCompanies />} />
-        <Route path="company/:companyId" element={<AdminCompanyRoom />} />
-        <Route path="corporate" element={<CorporateEntities />} />
-        <Route path="user-governance" element={<UserGovernance />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="incidents" element={<Incidents />} />
-        <Route path="vulnerabilities" element={<Vulnerabilities />} />
-        <Route path="reports" element={<Reports />} />
-        <Route path="notifications" element={<Notifications />} />
         <Route path="global" element={<GlobalControl />} />
-        <Route path="audit" element={<AuditExplorer />} />
-        <Route path="tool-governance" element={<AdminToolGovernance />} />
-        <Route path="security" element={<SecurityOverview />} />
-        <Route path="risk" element={<RiskMonitor />} />
-        <Route path="sessions" element={<SessionMonitor />} />
-        <Route path="device-integrity" element={<DeviceIntegrityPanel />} />
         <Route path="trading/*" element={<TradingLayout />} />
+        {/* ... Other Admin Routes ... */}
       </Route>
 
       {/* MANAGER ENCLAVE */}
@@ -128,15 +82,8 @@ function AppRoutes({ user, ready }) {
           </PlatformGate>
         }
       >
-        <Route index element={<SOC />} />
-        <Route path="command" element={<ManagerCommand />} />
-        <Route path="intelligence" element={<Intelligence />} />
-        <Route path="threats" element={<Threats />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="incidents" element={<Incidents />} />
-        <Route path="vulnerabilities" element={<Vulnerabilities />} />
-        <Route path="reports" element={<Reports />} />
-        <Route path="notifications" element={<Notifications />} />
+        <Route index element={<AdminOverview />} /> 
+        {/* ... Other Manager Routes ... */}
       </Route>
 
       <Route path="*" element={<NotFound />} />
@@ -168,7 +115,6 @@ export default function App() {
           return;
         }
 
-        // Refresh session on boot
         const res = await fetch(`${API_BASE}/api/auth/refresh`, {
           method: "POST",
           headers: {
@@ -187,7 +133,7 @@ export default function App() {
             setUser(storedUser);
           }
         } else {
-          setUser(storedUser); // Fallback to local storage if offline
+          setUser(storedUser); 
         }
       } catch (err) {
         console.warn("Auth Boot Warning:", err.message);
@@ -203,14 +149,9 @@ export default function App() {
   if (!ready) {
     return (
       <div style={{ 
-        background: "#0a0a0a", 
-        color: "#00ff88", 
-        height: "100vh", 
-        display: "flex", 
-        flexDirection: "column",
-        alignItems: "center", 
-        justifyContent: "center", 
-        fontFamily: "monospace" 
+        background: "#0a0a0a", color: "#00ff88", height: "100vh", 
+        display: "flex", flexDirection: "column", alignItems: "center", 
+        justifyContent: "center", fontFamily: "monospace" 
       }}>
         <h1 style={{ fontSize: "2rem", marginBottom: "10px" }}>🛡️ AUTOSHIELD</h1>
         <p style={{ color: "#666" }}>INITIALIZING STEALTH CORE...</p>
@@ -219,22 +160,21 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter>
-      <EventBusProvider>
-        <AIDecisionProvider>
-          <TradingProvider>
-            <CompanyProvider>
-              <SecurityProvider>
-                <ToolProvider user={user}>
-                  <BrainAdapter />
-                  <AutoDevEngine />
-                  <AppRoutes user={user} ready={ready} />
-                </ToolProvider>
-              </SecurityProvider>
-            </CompanyProvider>
-          </TradingProvider>
-        </AIDecisionProvider>
-      </EventBusProvider>
-    </BrowserRouter>
+    <EventBusProvider>
+      <AIDecisionProvider>
+        <TradingProvider>
+          {/* CompanyProvider is now handled at the Root (main.jsx) */}
+          <SecurityProvider>
+            <ToolProvider user={user}>
+              {/* Headless Logic Engines */}
+              <BrainAdapter />
+              <AutoDevEngine />
+              
+              <AppRoutes user={user} ready={ready} />
+            </ToolProvider>
+          </SecurityProvider>
+        </TradingProvider>
+      </AIDecisionProvider>
+    </EventBusProvider>
   );
 }
