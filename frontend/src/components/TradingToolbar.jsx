@@ -1,312 +1,165 @@
 // ==========================================================
-// FILE: frontend/src/components/TradingToolbar.jsx
-// VERSION: v2.0 (ENGINE + AI + ROUTES FULLY ALIGNED)
+// 🔒 AUTOSHIELD TOOLBAR — v5.0 (STEALTH SYNCED)
+// FILE: TradingToolbar.jsx - FULL REPLACEMENT
 // ==========================================================
 
 import React, { useEffect, useMemo, useState } from "react";
-import { getToken, getSavedUser } from "../lib/api.js";
+import { getToken, getSavedUser, API_BASE } from "../lib/api.js";
 
-/* =========================================================
-CONFIG
-========================================================= */
-
-const POLL_INTERVAL = 5000;
-
-/* =========================================================
-HELPERS
-========================================================= */
-
-function safeNum(v, fallback = 0) {
+/* ================= HELPERS ================= */
+const safeNum = (v, fallback = 0) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
+};
+
+function formatUptime(seconds) {
+  const s = safeNum(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m ${sec}s`;
 }
-
-function formatUptimeFromMs(ms) {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-/* =========================================================
-COMPONENT
-========================================================= */
 
 export default function TradingToolbar({
   mode = "Paper",
-  setMode = () => {},
-
+  setMode,
   symbol = "BTCUSDT",
-  setSymbol = () => {},
-  symbols = [],
-
-  feedStatus = "UNKNOWN",
-  lastText = "Loading",
-
+  setSymbol,
+  symbols = ["BTCUSDT"],
+  feedStatus = "OFFLINE",
+  lastText = "...",
   running = false,
-
-  showMoney = false,
-  setShowMoney = () => {},
-
-  showTradeLog = false,
-  setShowTradeLog = () => {},
-
-  showHistory = false,
-  setShowHistory = () => {},
-
-  showControls = false,
-  setShowControls = () => {},
-
-  showAI = false,
-  setShowAI = () => {},
-
-  wideChart = false,
-  setWideChart = () => {},
+  showAI,
+  setShowAI,
+  showMoney,
+  setShowMoney,
+  // ... other props passed from parent
 }) {
-
-  const [engine, setEngine] = useState("CHECKING");
-  const [ai, setAI] = useState("0.00");
+  const [engineStatus, setEngineStatus] = useState("SYNCING");
+  const [intelScore, setIntelScore] = useState("0.00");
   const [uptime, setUptime] = useState("0s");
 
-  const API_BASE =
-    (import.meta.env.VITE_API_BASE || "").replace(/\/+$/, "");
-
-  /* ======================================================
-  AUTH
-  ====================================================== */
-
-  function buildAuthHeaders() {
-    const token = getToken();
-    const user = getSavedUser();
-
-    const headers = {
-      "Content-Type": "application/json",
-    };
-
-    if (token) headers.Authorization = `Bearer ${token}`;
-    if (user?.companyId) headers["x-company-id"] = String(user.companyId);
-
-    return headers;
-  }
-
-  /* ======================================================
-  LOAD STATUS (🔥 FIXED)
-  ====================================================== */
-
+  /* ================= 📡 STEALTH TELEMETRY ================= */
   useEffect(() => {
-    let mounted = true;
+    let active = true;
 
-    async function loadStatus() {
+    async function fetchStatus() {
       if (!API_BASE) return;
-
       try {
+        const token = getToken();
+        const user = getSavedUser();
+        
         const res = await fetch(`${API_BASE}/api/trading/status`, {
-          headers: buildAuthHeaders(),
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "x-company-id": user?.companyId || ""
+          }
         });
 
-        if (!res.ok) return;
-
+        if (!res.ok) throw new Error();
         const data = await res.json();
-        if (!mounted) return;
 
-        /* ================= ENGINE ================= */
-
-        const engineState =
-          data?.engine ||
-          (data?.telemetry?.ticks > 0 ? "RUNNING" : "STARTING");
-
-        setEngine(String(engineState || "OFFLINE"));
-
-        /* ================= AI ================= */
-
-        const confidence =
-          data?.ai?.confidence ??
-          0;
-
-        setAI(safeNum(confidence, 0).toFixed(2));
-
-        /* ================= UPTIME ================= */
-
-        const ticks = safeNum(data?.telemetry?.ticks, 0);
-
-        if (ticks > 0) {
-          setUptime(formatUptimeFromMs(ticks * 1000));
-        } else {
-          setUptime("0s");
+        if (active) {
+          setEngineStatus(data?.engine || (data?.active ? "RUNNING" : "IDLE"));
+          setIntelScore(safeNum(data?.ai?.confidence || data?.confidence).toFixed(2));
+          setUptime(formatUptime(data?.telemetry?.uptime || data?.uptime || 0));
         }
-
-      } catch {
-        if (mounted) {
-          setEngine("OFFLINE");
-        }
+      } catch (err) {
+        if (active) setEngineStatus("OFFLINE");
       }
     }
 
-    loadStatus();
-    const timer = setInterval(loadStatus, POLL_INTERVAL);
+    fetchStatus();
+    const timer = setInterval(fetchStatus, 10000); // Relaxed to 10s for 7-year-old phone stability
+    return () => { active = false; clearInterval(timer); };
+  }, []);
 
-    return () => {
-      mounted = false;
-      clearInterval(timer);
-    };
-  }, [API_BASE]);
-
-  /* ======================================================
-  SAFE NORMALIZATION
-  ====================================================== */
-
-  const safeSymbols = useMemo(
-    () =>
-      Array.isArray(symbols) && symbols.length
-        ? symbols
-        : ["BTCUSDT"],
-    [symbols]
-  );
-
-  const normalizedMode =
-    String(mode || "Paper").toLowerCase() === "live"
-      ? "Live"
-      : "Paper";
-
-  const normalizedFeedStatus =
-    String(feedStatus || "UNKNOWN").toUpperCase();
-
-  const normalizedLastText =
-    lastText ? String(lastText) : "Loading";
-
-  const paperState =
-    running ? "ON" : "OFF";
-
-  /* ======================================================
-  UI
-  ====================================================== */
-
-  const chip = {
-    padding: "6px 10px",
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(0,0,0,0.18)",
-    fontSize: 12,
-    opacity: 0.95,
-    whiteSpace: "nowrap",
-  };
-
-  const pill = {
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(0,0,0,0.18)",
-    borderRadius: 12,
-    padding: 10,
-    minWidth: 150,
-  };
-
-  const btn = (active = false) => ({
-    padding: "8px 10px",
-    borderRadius: 10,
-    border: "1px solid rgba(255,255,255,0.18)",
-    background: active
-      ? "rgba(122,167,255,0.22)"
-      : "rgba(255,255,255,0.06)",
-    color: "white",
-    cursor: "pointer",
-    fontWeight: 800,
+  /* ================= UI STYLES (HARDENED) ================= */
+  const chipStyle = (color = "#94a3b8") => ({
+    padding: "4px 10px",
+    borderRadius: "20px",
+    background: "rgba(15, 23, 42, 0.6)",
+    border: `1px solid rgba(255,255,255,0.05)`,
+    fontSize: "11px",
+    color: color,
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    fontWeight: "bold"
   });
 
-  /* ======================================================
-  RENDER
-  ====================================================== */
+  const btnStyle = (active) => ({
+    padding: "6px 12px",
+    borderRadius: "8px",
+    border: "1px solid",
+    borderColor: active ? "#3b82f6" : "rgba(255,255,255,0.1)",
+    background: active ? "rgba(59, 130, 246, 0.2)" : "transparent",
+    color: active ? "#fff" : "#64748b",
+    cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: "bold",
+    transition: "all 0.2s"
+  });
 
   return (
-    <div className="tpBar">
-      <div className="tpLeft">
-        <div className="tpTitleRow">
-          <h2 className="tpTitle">Trading Room</h2>
-
-          <span style={chip}>
-            Feed: <b style={{ marginLeft: 6 }}>{normalizedFeedStatus}</b>
-          </span>
-
-          <span style={chip}>
-            Last: <b style={{ marginLeft: 6 }}>{normalizedLastText}</b>
-          </span>
-
-          <span style={chip}>
-            Paper: <b style={{ marginLeft: 6 }}>{paperState}</b>
-          </span>
-
-          <span style={chip}>
-            Engine: <b style={{ marginLeft: 6 }}>{engine}</b>
-          </span>
-
-          <span style={chip}>
-            AI: <b style={{ marginLeft: 6 }}>{ai}</b>
-          </span>
-
-          <span style={chip}>
-            Uptime: <b style={{ marginLeft: 6 }}>{uptime}</b>
-          </span>
+    <div style={{
+      background: "#0a0a0a",
+      borderBottom: "1px solid #1e293b",
+      padding: "12px 20px",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: "10px"
+    }}>
+      {/* LEFT: STATUS CHIPS */}
+      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ color: "#fff", fontWeight: "900", marginRight: "10px", fontSize: "14px" }}>
+          STEALTH <span style={{ color: "#3b82f6" }}>CORE</span>
+        </div>
+        
+        <div style={chipStyle(feedStatus === "CONNECTED" ? "#22c55e" : "#ef4444")}>
+          FEED: <span>{feedStatus}</span>
+        </div>
+        
+        <div style={chipStyle()}>
+          ENGINE: <span style={{ color: engineStatus === "RUNNING" ? "#22c55e" : "#f59e0b" }}>{engineStatus}</span>
         </div>
 
-        <div className="tpSub">
-          Live feed + chart + paper trader + AI explanations
+        <div style={chipStyle()}>
+          AI INTEL: <span style={{ color: "#3b82f6" }}>{intelScore}</span>
+        </div>
+
+        <div style={chipStyle()}>
+          UPTIME: <span style={{ color: "#fff" }}>{uptime}</span>
         </div>
       </div>
 
-      <div className="tpRight">
-        <div style={pill}>
-          <div className="tpPillLabel">Mode</div>
-
-          <div className="tpRow">
-            <button
-              style={btn(normalizedMode === "Live")}
-              onClick={() => setMode("Live")}
-            >
-              Live
-            </button>
-
-            <button
-              style={btn(normalizedMode === "Paper")}
-              onClick={() => setMode("Paper")}
-            >
-              Paper
-            </button>
-          </div>
+      {/* RIGHT: CONTROLS */}
+      <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+        <div style={{ display: "flex", background: "#111", borderRadius: "8px", padding: "2px" }}>
+          <button onClick={() => setMode("Paper")} style={btnStyle(mode === "Paper")}>PAPER</button>
+          <button onClick={() => setMode("Live")} style={btnStyle(mode === "Live")}>LIVE</button>
         </div>
 
-        <div style={pill}>
-          <div className="tpPillLabel">Symbol</div>
+        <select 
+          value={symbol} 
+          onChange={(e) => setSymbol(e.target.value)}
+          style={{
+            background: "#111",
+            color: "#fff",
+            border: "1px solid #334155",
+            padding: "6px",
+            borderRadius: "8px",
+            fontSize: "12px"
+          }}
+        >
+          {symbols.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
 
-          <select
-            value={
-              safeSymbols.includes(symbol)
-                ? symbol
-                : safeSymbols[0]
-            }
-            onChange={(e) => setSymbol(e.target.value)}
-            className="tpSelect"
-          >
-            {safeSymbols.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div style={pill}>
-          <div className="tpPillLabel">Panels</div>
-
-          <div className="tpRow tpRowWrap">
-            <button style={btn(showMoney)} onClick={() => setShowMoney(v => !v)}>Money</button>
-            <button style={btn(showTradeLog)} onClick={() => setShowTradeLog(v => !v)}>Log</button>
-            <button style={btn(showHistory)} onClick={() => setShowHistory(v => !v)}>History</button>
-            <button style={btn(showControls)} onClick={() => setShowControls(v => !v)}>Controls</button>
-            <button style={btn(showAI)} onClick={() => setShowAI(v => !v)}>AI</button>
-            <button style={btn(wideChart)} onClick={() => setWideChart(v => !v)}>Wide</button>
-          </div>
+        <div style={{ display: "flex", gap: "6px" }}>
+          <button onClick={() => setShowMoney(!showMoney)} style={btnStyle(showMoney)}>💰</button>
+          <button onClick={() => setShowAI(!showAI)} style={btnStyle(showAI)}>🧠 AI</button>
         </div>
       </div>
     </div>
