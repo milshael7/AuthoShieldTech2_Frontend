@@ -1,15 +1,30 @@
 /* =========================================================
    AUTOSHIELD TERMINAL — ENTERPRISE INSTITUTIONAL BUILD
-   Clean • Alive • Professional • No Patchwork
+   v39.2 (UNISON UPGRADE — INDUSTRIAL HARDENED)
 ========================================================= */
+
+:root {
+  --p-bg: #0b101a;
+  --p-surface: rgba(16, 24, 39, 0.85);
+  --p-border: rgba(255, 255, 255, 0.08);
+  --p-accent: #5ec6ff;
+  --p-ok: #2bd576;
+  --p-bad: #ff5a5f;
+  --p-warn: #ffb84d;
+  --p-muted: rgba(156, 163, 175, 0.7);
+  --p-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
 
 .terminalRoot {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  background:
-    radial-gradient(circle at top left, rgba(94,198,255,.08), transparent 40%),
-    linear-gradient(180deg, rgba(255,255,255,.04), rgba(0,0,0,.65));
+  height: 100vh;
+  background: var(--p-bg);
+  background-image: 
+    radial-gradient(circle at 0% 0%, rgba(94,198,255,0.05) 0%, transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(43,213,118,0.03) 0%, transparent 50%);
+  color: #fff;
+  font-family: 'Inter', sans-serif;
   overflow: hidden;
 }
 
@@ -21,292 +36,144 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.55));
-
+  background: rgba(0, 0, 0, 0.4);
   border-bottom: 1px solid var(--p-border);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(12px);
+  z-index: 100;
 }
 
 .terminalSymbol {
-  font-weight: 900;
-  letter-spacing: .8px;
+  font-family: var(--p-font-mono);
+  font-weight: 800;
+  letter-spacing: 1px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
-.terminalSymbol::before {
-  content: "";
+/* Connection Status Dot */
+.terminalStatus {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.terminalStatus.connected {
   background: var(--p-ok);
-  box-shadow: 0 0 10px var(--p-ok);
-  animation: pulse 1.6s infinite;
+  box-shadow: 0 0 12px var(--p-ok);
+  animation: pulse 2s infinite;
+}
+
+.terminalStatus.reconnecting {
+  background: var(--p-warn);
+  box-shadow: 0 0 12px var(--p-warn);
 }
 
 @keyframes pulse {
-  0% { box-shadow: 0 0 4px var(--p-ok); }
-  50% { box-shadow: 0 0 14px var(--p-ok); }
-  100% { box-shadow: 0 0 4px var(--p-ok); }
+  0% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0.6; transform: scale(0.9); }
 }
 
-/* ================= BUY / SELL ================= */
+/* ================= ACTION BUTTONS ================= */
 
 .terminalActions {
   display: flex;
-  gap: 14px;
+  gap: 12px;
 }
 
-.terminalBuy,
-.terminalSell {
-  padding: 7px 20px;
-  border-radius: 999px;
-  font-weight: 800;
+.terminalBuy, .terminalSell, .terminalEmergency {
+  padding: 6px 18px;
+  border-radius: 4px; /* More industrial than 999px */
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
   border: 1px solid var(--p-border);
   cursor: pointer;
-  transition: all .2s ease;
-  backdrop-filter: blur(4px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.terminalBuy {
-  background: rgba(43,213,118,.15);
-  color: var(--p-ok);
-}
+.terminalBuy { background: rgba(43,213,118,0.1); color: var(--p-ok); }
+.terminalSell { background: rgba(255,90,95,0.1); color: var(--p-bad); }
+.terminalEmergency { background: rgba(255, 184, 77, 0.1); color: var(--p-warn); }
 
-.terminalSell {
-  background: rgba(255,90,95,.15);
-  color: var(--p-bad);
-}
+.terminalBuy:hover { background: var(--p-ok); color: #000; box-shadow: 0 0 20px rgba(43,213,118,0.4); }
+.terminalSell:hover { background: var(--p-bad); color: #fff; box-shadow: 0 0 20px rgba(255,90,95,0.4); }
+.terminalEmergency:hover { background: var(--p-bad); color: #fff; box-shadow: 0 0 20px var(--p-bad); border-color: var(--p-bad); }
 
-.terminalBuy:hover,
-.terminalSell:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,.08),
-    0 6px 20px rgba(0,0,0,.45);
-}
-
-/* ================= BODY ================= */
-
-.terminalBody {
-  flex: 1;
-  display: flex;
-  position: relative;
-}
-
-/* ================= TOOL RAIL ================= */
-
-.terminalRail {
-  width: 60px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding-top: 18px;
-  gap: 20px;
-
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.7));
-
-  border-right: 1px solid var(--p-border);
-}
-
-.terminalRailItem {
-  font-size: 16px;
-  cursor: pointer;
-  opacity: .7;
-  transition: all .2s ease;
-}
-
-.terminalRailItem:hover {
-  opacity: 1;
-  color: var(--p-accent);
-  transform: scale(1.05);
-}
-
-/* ================= CHART AREA ================= */
-
-.terminalChartArea {
-  flex: 1;
-  position: relative;
-  transition: margin .2s ease;
-  overflow: hidden;
-}
-
-.terminalChartArea::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  opacity: .15;
-}
-
-.terminalChartSurface {
-  width: 100%;
-  height: 100%;
-}
-
-/* ================= TRADE PANEL ================= */
+/* ================= TRADE PANEL (SIDEBAR) ================= */
 
 .terminalPanel {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 0;
-
+  width: 320px;
+  background: var(--p-surface);
+  border-left: 1px solid var(--p-border);
   display: flex;
   flex-direction: column;
-
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.6));
-
-  border-left: 1px solid var(--p-border);
-  backdrop-filter: blur(10px);
-
-  box-shadow:
-    -12px 0 40px rgba(0,0,0,.45);
-
-  z-index: 50;
+  backdrop-filter: blur(20px);
+  box-shadow: -10px 0 30px rgba(0,0,0,0.5);
 }
 
 .terminalPanelHeader {
-  padding: 16px 20px;
-  font-weight: 900;
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: .8px;
-  cursor: move;
-
-  background: rgba(0,0,0,.45);
+  padding: 16px;
+  background: rgba(0,0,0,0.3);
   border-bottom: 1px solid var(--p-border);
+  font-family: var(--p-font-mono);
+  font-size: 11px;
+  color: var(--p-muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
 }
 
 .terminalPanelBody {
-  padding: 22px;
+  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 24px;
 }
 
-/* ================= FLOATING MODE ================= */
+/* ================= LIVE PRICE DISPLAY ================= */
 
-.terminalPanel.floating {
-  height: 420px;
-  border-radius: 14px;
-  border: 1px solid var(--p-border);
-  box-shadow:
-    0 0 0 1px rgba(94,198,255,.15),
-    0 14px 45px rgba(0,0,0,.5);
+.terminalPriceDisplay {
+  font-family: var(--p-font-mono);
+  font-size: 32px;
+  font-weight: 800;
+  text-align: center;
+  padding: 20px 0;
+  border-bottom: 1px dashed var(--p-border);
 }
 
-/* ================= AI METRICS ================= */
-
-.terminalAIMetrics {
-  font-size: 13px;
-  color: var(--p-muted);
-  line-height: 1.6;
-  padding: 12px 14px;
-  background: rgba(255,255,255,.04);
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,.06);
-}
-
-/* ================= CONFIRM BUTTON ================= */
-
-.terminalConfirm {
-  padding: 12px;
-  border-radius: 999px;
-  font-weight: 900;
-  border: 1px solid var(--p-border);
-  cursor: pointer;
-  transition: all .2s ease;
-}
-
-.terminalConfirm.buy {
-  background: rgba(43,213,118,.18);
-  color: var(--p-ok);
-}
-
-.terminalConfirm.sell {
-  background: rgba(255,90,95,.18);
-  color: var(--p-bad);
-}
-
-.terminalConfirm:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,.08),
-    0 6px 18px rgba(0,0,0,.45);
-}
+.terminalPriceDisplay.up { color: var(--p-ok); }
+.terminalPriceDisplay.down { color: var(--p-bad); }
 
 /* ================= SIGNAL FEED ================= */
 
 .terminalSignalFeed {
-  height: 48px;
+  height: 40px;
+  background: rgba(0,0,0,0.5);
+  border-top: 1px solid var(--p-border);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 20px;
-  border-top: 1px solid var(--p-border);
-  background: rgba(0,0,0,.45);
-  overflow-x: auto;
+  padding: 0 15px;
+  font-family: var(--p-font-mono);
+  font-size: 11px;
+  gap: 20px;
 }
 
-.terminalSignal {
-  padding: 6px 14px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 800;
-  white-space: nowrap;
+.tickerText {
+  color: var(--p-accent);
+  font-weight: 700;
 }
 
-.terminalSignal.buy {
-  background: rgba(43,213,118,.2);
-  color: var(--p-ok);
-  box-shadow: 0 0 8px rgba(43,213,118,.3);
-}
+/* ================= CHART AREA GRID ================= */
 
-.terminalSignal.sell {
-  background: rgba(255,90,95,.2);
-  color: var(--p-bad);
-  box-shadow: 0 0 8px rgba(255,90,95,.3);
-}
-
-/* =========================================================
-   LIVE THREAT TICKER (SOC COMMAND CENTER)
-========================================================= */
-
-@keyframes tickerMove {
-
-  0% {
-    transform: translateX(0);
-  }
-
-  100% {
-    transform: translateX(-100%);
-  }
-
-}
-
-.threatTicker {
-
-  overflow: hidden;
-  white-space: nowrap;
+.terminalChartArea {
+  flex: 1;
   position: relative;
-
-}
-
-.threatTickerTrack {
-
-  display: inline-block;
-  padding-left: 100vw;
-  animation: tickerMove 40s linear infinite;
-  opacity: .85;
-
+  background: 
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 50px 50px;
 }
