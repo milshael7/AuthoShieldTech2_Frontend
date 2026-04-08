@@ -1,22 +1,23 @@
 // ==========================================================
-// 🔒 PROTECTED STEALTH UI — v5.1 (AUTHORITY-SYNCED)
-// FILE: TradingRoom.jsx - SYNCED WITH ADMIN_LAYOUT v37.1
+// 🔒 PROTECTED STEALTH UI — v5.5 (FULL CONSOLIDATED)
+// FILE: src/pages/TradingRoom.jsx
 // ==========================================================
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useOutletContext } from "react-router-dom"; // 🔑 Pulls isAdmin from Layout
+import { useOutletContext } from "react-router-dom"; 
+import { useTrading } from "../context/TradingContext.jsx";
+import { api } from "../lib/api.js";
+
+// Unified Components
 import TerminalChart from "../components/TerminalChart";
 import OrderPanel from "../components/OrderPanel";
 import AIBehaviorPanel from "../components/AIBehaviorPanel";
 import AIPerformanceHistoryPanel from "../components/AIPerformanceHistoryPanel";
 
-import { api } from "../lib/api.js";
-import { useTrading } from "../context/TradingContext.jsx";
-
 const SYMBOL = "BTCUSDT";
 
 export default function TradingRoom() {
-  // 🔑 AUTHENTICATION BRIDGE: Check if current user is Admin or Manager
+  // 🔑 THE AUTHORITY KEY: Received from AdminLayout
   const { isAdmin } = useOutletContext(); 
 
   const {
@@ -25,30 +26,18 @@ export default function TradingRoom() {
     paperStatus
   } = useTrading();
 
-  /* ================= STATE ================= */
-  const [price, setPrice] = useState(null);
+  /* ================= 🧠 ENGINE STATE ================= */
   const [candles, setCandles] = useState([]);
   const [position, setPosition] = useState(null);
   const [trades, setTrades] = useState([]);
   const [decisions, setDecisions] = useState([]);
   const [equity, setEquity] = useState(0);
   const [loading, setLoading] = useState(false);
-  
-  const [capital, setCapital] = useState({ total: 0, available: 0, locked: 0 });
-  const [protection, setProtection] = useState({ armed: false, trailPct: 0 });
-
   const lastCandleRef = useRef(null);
 
-  /* ================= HELPERS ================= */
-  const fmtMoney = (v) => Number.isFinite(Number(v)) ? Number(v).toLocaleString(undefined, { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 2 
-  }) : "0.00";
-
-  /* ================= PRICE & CANDLE LOGIC ================= */
+  /* ================= 📊 PRICE & CANDLE SYNC ================= */
   useEffect(() => {
     if (!Number.isFinite(livePrice)) return;
-    setPrice(livePrice);
     const now = Math.floor(Date.now() / 60000) * 60000;
     setCandles(prev => {
       const last = lastCandleRef.current;
@@ -65,118 +54,141 @@ export default function TradingRoom() {
     });
   }, [livePrice]);
 
-  /* ================= STEALTH SNAPSHOT SYNC ================= */
+  /* ================= 📡 BACKEND v32.5 SNAPSHOT SYNC ================= */
   useEffect(() => {
     if (!snapshot) return;
-    const brainMemory = snapshot.intelligence || snapshot.decisions || [];
-    const tradeHistory = snapshot.history || snapshot.trades || [];
     setPosition(snapshot.position || null);
-    setTrades(Array.isArray(tradeHistory) ? tradeHistory.slice(-200) : []);
-    setDecisions(Array.isArray(brainMemory) ? brainMemory.slice(-200) : []);
-    const currentEquity = Number(snapshot.equity || snapshot.balance) || 0;
-    setEquity(currentEquity);
-    setCapital({
-      total: currentEquity,
-      available: Number(snapshot.availableCapital || snapshot.available) || 0,
-      locked: Number(snapshot.lockedCapital || snapshot.locked) || 0
-    });
-    if (snapshot.protection) setProtection(snapshot.protection);
+    setTrades(Array.isArray(snapshot.history || snapshot.trades) ? (snapshot.history || snapshot.trades).slice(-200) : []);
+    setDecisions(Array.isArray(snapshot.intelligence || snapshot.decisions) ? (snapshot.intelligence || snapshot.decisions).slice(-200) : []);
+    setEquity(Number(snapshot.equity || snapshot.balance) || 0);
   }, [snapshot]);
 
-  /* ================= ACTION HANDLER ================= */
+  /* ================= ⚡ EMERGENCY COMMANDS ================= */
   const closeNow = async () => {
-    if (!isAdmin || loading || !position) return; // 🛑 BLOCK NON-ADMINS
+    if (!isAdmin || loading || !position) return; 
     setLoading(true);
     try {
-      const res = await api.placePaperOrder({ 
+      await api.placePaperOrder({ 
         side: position?.side === 'buy' ? 'sell' : 'buy',
         qty: position?.qty,
         type: 'market',
         isClose: true,
-        symbol: SYMBOL
+        symbol: SYMBOL,
+        mode: "EMERGENCY_EXIT"
       });
-      if (res?.data?.snapshot) setPosition(res.data.snapshot.position || null);
     } catch (err) {
-      console.error("Action Failed:", err.message);
+      console.error("[SYS_ERR]:", err.message);
     } finally {
       setLoading(false);
     }
   };
 
   const pnl = useMemo(() => {
-    if (!position || !price) return 0;
+    if (!position || !livePrice) return 0;
     const direction = position.side === "buy" ? 1 : -1;
-    return (price - position.entry) * position.qty * direction;
-  }, [position, price]);
+    return (livePrice - position.entry) * position.qty * direction;
+  }, [position, livePrice]);
+
+  const fmt = (v) => Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 20, background: "#050505", minHeight: "100%", color: "#fff" }}>
+    <div style={{ 
+      display: "grid", 
+      gridTemplateColumns: "1fr 340px", 
+      gap: "20px", 
+      background: "#050505", 
+      minHeight: "100%", 
+      color: "#fff", 
+      padding: '20px' 
+    }}>
       
-      {/* 📊 LEFT: ENGINE VISUALS */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* 📊 LEFT SECTION: ENGINE & INTELLIGENCE VISUALS */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: "20px" }}>
         <TerminalChart candles={candles} trades={trades} position={position} />
-        <AIBehaviorPanel trades={trades} decisions={decisions} position={position} />
-        <AIPerformanceHistoryPanel trades={trades} />
+        
+        {/* Uniform Intel Section */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+          <AIBehaviorPanel trades={trades} decisions={decisions} position={position} />
+          <AIPerformanceHistoryPanel trades={trades} />
+        </div>
       </div>
 
-      {/* 🕹️ RIGHT: COMMAND CONSOLE */}
-      <div style={{ backgroundColor: "#0b101a", padding: 20, borderRadius: 4, border: "1px solid #00ff8822", display: 'flex', flexDirection: 'column', height: 'fit-content' }}>
+      {/* 🕹️ RIGHT SECTION: COMMAND OVERRIDE CONSOLE */}
+      <div style={{ 
+        backgroundColor: "#0b101a", 
+        padding: "20px", 
+        borderRadius: "2px", 
+        border: "1px solid #00ff8822", 
+        display: 'flex', 
+        flexDirection: 'column', 
+        height: 'fit-content',
+        position: 'sticky',
+        top: '20px'
+      }}>
         
-        {/* AUTHORITY TAG */}
-        <div style={{ fontSize: '10px', color: isAdmin ? '#00ff88' : '#3498db', border: `1px solid ${isAdmin ? '#00ff8844' : '#3498db44'}`, padding: '4px 8px', borderRadius: '2px', textAlign: 'center', marginBottom: 20, letterSpacing: '2px', background: isAdmin ? '#00ff8805' : '#3498db05' }}>
-          {isAdmin ? "COMMAND_OVERRIDE_ENABLED" : "SECURE_MONITOR_MODE"}
+        {/* SECURITY TAG */}
+        <div style={{ 
+          fontSize: '10px', 
+          color: isAdmin ? '#00ff88' : '#3498db', 
+          border: `1px solid ${isAdmin ? '#00ff8844' : '#3498db44'}`, 
+          padding: '8px', 
+          borderRadius: '1px', 
+          textAlign: 'center', 
+          marginBottom: "20px", 
+          letterSpacing: '2px', 
+          background: isAdmin ? '#00ff8805' : '#3498db05',
+          fontWeight: '900'
+        }}>
+          {isAdmin ? "COMMAND_OVERRIDE_ACTIVE" : "SECURE_MONITOR_SESSION"}
         </div>
 
-        <OrderPanel symbol={SYMBOL} price={price} disabled={!isAdmin} />
+        {/* ORDER MODULE: Receives Admin Authority */}
+        <OrderPanel symbol={SYMBOL} price={livePrice} disabled={!isAdmin} />
 
-        <div style={{ marginTop: 20 }}>
+        {/* EMERGENCY CONTROLS */}
+        <div style={{ marginTop: "20px" }}>
           <button 
             onClick={closeNow} 
             disabled={!position || loading || !isAdmin}
             style={{ 
               width: "100%", 
-              backgroundColor: !isAdmin ? "#1a1f26" : !position ? "#222" : "#ff4444", 
-              color: !isAdmin ? "#444" : "white", 
-              padding: "14px", 
-              border: `1px solid ${!isAdmin ? "#222" : "#ff444433"}`, 
-              borderRadius: 2, 
+              backgroundColor: !isAdmin ? "#151921" : !position ? "#1a1a1a" : "#ff4444", 
+              color: !isAdmin ? "#333" : "white", 
+              padding: "16px", 
+              border: 'none', 
+              borderRadius: "1px", 
               cursor: (position && isAdmin) ? "pointer" : "not-allowed",
-              fontWeight: "bold",
-              letterSpacing: '1px'
+              fontWeight: "900",
+              letterSpacing: '2px',
+              transition: '0.3s'
             }}
           >
-            {!isAdmin ? "ACCESS_RESTRICTED" : loading ? "SYNCHRONIZING..." : "MARKET_CLOSE_COMMAND"}
+            {isAdmin ? (loading ? "SYNCING..." : "EMERGENCY_EXIT") : "NODE_LOCKED"}
           </button>
         </div>
 
-        {/* STATS AREA */}
-        <div style={{ marginTop: 30, borderTop: "1px solid #ffffff11", paddingTop: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 15 }}>
-            <span style={{ color: "#555", fontSize: '12px' }}>ENGINE_STATUS</span>
-            <span style={{ color: paperStatus === "online" ? "#00ff88" : "#ff9100", fontWeight: "bold", fontSize: '12px' }}>
-              {paperStatus ? paperStatus.toUpperCase() : "OFFLINE"}
-            </span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 15 }}>
-            <span style={{ color: "#555", fontSize: '12px' }}>CURRENT_EQUITY</span>
-            <span style={{ color: "#fff", fontWeight: 'bold' }}>${fmtMoney(equity)}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "#555", fontSize: '12px' }}>LIVE_PNL</span>
-            <span style={{ color: pnl >= 0 ? "#00ff88" : "#ff4444", fontWeight: "bold" }}>
-              {pnl >= 0 ? "+" : ""}${fmtMoney(pnl)}
-            </span>
-          </div>
+        {/* REAL-TIME SESSION STATS */}
+        <div style={{ marginTop: "30px", borderTop: "1px solid #ffffff11", paddingTop: "20px" }}>
+          <StatRow label="NETWORK_STATUS" value={paperStatus?.toUpperCase() || "OFFLINE"} color={paperStatus === "connected" ? "#00ff88" : "#ff9100"} />
+          <StatRow label="TOTAL_EQUITY" value={`$${fmt(equity)}`} />
+          <StatRow label="UNREALIZED_PNL" value={`${pnl >= 0 ? "+" : ""}$${fmt(pnl)}`} color={pnl >= 0 ? "#00ff88" : "#ff4444"} />
         </div>
 
-        {/* FOOTER DATA */}
-        <div style={{ marginTop: 'auto', paddingTop: 20, fontSize: "10px", color: "#333", borderTop: "1px solid #ffffff05" }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>AVAILABLE: ${fmtMoney(capital.available)}</span>
-            <span>LOCKED: ${fmtMoney(capital.locked)}</span>
-          </div>
+        {/* SYSTEM FOOTER */}
+        <div style={{ marginTop: "40px", fontSize: '9px', color: '#222', borderTop: '1px solid #ffffff05', paddingTop: '10px' }}>
+          AUTO_SHIELD_SECURE_LINK v5.5 // {SYMBOL}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* Internal Row Helper for Uniformity */
+function StatRow({ label, value, color = "#fff" }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
+      <span style={{ color: "#444", fontSize: '10px', fontWeight: 'bold', letterSpacing: '1px' }}>{label}</span>
+      <span style={{ color, fontWeight: 'bold', fontSize: '12px', fontFamily: 'monospace' }}>{value}</span>
     </div>
   );
 }
