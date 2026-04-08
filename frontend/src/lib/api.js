@@ -1,5 +1,5 @@
 // ============================================================
-// 🔒 AUTOSHIELD API CORE — v35.1 (BUILD-FIXED)
+// 🔒 AUTOSHIELD API CORE — v35.2 (VERCEL-READY)
 // FILE: src/lib/api.js
 // ============================================================
 
@@ -25,12 +25,10 @@ export const getToken = () => {
   return t && t !== "undefined" && t !== "null" ? t : null;
 };
 
-// ✅ ADDED: AdminLayout calls this specifically
 export const clearToken = () => {
   if (isBrowser) localStorage.removeItem(TOKEN_KEY);
 };
 
-// ✅ ADDED: AdminLayout calls this specifically
 export const clearUser = () => {
   if (isBrowser) localStorage.removeItem(USER_KEY);
 };
@@ -101,7 +99,8 @@ async function request(path, options = {}) {
 }
 
 /* ================= API SURFACE ================= */
-const api = {
+// We export this as a named const AND a default to prevent any "not exported" errors
+export const api = {
   login: async (email, password) => {
     try {
       const res = await fetch(getUrl("/auth/login"), {
@@ -123,8 +122,9 @@ const api = {
   snapshot: () => request("/paper/snapshot"),
   getBrain: () => request("/ai/brain"),
   getAnalytics: () => request("/analytics/trading"),
-  clearToken, // Also attaching to object for convenience
+  clearToken, 
   clearUser
 };
 
+// Default export for 'import api from ...'
 export default api;
