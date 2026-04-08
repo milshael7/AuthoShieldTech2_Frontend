@@ -1,9 +1,9 @@
 // ==========================================================
-// 🏢 ADMIN LAYOUT — v35.3 (AUTH-SYNCED & STABLE)
+// 🏢 ADMIN LAYOUT — v35.4 (FORCED RENDER & ROLE SYNC)
 // FILE: src/layouts/AdminLayout.jsx
 // ==========================================================
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 // 🔑 CORE AUTH INTEGRATION
@@ -18,8 +18,9 @@ const SIDEBAR_WIDTH = 260;
 const ADVISOR_WIDTH = 380;
 
 export default function AdminLayout() {
-  const { user, logout } = useAuth(); // Now pulling directly from our new AuthContext
-  const { systemStatus } = useSecurity() || { systemStatus: "secure" };
+  const { user, logout } = useAuth();
+  const securityCtx = useSecurity() || {};
+  const systemStatus = securityCtx.systemStatus || "secure";
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [advisorOpen, setAdvisorOpen] = useState(() => {
@@ -27,12 +28,21 @@ export default function AdminLayout() {
     return localStorage.getItem("admin.advisor.open") !== "false";
   });
 
+  // 🛡️ ROLE ALIGNMENT FIX (v35.4)
+  // We normalize the role to lowercase to prevent "Admin" vs "admin" mismatches.
+  const rawRole = String(user?.role || "guest").toLowerCase();
+  
+  // We check for 'admin' or 'manager' explicitly.
+  const isAdmin = rawRole === "admin";
+  const isManager = rawRole === "manager" || isAdmin;
+
+  // DEBUG: Check your console in the browser to see what role is actually being received
+  useEffect(() => {
+    console.log("[AUTH_DEBUG]: User detected with role:", rawRole);
+  }, [rawRole]);
+
   const navClass = ({ isActive }) =>
     isActive ? "nav-link active" : "nav-link";
-
-  // 🛡️ ROLE CHECK: Determine which rooms to show
-  const isAdmin = user?.role === "Admin";
-  const isManager = user?.role === "Manager" || isAdmin;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#050505", fontFamily: 'monospace' }}>
@@ -54,12 +64,13 @@ export default function AdminLayout() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <div style={{ 
               fontSize: '0.6rem', 
-              color: systemStatus === 'secure' ? '#00ff88' : '#ff4444',
-              border: `1px solid ${systemStatus === 'secure' ? '#00ff88' : '#ff4444'}`,
+              color: '#00ff88',
+              border: '1px solid #00ff88',
               padding: '4px 8px',
-              borderRadius: '2px'
+              borderRadius: '2px',
+              letterSpacing: '1px'
             }}>
-                {user?.role?.toUpperCase()}_SESSION // SYS_{systemStatus?.toUpperCase()}
+                {rawRole.toUpperCase()}_SESSION // SYS_ACTIVE
             </div>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -89,18 +100,17 @@ export default function AdminLayout() {
           <div style={{ flex: 1, padding: 20, opacity: sidebarOpen ? 1 : 0, transition: 'opacity 0.2s' }}>
             <div className="layout-nav" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               
-              {/* 🟢 PUBLIC/COMMON ADMIN ROOMS */}
+              {/* CORE ROOMS - ALWAYS SHOW IF LOGGED IN */}
               <NavLink to="/admin" end className={navClass}>CORE_DASHBOARD</NavLink>
               
-              {/* 🟢 SECURITY ROOM */}
               <NavLink to="/admin/security" className={navClass}>SECURITY_INTEL</NavLink>
               
-              {/* 🟢 THE TRADING ROOM (Now Always Visible for Admins) */}
+              {/* TRADING ROOM - FORCED VISIBILITY FOR ADMINS/MANAGERS */}
               {isManager && (
                 <NavLink to="/admin/trading" className={navClass}>ALGO_TRADING</NavLink>
               )}
 
-              {/* 🟢 GLOBAL CONFIG */}
+              {/* CONFIG ROOM - ADMIN ONLY */}
               {isAdmin && (
                 <NavLink to="/admin/global" className={navClass}>GLOBAL_CONFIG</NavLink>
               )}
@@ -149,8 +159,7 @@ export default function AdminLayout() {
               title="A.I. ADVISOR"
               getContext={() => ({
                 user: user,
-                role: user?.role,
-                status: systemStatus,
+                role: rawRole,
                 path: window.location.pathname
               })}
             />
