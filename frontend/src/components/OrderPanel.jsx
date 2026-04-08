@@ -1,12 +1,13 @@
 // ==========================================================
-// 🔒 PROTECTED STEALTH ORDER — v5.0 (HARDENED & SYNCED)
-// FILE: OrderPanel.jsx - SYNCED WITH BACKEND v32.5
+// 🔒 PROTECTED STEALTH ORDER — v5.3 (ADMIN-LOCKED & SYNCED)
+// FILE: src/components/OrderPanel.jsx
 // ==========================================================
 
 import React, { useMemo, useState } from "react";
 import { api } from "../lib/api.js";
 
-export default function OrderPanel({ symbol = "BTCUSDT", price = 0 }) {
+// Added 'disabled' to props to receive authority from AdminLayout
+export default function OrderPanel({ symbol = "BTCUSDT", price = 0, disabled = false }) {
   const [side, setSide] = useState("buy");
   const [size, setSize] = useState("");
   const [stopLoss, setStopLoss] = useState("");
@@ -25,7 +26,7 @@ export default function OrderPanel({ symbol = "BTCUSDT", price = 0 }) {
   const risk = useMemo(() => {
     const sl = safeNum(stopLoss, 0);
     const qty = safeNum(size, 0);
-    if (!livePrice || !sl || !qty) return { amt: 0, rr: 0 };
+    if (!livePrice || !sl || !qty) return { amt: 0, reward: 0, rr: 0 };
     
     const amt = Math.abs(livePrice - sl) * qty;
     const tp = safeNum(takeProfit, 0);
@@ -40,6 +41,9 @@ export default function OrderPanel({ symbol = "BTCUSDT", price = 0 }) {
 
   /* ================= 🚀 STEALTH EXECUTION ================= */
   async function submitOrder() {
+    // 🛡️ THE SECURITY GATE: Prevent execution if not Admin
+    if (disabled) return setMsg("⚠️ ACCESS_DENIED: READ_ONLY_SESSION");
+    
     const qty = safeNum(size, 0);
     if (qty <= 0) return setMsg("⚠️ Enter valid size");
     if (livePrice <= 0) return setMsg("⚠️ Waiting for price pulse...");
@@ -54,12 +58,11 @@ export default function OrderPanel({ symbol = "BTCUSDT", price = 0 }) {
       price: livePrice, 
       stopLoss: stopLoss === "" ? null : safeNum(stopLoss),
       takeProfit: takeProfit === "" ? null : safeNum(takeProfit),
-      mode: "STEALTH_LEARNING", // 🧠 Force AI Learning
+      mode: "STEALTH_LEARNING", 
       timestamp: Date.now()
     };
 
     try {
-      // Using the api.js instance we hardened earlier
       const res = await api.placePaperOrder(payload);
       
       if (res?.ok || res?.id) {
@@ -67,7 +70,6 @@ export default function OrderPanel({ symbol = "BTCUSDT", price = 0 }) {
         setSize("");
         setStopLoss("");
         setTakeProfit("");
-        // Clear message after 3 seconds
         setTimeout(() => setMsg(""), 3000);
       } else {
         setMsg(`❌ ${res?.error || "REJECTED"}`);
@@ -79,39 +81,38 @@ export default function OrderPanel({ symbol = "BTCUSDT", price = 0 }) {
     }
   }
 
-  /* ================= UI RENDER ================= */
   return (
     <div style={{
-      background: "#0f172a",
+      background: "#0b101a", // Swapped for Unified Navy
       padding: "20px",
-      borderRadius: "16px",
-      border: "1px solid #1e293b",
+      borderRadius: "4px", // Sharp industrial edges
+      border: "1px solid #00ff8822", // Neon Green accents
       color: "#f8fafc",
       fontFamily: "monospace"
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px" }}>
-        <span style={{ fontWeight: "900", color: "#3b82f6" }}>{symbol}</span>
-        <span style={{ color: "#22c55e", fontWeight: "bold" }}>${livePrice.toLocaleString()}</span>
+        <span style={{ fontWeight: "900", color: "#00ff88", letterSpacing: '1px' }}>{symbol}_CORE</span>
+        <span style={{ color: "#00ff88", fontWeight: "bold" }}>${livePrice.toLocaleString()}</span>
       </div>
 
       {/* SIDE SELECTOR */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
         <button 
           onClick={() => setSide("buy")} 
-          style={btnSideStyle(side === "buy", "#22c55e")}
-        >BUY</button>
+          style={btnSideStyle(side === "buy", "#00ff88")}
+        >LONG</button>
         <button 
           onClick={() => setSide("sell")} 
-          style={btnSideStyle(side === "sell", "#ef4444")}
-        >SELL</button>
+          style={btnSideStyle(side === "sell", "#ff4444")}
+        >SHORT</button>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        <InputBox label="QUANTITY" value={size} onChange={setSize} placeholder="0.01" />
+        <InputBox label="NODE_QUANTITY" value={size} onChange={setSize} placeholder="0.01" />
         
         <div style={{ display: "flex", gap: "10px" }}>
-          <InputBox label="STOP LOSS" value={stopLoss} onChange={setStopLoss} placeholder="Price" />
-          <InputBox label="TAKE PROFIT" value={takeProfit} onChange={setTakeProfit} placeholder="Price" />
+          <InputBox label="STOP_LOSS" value={stopLoss} onChange={setStopLoss} placeholder="Price" />
+          <InputBox label="TAKE_PROFIT" value={takeProfit} onChange={setTakeProfit} placeholder="Price" />
         </div>
       </div>
 
@@ -119,47 +120,48 @@ export default function OrderPanel({ symbol = "BTCUSDT", price = 0 }) {
       <div style={{ 
         margin: "20px 0", 
         padding: "12px", 
-        background: "rgba(30,41,59,0.5)", 
-        borderRadius: "8px", 
+        background: "rgba(0,255,136,0.03)", 
+        borderRadius: "2px", 
         fontSize: "11px",
-        border: "1px dashed #334155"
+        border: "1px dashed #00ff8822"
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-          <span>RISK: <span style={{ color: "#ef4444" }}>-${risk.amt.toFixed(2)}</span></span>
-          <span>REWARD: <span style={{ color: "#22c55e" }}>+${risk.reward.toFixed(2)}</span></span>
+          <span>RISK: <span style={{ color: "#ff4444" }}>-${risk.amt.toFixed(2)}</span></span>
+          <span>REWARD: <span style={{ color: "#00ff88" }}>+${risk.reward.toFixed(2)}</span></span>
         </div>
-        <div style={{ textAlign: "center", borderTop: "1px solid #334155", paddingTop: "4px", color: "#94a3b8" }}>
-          R:R RATIO: <span style={{ color: "#fff", fontWeight: "bold" }}>{risk.rr}</span>
+        <div style={{ textAlign: "center", borderTop: "1px solid #00ff8811", paddingTop: "4px", color: "#444" }}>
+          R:R_RATIO: <span style={{ color: "#fff", fontWeight: "bold" }}>{risk.rr}</span>
         </div>
       </div>
 
       <button 
         onClick={submitOrder} 
-        disabled={loading}
+        disabled={loading || disabled}
         style={{ 
           width: "100%", 
           padding: "14px", 
-          borderRadius: "10px", 
+          borderRadius: "2px", 
           border: "none", 
-          background: loading ? "#334155" : (side === "buy" ? "#22c55e" : "#ef4444"),
-          color: "white", 
+          background: disabled ? "#1a1f26" : loading ? "#334155" : (side === "buy" ? "#00ff88" : "#ff4444"),
+          color: disabled ? "#444" : "black", 
           fontWeight: "900", 
-          cursor: "pointer",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+          cursor: disabled ? "not-allowed" : "pointer",
+          letterSpacing: '2px'
         }}
       >
-        {loading ? "EXECUTING..." : `CONFIRM ${side.toUpperCase()} POSITION`}
+        {disabled ? "MONITOR_ONLY" : loading ? "EXECUTING..." : `EXECUTE_${side.toUpperCase()}_STRIKE`}
       </button>
 
       {msg && (
         <div style={{ 
           marginTop: "12px", 
           textAlign: "center", 
-          fontSize: "12px", 
-          color: msg.includes("✅") ? "#22c55e" : "#f59e0b",
-          fontWeight: "bold" 
+          fontSize: "11px", 
+          color: msg.includes("✅") ? "#00ff88" : "#ff9100",
+          fontWeight: "bold",
+          letterSpacing: '1px'
         }}>
-          {msg}
+          [SYS_LOG]: {msg}
         </div>
       )}
     </div>
@@ -170,33 +172,36 @@ export default function OrderPanel({ symbol = "BTCUSDT", price = 0 }) {
 const btnSideStyle = (active, color) => ({
   flex: 1, 
   padding: "12px", 
-  borderRadius: "8px", 
-  border: active ? `2px solid ${color}` : "2px solid #1e293b", 
+  borderRadius: "2px", 
+  border: active ? `1px solid ${color}` : "1px solid #ffffff11", 
   cursor: "pointer", 
-  background: active ? `${color}22` : "transparent", 
-  color: active ? color : "#64748b",
+  background: active ? `${color}15` : "transparent", 
+  color: active ? color : "#444",
   fontWeight: "bold",
-  fontSize: "13px"
+  fontSize: "11px",
+  letterSpacing: '1px',
+  transition: '0.2s'
 });
 
 function InputBox({ label, value, onChange, placeholder }) {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
-      <label style={{ fontSize: "10px", color: "#64748b", fontWeight: "bold" }}>{label}</label>
+      <label style={{ fontSize: "9px", color: "#444", fontWeight: "bold", letterSpacing: '1px' }}>{label}</label>
       <input
         type="number"
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         style={{ 
-          background: "#1e293b", 
-          border: "1px solid #334155", 
+          background: "#050505", 
+          border: "1px solid #ffffff11", 
           color: "#fff", 
-          padding: "10px", 
-          borderRadius: "6px", 
+          padding: "12px", 
+          borderRadius: "2px", 
           outline: "none",
-          fontSize: "14px",
-          width: "100%"
+          fontSize: "13px",
+          width: "100%",
+          fontFamily: 'monospace'
         }}
       />
     </div>
