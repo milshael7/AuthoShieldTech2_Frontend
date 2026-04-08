@@ -1,5 +1,5 @@
 // ==========================================================
-// 🔒 PROTECTED STEALTH UI — v5.5 (FULL CONSOLIDATED)
+// 🔒 PROTECTED STEALTH UI — v5.8 (UNISON HARDENED)
 // FILE: src/pages/TradingRoom.jsx
 // ==========================================================
 
@@ -17,7 +17,6 @@ import AIPerformanceHistoryPanel from "../components/AIPerformanceHistoryPanel";
 const SYMBOL = "BTCUSDT";
 
 export default function TradingRoom() {
-  // 🔑 THE AUTHORITY KEY: Received from AdminLayout
   const { isAdmin } = useOutletContext(); 
 
   const {
@@ -28,25 +27,49 @@ export default function TradingRoom() {
 
   /* ================= 🧠 ENGINE STATE ================= */
   const [candles, setCandles] = useState([]);
-  const [position, setPosition] = useState(null);
-  const [trades, setTrades] = useState([]);
-  const [decisions, setDecisions] = useState([]);
   const [equity, setEquity] = useState(0);
   const [loading, setLoading] = useState(false);
   const lastCandleRef = useRef(null);
 
+  // 🔑 BRAIN METRICS: Extracted for AIBehaviorPanel
+  const brainMetrics = useMemo(() => {
+    const intel = snapshot?.intelligence || {};
+    return {
+      confidence: Number(intel.confidence || snapshot?.confidence || 0),
+      velocity: Number(intel.velocity || snapshot?.velocity || 0),
+      memory: Number(intel.memoryUsage || intel.memory || snapshot?.memory || 0),
+      decisions: Array.isArray(intel.history || snapshot?.decisions) ? (intel.history || snapshot?.decisions) : []
+    };
+  }, [snapshot]);
+
   /* ================= 📊 PRICE & CANDLE SYNC ================= */
   useEffect(() => {
-    if (!Number.isFinite(livePrice)) return;
+    if (!livePrice || !Number.isFinite(livePrice)) return;
+    
+    // Create 1-minute candle buckets
     const now = Math.floor(Date.now() / 60000) * 60000;
+    
     setCandles(prev => {
       const last = lastCandleRef.current;
+      
       if (!last || last.time !== now) {
-        const c = { time: now, open: livePrice, high: livePrice, low: livePrice, close: livePrice };
-        lastCandleRef.current = c;
-        return [...prev.slice(-199), c];
+        const newCandle = { 
+          time: now / 1000, // Charts usually expect seconds
+          open: livePrice, 
+          high: livePrice, 
+          low: livePrice, 
+          close: livePrice 
+        };
+        lastCandleRef.current = newCandle;
+        return [...prev.slice(-199), newCandle];
       }
-      const updated = { ...last, high: Math.max(last.high, livePrice), low: Math.min(last.low, livePrice), close: livePrice };
+      
+      const updated = { 
+        ...last, 
+        high: Math.max(last.high, livePrice), 
+        low: Math.min(last.low, livePrice), 
+        close: livePrice 
+      };
       lastCandleRef.current = updated;
       const next = [...prev];
       next[next.length - 1] = updated;
@@ -54,28 +77,14 @@ export default function TradingRoom() {
     });
   }, [livePrice]);
 
-  /* ================= 📡 BACKEND v32.5 SNAPSHOT SYNC ================= */
-  useEffect(() => {
-    if (!snapshot) return;
-    setPosition(snapshot.position || null);
-    setTrades(Array.isArray(snapshot.history || snapshot.trades) ? (snapshot.history || snapshot.trades).slice(-200) : []);
-    setDecisions(Array.isArray(snapshot.intelligence || snapshot.decisions) ? (snapshot.intelligence || snapshot.decisions).slice(-200) : []);
-    setEquity(Number(snapshot.equity || snapshot.balance) || 0);
-  }, [snapshot]);
-
   /* ================= ⚡ EMERGENCY COMMANDS ================= */
-  const closeNow = async () => {
-    if (!isAdmin || loading || !position) return; 
+  const handleEmergencyExit = async () => {
+    if (!isAdmin || loading) return; 
     setLoading(true);
     try {
-      await api.placePaperOrder({ 
-        side: position?.side === 'buy' ? 'sell' : 'buy',
-        qty: position?.qty,
-        type: 'market',
-        isClose: true,
-        symbol: SYMBOL,
-        mode: "EMERGENCY_EXIT"
-      });
+      // Direct call to the hardened API logic
+      await api.emergencyExit();
+      console.log("[SYSTEM]: Emergency Exit Command Dispatched");
     } catch (err) {
       console.error("[SYS_ERR]:", err.message);
     } finally {
@@ -84,111 +93,83 @@ export default function TradingRoom() {
   };
 
   const pnl = useMemo(() => {
-    if (!position || !livePrice) return 0;
-    const direction = position.side === "buy" ? 1 : -1;
-    return (livePrice - position.entry) * position.qty * direction;
-  }, [position, livePrice]);
+    const pos = snapshot?.position;
+    if (!pos || !livePrice) return 0;
+    const direction = pos.side === "buy" ? 1 : -1;
+    return (livePrice - pos.entry) * pos.qty * direction;
+  }, [snapshot?.position, livePrice]);
 
   const fmt = (v) => Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
-    <div style={{ 
+    <div className="terminalRoot" style={{ 
       display: "grid", 
       gridTemplateColumns: "1fr 340px", 
       gap: "20px", 
-      background: "#050505", 
-      minHeight: "100%", 
-      color: "#fff", 
-      padding: '20px' 
+      padding: '20px',
+      height: '100vh'
     }}>
       
       {/* 📊 LEFT SECTION: ENGINE & INTELLIGENCE VISUALS */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: "20px" }}>
-        <TerminalChart candles={candles} trades={trades} position={position} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: "20px", overflow: 'hidden' }}>
+        <div style={{ flex: 1, minHeight: '400px', background: '#000', borderRadius: '4px', border: '1px solid var(--p-border)' }}>
+          <TerminalChart candles={candles} trades={snapshot?.trades || []} position={snapshot?.position} />
+        </div>
         
-        {/* Uniform Intel Section */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-          <AIBehaviorPanel trades={trades} decisions={decisions} position={position} />
-          <AIPerformanceHistoryPanel trades={trades} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', height: '300px' }}>
+          {/* Passing the upgraded brainMetrics here ensures the 0s turn into real numbers */}
+          <AIBehaviorPanel 
+            metrics={brainMetrics} 
+            position={snapshot?.position} 
+          />
+          <AIPerformanceHistoryPanel trades={snapshot?.trades || []} />
         </div>
       </div>
 
       {/* 🕹️ RIGHT SECTION: COMMAND OVERRIDE CONSOLE */}
-      <div style={{ 
-        backgroundColor: "#0b101a", 
-        padding: "20px", 
-        borderRadius: "2px", 
-        border: "1px solid #00ff8822", 
-        display: 'flex', 
-        flexDirection: 'column', 
-        height: 'fit-content',
-        position: 'sticky',
-        top: '20px'
+      <div className="terminalPanel" style={{ 
+        position: 'relative', 
+        width: '100%', 
+        height: '100%',
+        borderRadius: '4px'
       }}>
-        
-        {/* SECURITY TAG */}
-        <div style={{ 
-          fontSize: '10px', 
-          color: isAdmin ? '#00ff88' : '#3498db', 
-          border: `1px solid ${isAdmin ? '#00ff8844' : '#3498db44'}`, 
-          padding: '8px', 
-          borderRadius: '1px', 
-          textAlign: 'center', 
-          marginBottom: "20px", 
-          letterSpacing: '2px', 
-          background: isAdmin ? '#00ff8805' : '#3498db05',
-          fontWeight: '900'
-        }}>
+        <div className="terminalPanelHeader">
           {isAdmin ? "COMMAND_OVERRIDE_ACTIVE" : "SECURE_MONITOR_SESSION"}
         </div>
 
-        {/* ORDER MODULE: Receives Admin Authority */}
-        <OrderPanel symbol={SYMBOL} price={livePrice} disabled={!isAdmin} />
+        <div className="terminalPanelBody">
+          {/* LIVE PRICE TRACKER */}
+          <div className={`terminalPriceDisplay ${pnl >= 0 ? 'up' : 'down'}`}>
+            ${fmt(livePrice || 0)}
+          </div>
 
-        {/* EMERGENCY CONTROLS */}
-        <div style={{ marginTop: "20px" }}>
+          <OrderPanel symbol={SYMBOL} price={livePrice} disabled={!isAdmin} />
+
           <button 
-            onClick={closeNow} 
-            disabled={!position || loading || !isAdmin}
-            style={{ 
-              width: "100%", 
-              backgroundColor: !isAdmin ? "#151921" : !position ? "#1a1a1a" : "#ff4444", 
-              color: !isAdmin ? "#333" : "white", 
-              padding: "16px", 
-              border: 'none', 
-              borderRadius: "1px", 
-              cursor: (position && isAdmin) ? "pointer" : "not-allowed",
-              fontWeight: "900",
-              letterSpacing: '2px',
-              transition: '0.3s'
-            }}
+            className="terminalEmergency"
+            onClick={handleEmergencyExit} 
+            disabled={loading || !isAdmin}
+            style={{ width: '100%', padding: '16px', marginTop: '10px' }}
           >
-            {isAdmin ? (loading ? "SYNCING..." : "EMERGENCY_EXIT") : "NODE_LOCKED"}
+            {loading ? "SYNCING..." : "EMERGENCY_EXIT"}
           </button>
-        </div>
 
-        {/* REAL-TIME SESSION STATS */}
-        <div style={{ marginTop: "30px", borderTop: "1px solid #ffffff11", paddingTop: "20px" }}>
-          <StatRow label="NETWORK_STATUS" value={paperStatus?.toUpperCase() || "OFFLINE"} color={paperStatus === "connected" ? "#00ff88" : "#ff9100"} />
-          <StatRow label="TOTAL_EQUITY" value={`$${fmt(equity)}`} />
-          <StatRow label="UNREALIZED_PNL" value={`${pnl >= 0 ? "+" : ""}$${fmt(pnl)}`} color={pnl >= 0 ? "#00ff88" : "#ff4444"} />
-        </div>
-
-        {/* SYSTEM FOOTER */}
-        <div style={{ marginTop: "40px", fontSize: '9px', color: '#222', borderTop: '1px solid #ffffff05', paddingTop: '10px' }}>
-          AUTO_SHIELD_SECURE_LINK v5.5 // {SYMBOL}
+          <div style={{ marginTop: "auto", borderTop: "1px solid var(--p-border)", paddingTop: "20px" }}>
+            <StatRow label="NETWORK_STATUS" value={paperStatus?.toUpperCase()} color={paperStatus === "connected" ? "var(--p-ok)" : "var(--p-warn)"} />
+            <StatRow label="TOTAL_EQUITY" value={`$${fmt(snapshot?.equity || snapshot?.balance || 0)}`} />
+            <StatRow label="UNREALIZED_PNL" value={`${pnl >= 0 ? "+" : ""}$${fmt(pnl)}`} color={pnl >= 0 ? "var(--p-ok)" : "var(--p-bad)"} />
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-/* Internal Row Helper for Uniformity */
 function StatRow({ label, value, color = "#fff" }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
-      <span style={{ color: "#444", fontSize: '10px', fontWeight: 'bold', letterSpacing: '1px' }}>{label}</span>
-      <span style={{ color, fontWeight: 'bold', fontSize: '12px', fontFamily: 'monospace' }}>{value}</span>
+      <span style={{ color: "var(--p-muted)", fontSize: '10px', fontWeight: 'bold', letterSpacing: '1px' }}>{label}</span>
+      <span style={{ color, fontWeight: 'bold', fontSize: '12px', fontFamily: 'var(--p-font-mono)' }}>{value}</span>
     </div>
   );
 }
