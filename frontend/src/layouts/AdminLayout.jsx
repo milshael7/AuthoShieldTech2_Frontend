@@ -1,5 +1,5 @@
 // ==========================================================
-// 🏛️ COMMAND CENTER — v36.5 (THE ADVISOR HANDLE UPGRADE)
+// 🏛️ COMMAND CENTER — v36.7 (FULL ROOM RESTORATION)
 // FILE: src/layouts/AdminLayout.jsx
 // ==========================================================
 
@@ -14,8 +14,6 @@ export default function AdminLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   
-  // Left side: Hot Dog controlled via "ADVISOR" handle
-  // Right side: Tactical Handle controlled via directional arrow
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [advisorOpen, setAdvisorOpen] = useState(true);
 
@@ -38,11 +36,11 @@ export default function AdminLayout() {
         <Logo size="md" />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <span style={{ fontSize: '10px', color: '#00ff88', border: '1px solid #00ff8844', padding: '4px 12px', borderRadius: '2px', backgroundColor: '#00ff8805', opacity: 0.6 }}>
-              SECURED_NODE // {user?.email || "ADMIN"}
+            <span style={{ fontSize: '10px', color: '#444', letterSpacing: '1px' }}>
+              NODE_ID: {user?.email || "CONNECTED"}
             </span>
 
-            {/* 🌭 THE ADVISOR HANDLE (Trigger for the LEFT Sliding Door) */}
+            {/* 🌭 THE MENU TRIGGER (Hot Dog Bar for the Sliding Door) */}
             <button 
               onClick={() => setSidebarOpen(!sidebarOpen)} 
               style={{ 
@@ -57,16 +55,10 @@ export default function AdminLayout() {
                 borderRadius: "4px"
               }}
             >
-              <span style={{ 
-                color: "#00ff88", 
-                fontSize: "11px", 
-                fontWeight: "bold", 
-                letterSpacing: "3px" 
-              }}>
-                ADVISOR
+              <span style={{ color: "#00ff88", fontSize: "11px", fontWeight: "bold", letterSpacing: "3px" }}>
+                MENU
               </span>
               
-              {/* Vertical Hot Dog Bars (The "Barks") */}
               <div style={{ display: "flex", gap: "4px" }}>
                 <div style={{ width: "2px", height: "18px", background: "#00ff88" }}></div>
                 <div style={{ width: "2px", height: "18px", background: "#00ff88", opacity: 0.6 }}></div>
@@ -78,9 +70,9 @@ export default function AdminLayout() {
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
 
-        {/* 🔵 LEFT NAVIGATION (Sliding Door - Command Overwatch) */}
+        {/* 🔵 LEFT NAVIGATION (The Command Door - Packed with Rooms) */}
         <nav style={{ 
-          width: sidebarOpen ? 280 : 0, 
+          width: sidebarOpen ? 300 : 0, 
           background: "#080a0f", 
           transition: "0.45s cubic-bezier(0.19, 1, 0.22, 1)", 
           overflowX: "hidden", 
@@ -89,58 +81,60 @@ export default function AdminLayout() {
           flexDirection: "column",
           zIndex: 50
         }}>
-          <div style={{ width: 280, padding: "20px" }}>
-            <p style={{ color: "#00ff88", fontSize: "0.55rem", marginBottom: "15px", letterSpacing: "2px", opacity: 0.8 }}>GLOBAL OVERSIGHT</p>
+          <div style={{ width: 300, padding: "25px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            
+            <p style={{ color: "#00ff88", fontSize: "0.55rem", marginBottom: "10px", letterSpacing: "2px", opacity: 0.6 }}>GLOBAL OVERSIGHT</p>
             <NavLink to="/admin/global-view" className={navClass}>🌐 ALL_ROOMS_MONITOR</NavLink>
+            <NavLink to="/admin/sync" className={navClass}>📡 SYSTEM_SYNC</NavLink>
             
-            <div style={{ margin: "20px 0", height: "1px", background: "#ffffff05" }} />
+            <div style={{ margin: "15px 0", height: "1px", background: "#ffffff05" }} />
             
-            <p style={{ color: "#444", fontSize: "0.55rem", marginBottom: "5px", letterSpacing: "2px" }}>CORE SYSTEMS</p>
+            <p style={{ color: "#444", fontSize: "0.55rem", marginBottom: "5px", letterSpacing: "2px" }}>MARKET OPERATIONS</p>
             <NavLink to="/admin" end className={navClass}>🏠 MAIN_DASHBOARD</NavLink>
             <NavLink to="/admin/trading" className={navClass}>📈 TRADING_ROOM</NavLink>
-            <NavLink to="/admin/assets" className={navClass}>💰 MY_ASSETS</NavLink>
+            <NavLink to="/admin/assets" className={navClass}>💰 ASSET_VAULT</NavLink>
+            <NavLink to="/admin/ledger" className={navClass}>📜 TRADE_LEDGER</NavLink>
 
-            <div style={{ marginTop: "auto", padding: "20px 0" }}>
-               <button onClick={logout} style={{ width: "100%", padding: "10px", background: "#ff444411", color: "#ff4444", border: "1px solid #ff444433", cursor: "pointer", fontSize: "0.7rem", fontWeight: "bold" }}>
-                 EXIT_SYSTEM
+            <div style={{ margin: "15px 0", height: "1px", background: "#ffffff05" }} />
+
+            <p style={{ color: "#444", fontSize: "0.55rem", marginBottom: "5px", letterSpacing: "2px" }}>CYBER DEFENSE</p>
+            <NavLink to="/admin/security" className={navClass}>🛡️ SECURITY_CORE</NavLink>
+            <NavLink to="/admin/threat-monitor" className={navClass}>🚨 THREAT_INTEL</NavLink>
+            <NavLink to="/admin/risk-report" className={navClass}>🔍 RISK_ANALYSIS</NavLink>
+
+            <div style={{ margin: "15px 0", height: "1px", background: "#ffffff05" }} />
+
+            <p style={{ color: "#444", fontSize: "0.55rem", marginBottom: "5px", letterSpacing: "2px" }}>ADMIN_CONTROL</p>
+            <NavLink to="/admin/users" className={navClass}>👥 USER_DATABASE</NavLink>
+            <NavLink to="/admin/companies" className={navClass}>🏢 COMPANY_GROUPS</NavLink>
+            <NavLink to="/admin/settings" className={navClass}>⚙️ SYSTEM_SETTINGS</NavLink>
+
+            <div style={{ marginTop: "40px" }}>
+               <button onClick={logout} style={{ width: "100%", padding: "12px", background: "#ff444411", color: "#ff4444", border: "1px solid #ff444433", cursor: "pointer", fontSize: "0.7rem", fontWeight: "bold", letterSpacing: "1px" }}>
+                 TERMINATE_SESSION
                </button>
             </div>
           </div>
         </nav>
 
-        {/* ⚪ MAIN DISPLAY (The Active Room) */}
+        {/* ⚪ MAIN DISPLAY */}
         <main style={{ flex: 1, padding: "24px", overflowY: "auto", background: "#050505" }}>
           <Outlet />
         </main>
 
-        {/* 🔴 THE ADVISOR (Sliding Door + Tactical Directional Handle) */}
+        {/* 🔴 THE ADVISOR (Right Side Slide with Directional Handle) */}
         <div style={{ position: "relative", display: "flex" }}>
           
-          {/* TACTICAL HANDLE: Indicates slide-in/out via arrows */}
           <div 
             onClick={() => setAdvisorOpen(!advisorOpen)} 
             style={{ 
-                position: "absolute",
-                top: "50%",
-                left: "-20px", 
-                transform: "translateY(-50%)",
-                width: "20px",
-                height: "100px",
-                background: "#0b101a",
-                border: "1px solid #00ff8844",
-                color: "#00ff88",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                zIndex: 100,
-                fontSize: "14px",
-                transition: "0.45s cubic-bezier(0.19, 1, 0.22, 1)",
-                borderRadius: "6px 0 0 6px",
+                position: "absolute", top: "50%", left: "-20px", transform: "translateY(-50%)",
+                width: "20px", height: "100px", background: "#0b101a", border: "1px solid #00ff8844",
+                color: "#00ff88", display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", zIndex: 100, transition: "0.45s", borderRadius: "6px 0 0 6px",
                 boxShadow: "-4px 0 15px rgba(0,0,0,0.6)"
             }}
           >
-            {/* Logic: Arrow points AWAY from the panel to slide it out, TOWARD it to slide in */}
             {advisorOpen ? "»" : "«"}
           </div>
 
@@ -149,12 +143,9 @@ export default function AdminLayout() {
             background: "#080a0f", 
             transition: "0.45s cubic-bezier(0.19, 1, 0.22, 1)", 
             overflowX: "hidden", 
-            borderLeft: advisorOpen ? "1px solid #00ff8822" : "none",
-            display: "flex", 
-            flexDirection: "column" 
+            borderLeft: advisorOpen ? "1px solid #00ff8822" : "none"
           }}>
             <div style={{ width: 380, height: "100%" }}>
-              {/* Context-aware Advisor Content */}
               <AuthoDevPanel currentPath={location.pathname} />
             </div>
           </aside>
