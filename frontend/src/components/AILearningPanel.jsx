@@ -1,143 +1,143 @@
 // ============================================================
-// 🧠 AUTOSHIELD NEURAL PANEL — v5.0 (PULSE-HARDENED)
-// FILE: AILearningPanel.jsx - SYNCED WITH BACKEND v32.5
+// 🧠 AUTOSHIELD NEURAL PANEL — v5.1 (COMMAND-ENABLED)
+// FILE: AILearningPanel.jsx - SYNCED WITH ENGINE v15.1
 // ============================================================
 
 import React, { useEffect, useState, useMemo } from "react";
-import { getToken, API_BASE } from "../lib/api.js";
+// ✅ FIXED: Using our hardened api handler
+import api from "../lib/api.js";
+import { useTrading } from "../context/TradingContext";
 
 export default function AILearningPanel() {
-  const [brain, setBrain] = useState(null);
-  const [lastUpdate, setLastUpdate] = useState(Date.now());
+  const { snapshot, decisions } = useTrading();
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [localStats, setLocalStats] = useState(null);
 
-  const load = async () => {
-    const token = getToken();
-    if (!token || !API_BASE) return;
-
+  // 📡 FETCH LIVE STATS FROM THE ENGINE
+  const refreshStats = async () => {
+    setIsSyncing(true);
     try {
-      const res = await fetch(`${API_BASE}/api/ai/brain`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      
-      setBrain(data);
-      setLastUpdate(Date.now());
+      // Hits the getLearningStats logic in your EngineCore
+      const data = await api.getSnapshot("default"); 
+      if (data) setLocalStats(data);
     } catch (err) {
-      console.warn("Neural Link Interrupted");
+      console.warn("Neural Link Latency High");
+    } finally {
+      setTimeout(() => setIsSyncing(false), 800);
     }
   };
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 5000); // 5s to save battery on older devices
+    refreshStats();
+    const t = setInterval(refreshStats, 3000); // 3s for snappier feedback
     return () => clearInterval(t);
   }, []);
 
-  // Normalize data for the UI
+  // 🧪 FUSE WS DATA WITH API SNAPSHOT
   const stats = useMemo(() => {
-    if (!brain) return null;
-    const s = brain.stats || {};
-    const a = brain.adaptive || {};
-    const t = brain.telemetry || {};
-
+    const s = snapshot || {};
+    const d = decisions && decisions.length > 0 ? decisions[decisions.length - 1] : {};
+    
     return {
-      dpm: t.decisionsPerMinute || 0,
-      trades: s.totalTrades || 0,
-      winRate: (s.winRate || 0) * 100,
-      expectancy: s.expectancy || 0,
-      memory: brain.signalMemory || 0,
-      confidence: (a.confidenceBoost || 0) * 100,
-      edge: a.edgeAmplifier || 1.0,
-      uptime: Math.floor((t.uptime || 0) / 60)
+      dpm: s.stats?.ticks || 0,
+      trades: s.history?.length || 0,
+      // Win rate from the actual PnL history
+      winRate: s.history?.length > 0 
+        ? (s.history.filter(t => t.pnl > 0).length / s.history.length) * 100 
+        : 0,
+      confidence: global.lastConfidence || d.confidence || 0,
+      regime: d.regime || "SCANNING",
+      equity: s.equity || 100000,
+      status: s.equity >= 100000 ? "OPTIMAL" : "RECOVERING"
     };
-  }, [brain]);
-
-  if (!stats) {
-    return (
-      <div style={{ padding: 20, color: "#64748b", fontFamily: "monospace" }}>
-        SYNCING NEURAL CORE...
-      </div>
-    );
-  }
+  }, [snapshot, decisions]);
 
   return (
     <section style={{
-      background: "#0f172a",
-      padding: "20px",
-      borderRadius: "16px",
-      border: "1px solid #1e293b",
+      background: "#080a0f",
+      padding: "24px",
+      borderRadius: "12px",
+      border: "1px solid rgba(0,255,136,0.1)",
       marginBottom: "20px",
       fontFamily: "monospace",
-      boxShadow: "0 10px 25px -5px rgba(0,0,0,0.3)"
+      position: "relative",
+      overflow: "hidden"
     }}>
       
+      {/* GLOW EFFECT */}
+      <div style={{
+        position: "absolute",
+        top: -50,
+        right: -50,
+        width: 150,
+        height: 150,
+        background: "rgba(0,255,136,0.03)",
+        filter: "blur(40px)",
+        borderRadius: "50%"
+      }} />
+
       {/* HEADER */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
         <div>
-          <h2 style={{ color: "#3b82f6", margin: 0, fontSize: "1.1rem", fontWeight: "900" }}>
-            NEURAL LEARNING HUB
+          <h2 style={{ color: "#00ff88", margin: 0, fontSize: "0.9rem", letterSpacing: "2px" }}>
+            NEURAL_LEARNING_HUB
           </h2>
-          <div style={{ color: "#64748b", fontSize: "0.7rem", marginTop: "4px" }}>
-            v32.5 STEALTH REINFORCEMENT
+          <div style={{ color: "rgba(0,255,136,0.5)", fontSize: "0.6rem", marginTop: "4px" }}>
+            ENGINE_SYNC: {isSyncing ? "ACTIVE" : "STABLE"}
           </div>
         </div>
-        <div style={{ 
-          background: "#064e3b", 
-          color: "#34d399", 
-          padding: "4px 10px", 
-          borderRadius: "20px", 
-          fontSize: "10px", 
-          fontWeight: "bold",
-          border: "1px solid #059669"
-        }}>
-          LIVE FEED
-        </div>
+        
+        <button 
+          onClick={refreshStats}
+          style={{
+            background: "transparent",
+            border: "1px solid #00ff88",
+            color: "#00ff88",
+            fontSize: "9px",
+            padding: "5px 10px",
+            cursor: "pointer",
+            borderRadius: "4px",
+            opacity: isSyncing ? 0.5 : 1
+          }}
+        >
+          FORCE_RESYNC
+        </button>
       </div>
 
       {/* STATS GRID */}
       <div style={{
         display: "grid",
         gridTemplateColumns: "repeat(2, 1fr)",
-        gap: "12px"
+        gap: "10px"
       }}>
-        <DataPoint label="DECISIONS/MIN" value={stats.dpm} color="#fff" />
-        <DataPoint label="TRADES LEARNED" value={stats.trades} color="#3b82f6" />
+        <DataPoint label="MARKET_TICKS" value={stats.dpm} color="#fff" />
+        <DataPoint label="LEARNED_SAMPLES" value={stats.trades} color="#00ff88" />
         <DataPoint 
-          label="WIN RATE" 
+          label="WIN_ACCURACY" 
           value={`${stats.winRate.toFixed(1)}%`} 
-          color={stats.winRate >= 50 ? "#22c55e" : "#ef4444"} 
+          color={stats.winRate >= 50 ? "#00ff88" : "#ff4444"} 
         />
-        <DataPoint label="EXPECTANCY" value={stats.expectancy.toFixed(2)} color="#f59e0b" />
-        <DataPoint label="SIGNAL MEMORY" value={stats.memory} color="#fff" />
-        <DataPoint label="CONFIDENCE" value={`${stats.confidence.toFixed(0)}%`} color="#a855f7" />
-        <DataPoint label="EDGE AMP" value={`x${stats.edge.toFixed(2)}`} color="#06b6d4" />
-        <DataPoint label="UPTIME" value={`${stats.uptime} MIN`} color="#64748b" />
+        <DataPoint label="AI_CONFIDENCE" value={`${stats.confidence}%`} color="#00ff88" />
+        <DataPoint label="MARKET_REGIME" value={stats.regime} color="#fff" />
+        <DataPoint label="CORE_EQUITY" value={`$${Math.floor(stats.equity)}`} color="#00ff88" />
       </div>
 
       {/* PULSE BAR */}
       <div style={{ 
-        marginTop: "20px", 
-        height: "4px", 
-        background: "#1e293b", 
-        borderRadius: "2px", 
+        marginTop: "25px", 
+        height: "2px", 
+        background: "rgba(255,255,255,0.05)", 
+        borderRadius: "1px", 
         overflow: "hidden" 
       }}>
         <div style={{ 
           width: "100%", 
           height: "100%", 
-          background: "#3b82f6", 
-          opacity: 0.5,
-          animation: "pulse 2s infinite" 
+          background: "#00ff88", 
+          opacity: isSyncing ? 0.8 : 0.2,
+          transition: "opacity 0.3s"
         }} />
       </div>
-      
-      <style>{`
-        @keyframes pulse {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-      `}</style>
     </section>
   );
 }
@@ -145,15 +145,15 @@ export default function AILearningPanel() {
 function DataPoint({ label, value, color }) {
   return (
     <div style={{ 
-      background: "rgba(30,41,59,0.5)", 
-      padding: "12px", 
-      borderRadius: "8px",
-      border: "1px solid rgba(255,255,255,0.03)"
+      background: "rgba(255,255,255,0.02)", 
+      padding: "15px", 
+      borderRadius: "4px",
+      border: "1px solid rgba(255,255,255,0.05)"
     }}>
-      <div style={{ fontSize: "0.6rem", color: "#64748b", fontWeight: "bold", marginBottom: "4px" }}>
+      <div style={{ fontSize: "0.55rem", color: "rgba(255,255,255,0.4)", marginBottom: "6px", letterSpacing: "1px" }}>
         {label}
       </div>
-      <div style={{ fontSize: "1rem", fontWeight: "bold", color: color }}>
+      <div style={{ fontSize: "1.1rem", fontWeight: "bold", color: color, fontFamily: "monospace" }}>
         {value}
       </div>
     </div>
