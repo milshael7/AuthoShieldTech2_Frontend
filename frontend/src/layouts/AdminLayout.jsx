@@ -1,14 +1,13 @@
 // ==========================================================
-// 🏢 ADMIN LAYOUT — v35.1 (STABLE & CRASH-RESISTANT)
+// 🏢 ADMIN LAYOUT — v35.3 (AUTH-SYNCED & STABLE)
 // FILE: src/layouts/AdminLayout.jsx
 // ==========================================================
 
-import React, { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import api, { clearToken, clearUser, getToken } from "../lib/api.js";
+import React, { useState } from "react";
+import { NavLink, Outlet } from "react-router-dom";
 
-// ✅ CRITICAL: Using safety wrappers for Context
-import { useCompany } from "../context/CompanyContext";
+// 🔑 CORE AUTH INTEGRATION
+import { useAuth } from "../context/AuthContext.jsx";
 import { useSecurity } from "../context/SecurityContext.jsx";
 
 import AuthoDevPanel from "../components/AuthoDevPanel.jsx";
@@ -19,51 +18,21 @@ const SIDEBAR_WIDTH = 260;
 const ADVISOR_WIDTH = 380;
 
 export default function AdminLayout() {
-  const navigate = useNavigate();
-  
-  // 🛡️ SAFETY GATE: Accessing context safely
-  const companyCtx = useCompany() || {};
-  const securityCtx = useSecurity() || {};
-  
-  const activeCompanyId = companyCtx.activeCompanyId;
-  const systemStatus = securityCtx.systemStatus || "checking";
+  const { user, logout } = useAuth(); // Now pulling directly from our new AuthContext
+  const { systemStatus } = useSecurity() || { systemStatus: "secure" };
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [isAuthReady, setIsAuthReady] = useState(false);
   const [advisorOpen, setAdvisorOpen] = useState(() => {
-    // Vercel/SSR Safety: check for window
     if (typeof window === 'undefined') return true;
-    const saved = localStorage.getItem("admin.advisor.open");
-    return saved !== "false";
+    return localStorage.getItem("admin.advisor.open") !== "false";
   });
-
-  // 🛡️ AUTH GUARD: Bulletproof session check
-  useEffect(() => {
-    const token = getToken();
-    if (!token) {
-      window.location.replace("/login");
-    } else {
-      setIsAuthReady(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem("admin.advisor.open", advisorOpen);
-    }
-  }, [advisorOpen]);
-
-  function logout() {
-    clearToken();
-    clearUser();
-    window.location.replace("/login");
-  }
 
   const navClass = ({ isActive }) =>
     isActive ? "nav-link active" : "nav-link";
 
-  // Prevent rendering if auth isn't confirmed yet
-  if (!isAuthReady) return null;
+  // 🛡️ ROLE CHECK: Determine which rooms to show
+  const isAdmin = user?.role === "Admin";
+  const isManager = user?.role === "Manager" || isAdmin;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#050505", fontFamily: 'monospace' }}>
@@ -83,18 +52,18 @@ export default function AdminLayout() {
       >
         <Logo size="md" />
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <div style={{ fontSize: '0.6rem', color: systemStatus === 'secure' ? '#00ff88' : '#ff4444' }}>
-                SYSTEM_{systemStatus.toUpperCase()}
+            <div style={{ 
+              fontSize: '0.6rem', 
+              color: systemStatus === 'secure' ? '#00ff88' : '#ff4444',
+              border: `1px solid ${systemStatus === 'secure' ? '#00ff88' : '#ff4444'}`,
+              padding: '4px 8px',
+              borderRadius: '2px'
+            }}>
+                {user?.role?.toUpperCase()}_SESSION // SYS_{systemStatus?.toUpperCase()}
             </div>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#00ff88",
-                fontSize: 20,
-                cursor: "pointer"
-              }}
+              style={{ background: "transparent", border: "none", color: "#00ff88", fontSize: 20, cursor: "pointer" }}
             >
               {sidebarOpen ? "«" : "»"}
             </button>
@@ -119,10 +88,22 @@ export default function AdminLayout() {
         >
           <div style={{ flex: 1, padding: 20, opacity: sidebarOpen ? 1 : 0, transition: 'opacity 0.2s' }}>
             <div className="layout-nav" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              
+              {/* 🟢 PUBLIC/COMMON ADMIN ROOMS */}
               <NavLink to="/admin" end className={navClass}>CORE_DASHBOARD</NavLink>
+              
+              {/* 🟢 SECURITY ROOM */}
               <NavLink to="/admin/security" className={navClass}>SECURITY_INTEL</NavLink>
-              <NavLink to="/admin/trading" className={navClass}>ALGO_TRADING</NavLink>
-              <NavLink to="/admin/global" className={navClass}>GLOBAL_CONFIG</NavLink>
+              
+              {/* 🟢 THE TRADING ROOM (Now Always Visible for Admins) */}
+              {isManager && (
+                <NavLink to="/admin/trading" className={navClass}>ALGO_TRADING</NavLink>
+              )}
+
+              {/* 🟢 GLOBAL CONFIG */}
+              {isAdmin && (
+                <NavLink to="/admin/global" className={navClass}>GLOBAL_CONFIG</NavLink>
+              )}
               
               <div style={{ margin: "25px 0", height: 1, background: "rgba(0,255,136,0.05)" }} />
               
@@ -167,7 +148,8 @@ export default function AdminLayout() {
             <AuthoDevPanel
               title="A.I. ADVISOR"
               getContext={() => ({
-                role: "admin",
+                user: user,
+                role: user?.role,
                 status: systemStatus,
                 path: window.location.pathname
               })}
@@ -177,7 +159,11 @@ export default function AdminLayout() {
 
         {/* ADVISOR TOGGLE */}
         <button
-          onClick={() => setAdvisorOpen(!advisorOpen)}
+          onClick={() => {
+            const next = !advisorOpen;
+            setAdvisorOpen(next);
+            localStorage.setItem("admin.advisor.open", next);
+          }}
           style={{
             position: "absolute",
             right: advisorOpen ? ADVISOR_WIDTH : 0,
