@@ -1,21 +1,18 @@
 // ==========================================================
-// 🔒 AUTOSHIELD CORE — v35.1 (CRASH-RESISTANT)
+// 🛡️ AUTOSHIELD CORE — v35.2 (UNIFIED & STALL-PROOF)
 // FILE: frontend/src/App.jsx
 // ==========================================================
 
-import React, { useEffect, useState, useRef } from "react";
-import { Routes, Route } from "react-router-dom";
+import React from "react";
+import { Routes, Route, BrowserRouter } from "react-router-dom";
 
-import api, { 
-  getSavedUser, 
-  getToken, 
-  saveUser 
-} from "./lib/api.js";
+/* 🔑 AUTH & SECURITY */
+import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
+import { SecurityProvider } from "./context/SecurityContext.jsx";
+import { TradingProvider } from "./context/TradingContext.jsx";
 
 /* 🏢 CONTEXT PROVIDERS */
 import { ToolProvider } from "./pages/tools/ToolContext.jsx";
-import { SecurityProvider } from "./context/SecurityContext.jsx";
-import { TradingProvider } from "./context/TradingContext.jsx";
 import { EventBusProvider } from "./core/EventBus.jsx";
 import { AIDecisionProvider } from "./core/AIDecisionBus.jsx";
 
@@ -36,7 +33,12 @@ import GlobalControl from "./pages/admin/GlobalControl.jsx";
 import TradingLayout from "./pages/trading/TradingLayout.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
-function AppRoutes({ user, ready }) {
+/**
+ * 🛰️ ROUTE ARCHITECTURE
+ */
+function AppRoutes() {
+  const { user, loading } = useAuth(); // Now pulling from the unified context
+
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
@@ -47,7 +49,7 @@ function AppRoutes({ user, ready }) {
       <Route
         path="/admin/*"
         element={
-          <PlatformGate user={user} ready={ready} allow={["admin"]}>
+          <PlatformGate user={user} ready={!loading} allow={["admin"]}>
             <AdminLayout />
           </PlatformGate>
         }
@@ -60,7 +62,7 @@ function AppRoutes({ user, ready }) {
       <Route
         path="/manager/*"
         element={
-          <PlatformGate user={user} ready={ready} allow={["manager", "admin"]}>
+          <PlatformGate user={user} ready={!loading} allow={["manager", "admin"]}>
             <ManagerLayout />
           </PlatformGate>
         }
@@ -73,51 +75,35 @@ function AppRoutes({ user, ready }) {
   );
 }
 
+/**
+ * 🏗️ MASTER PROVIDER WRAPPER
+ */
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [ready, setReady] = useState(false);
-  const bootedRef = useRef(false);
+  return (
+    <BrowserRouter> {/* Ensures Routing is handled at the root */}
+      <AuthProvider>
+        <EventBusProvider>
+          <SecurityProvider>
+            <AIDecisionProvider>
+              <TradingProvider>
+                <AuthWrapper />
+              </TradingProvider>
+            </AIDecisionProvider>
+          </SecurityProvider>
+        </EventBusProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
 
-  useEffect(() => {
-    if (bootedRef.current) return;
-    bootedRef.current = true;
+/**
+ * 🔒 AUTH WRAPPER: Handles the Boot UI and ToolProvider Sync
+ */
+function AuthWrapper() {
+  const { user, loading } = useAuth();
 
-    async function bootAuth() {
-      try {
-        const token = getToken();
-        const storedUser = getSavedUser();
-
-        if (!token) {
-          setReady(true);
-          return;
-        }
-
-        // Use a timeout so the boot doesn't hang the UI forever
-        const res = await Promise.race([
-          api.status(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000))
-        ]);
-
-        if (res?.ok && res?.user) {
-            setUser(res.user);
-            saveUser(res.user);
-        } else if (storedUser) {
-            setUser(storedUser);
-        }
-      } catch (err) {
-        console.warn("Auth Boot Shielded:", err.message);
-        const backupUser = getSavedUser();
-        if (backupUser) setUser(backupUser);
-      } finally {
-        setReady(true);
-      }
-    }
-
-    bootAuth();
-  }, []);
-
-  // LOADING STATE (Matches your branding)
-  if (!ready) {
+  // Show branding while AuthContext verifies the token
+  if (loading) {
     return (
       <div style={{ 
         background: "#050505", color: "#00ff88", height: "100vh", 
@@ -127,26 +113,17 @@ export default function App() {
         <div style={{ border: "1px solid #00ff88", padding: "40px", borderRadius: "4px" }}>
             <h1 style={{ fontSize: "1.5rem", margin: 0, letterSpacing: "8px" }}>AUTOSHIELD</h1>
             <div style={{ height: "2px", background: "#00ff88", width: "100%", marginTop: "10px", opacity: 0.3 }}></div>
-            <p style={{ color: "#444", fontSize: "0.6rem", marginTop: "15px" }}>ESTABLISHING SECURE PROTOCOLS...</p>
+            <p style={{ color: "rgba(0,255,136,0.4)", fontSize: "0.6rem", marginTop: "15px" }}>INITIALIZING_SECURE_PROTOCOLS...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <EventBusProvider>
-      <SecurityProvider>
-        <AIDecisionProvider>
-          <TradingProvider>
-            {/* ToolProvider gets a default object if user is null to prevent the Root Crash */}
-            <ToolProvider user={user || { role: 'guest', id: 'booting' }}>
-              <BrainAdapter />
-              <AutoDevEngine />
-              <AppRoutes user={user} ready={ready} />
-            </ToolProvider>
-          </TradingProvider>
-        </AIDecisionProvider>
-      </SecurityProvider>
-    </EventBusProvider>
+    <ToolProvider user={user || { role: 'guest', id: 'booting' }}>
+      <BrainAdapter />
+      <AutoDevEngine />
+      <AppRoutes />
+    </ToolProvider>
   );
 }
