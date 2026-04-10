@@ -1,7 +1,8 @@
-// ============================================================
-// 🔒 AUTOSHIELD ANALYTICS — v32.6 (UNIFIED & HARDENED)
-// FILE: Analytics.jsx - INDUSTRIAL MONITORING
-// ============================================================
+// ==========================================================
+// 🛡️ AUTOSHIELD ANALYTICS — v33.0 (INDUSTRIAL_WAR_ROOM)
+// MODULE: Performance Audit & Equity Monitoring
+// FILE: src/pages/trading/Analytics.jsx
+// ==========================================================
 
 import React, { useEffect, useState, useMemo } from "react";
 import { getToken, getSavedUser, API_BASE } from "../../lib/api.js";
@@ -17,7 +18,6 @@ const safeNum = (v, f = 0) => {
 const fmtMoney = (v) => `$${safeNum(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtPct = (v) => {
     const n = safeNum(v);
-    // Auto-detect if it's 0.85 (decimal) or 85 (percentage)
     const display = n <= 1 && n !== 0 ? n * 100 : n;
     return `${display.toFixed(1)}%`;
 };
@@ -50,7 +50,9 @@ export default function Analytics() {
         fetch(`${API_BASE}/api/paper/status`, { headers }),
         fetch(`${API_BASE}/api/analytics/trading`, { headers }),
         fetch(`${API_BASE}/api/ai/analytics`, { headers })
-      ]);
+      ]).catch(() => [null, null, null]);
+
+      if (!resLive) throw new Error("Link Failed");
 
       const [live, hist, ai] = await Promise.all([
         resLive.json(),
@@ -74,29 +76,36 @@ export default function Analytics() {
 
   useEffect(() => {
     refreshAll();
-    const timer = setInterval(refreshAll, 30000); // 30s is enough for analytics
+    const timer = setInterval(refreshAll, 30000); 
     return () => clearInterval(timer);
   }, []);
 
   const recentDecisions = useMemo(() => data.decisions.slice(-6).reverse(), [data.decisions]);
   const recentTrades = useMemo(() => data.trades.slice(-6).reverse(), [data.trades]);
 
-  if (loading) return <div style={styles.loader}>INITIALIZING WAR ROOM...</div>;
+  if (loading) return (
+    <div style={styles.loader}>
+      <div style={styles.loaderBox}>INITIALIZING_WAR_ROOM...</div>
+    </div>
+  );
 
   return (
     <div style={styles.wrapper}>
       <header style={styles.header}>
-        <h1 style={{ margin: 0, fontSize: "1.2rem", letterSpacing: '2px', fontWeight: 900 }}>📡 ANALYTICS_ROOM</h1>
+        <div>
+          <h1 style={styles.title}>ANALYTICS_COMMAND_v33.0</h1>
+          <div style={styles.subtitle}>// STRATEGIC_PERFORMANCE_AUDIT</div>
+        </div>
         <div style={styles.statusIndicator}>
-          NODE_STATUS: <span style={{ color: data.engine === "RUNNING" || data.engine === "connected" ? "var(--p-ok, #2bd576)" : "var(--p-warn, #ffb84d)" }}>{data.engine.toUpperCase()}</span>
+          NODE_STATUS: <span style={{ color: (data.engine === "RUNNING" || data.engine === "connected") ? "#00ff88" : "#ff4444" }}>{data.engine.toUpperCase()}</span>
         </div>
       </header>
 
       {/* TOP ROW: KEY KPI */}
       <div style={styles.grid3}>
-        <StatCard title="AI_CONFIDENCE" value={fmtPct(data.brain?.smoothedConfidence || data.brain?.confidence || 0)} color="var(--p-accent, #5ec6ff)" />
-        <StatCard title="WIN_RATE" value={fmtPct(data.summary?.winRate || 0)} color="var(--p-ok, #2bd576)" />
-        <StatCard title="NET_PROFIT" value={fmtMoney(data.summary?.netPnL || data.summary?.totalProfit || 0)} color={data.summary?.netPnL >= 0 ? "var(--p-ok, #2bd576)" : "var(--p-bad, #ff5a5f)"} />
+        <StatCard title="AI_CONFIDENCE" value={fmtPct(data.brain?.smoothedConfidence || data.brain?.confidence || 0)} color="#5ec6ff" />
+        <StatCard title="WIN_RATE" value={fmtPct(data.summary?.winRate || 0)} color="#00ff88" />
+        <StatCard title="NET_PROFIT" value={fmtMoney(data.summary?.netPnL || data.summary?.totalProfit || 0)} color={data.summary?.netPnL >= 0 ? "#00ff88" : "#ff4444"} />
       </div>
 
       {/* MAIN CHART */}
@@ -139,17 +148,17 @@ function LogCard({ title, items, type }) {
     <div style={styles.card}>
       <h3 style={styles.cardTitle}>{title}</h3>
       <div style={styles.logList}>
-        {items.length === 0 ? <div style={{color: '#444', fontSize: '0.7rem'}}>NO_DATA_AVAILABLE</div> : items.map((item, i) => (
+        {items.length === 0 ? <div style={{color: '#334155', fontSize: '10px'}}>NO_DATA_AVAILABLE</div> : items.map((item, i) => (
           <div key={i} style={styles.logItem}>
             {type === 'decision' ? (
               <>
-                <span style={{ color: item.action === 'BUY' ? 'var(--p-ok, #2bd576)' : 'var(--p-bad, #ff5a5f)', fontWeight: 900 }}>{item.action}</span>
-                <span style={{ color: '#94a3b8', fontFamily: 'monospace' }}>{fmtPct(item.confidence || item.score)}</span>
+                <span style={{ color: item.action === 'BUY' ? '#00ff88' : '#ff4444', fontWeight: 900 }}>{item.action}</span>
+                <span style={{ color: '#64748b', fontFamily: 'monospace' }}>{fmtPct(item.confidence || item.score)}</span>
               </>
             ) : (
               <>
-                <span style={{ fontSize: '0.7rem' }}>{item.side} @ {item.price}</span>
-                <span style={{ color: item.pnl >= 0 ? 'var(--p-ok, #2bd576)' : 'var(--p-bad, #ff5a5f)', fontWeight: 900 }}>{fmtMoney(item.pnl)}</span>
+                <span style={{ fontSize: '10px', color: '#cbd5e1' }}>{item.side} @ {item.price}</span>
+                <span style={{ color: item.pnl >= 0 ? '#00ff88' : '#ff4444', fontWeight: 900 }}>{fmtMoney(item.pnl)}</span>
               </>
             )}
           </div>
@@ -161,58 +170,20 @@ function LogCard({ title, items, type }) {
 
 /* ================= STYLES ================= */
 const styles = {
-  wrapper: {
-    padding: "24px",
-    background: "#0b101a", // Industrial Navy
-    color: "#fff",
-    minHeight: "100vh",
-    fontFamily: "'JetBrains Mono', monospace",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "24px",
-    borderBottom: "1px solid rgba(255,255,255,0.05)",
-    paddingBottom: "15px"
-  },
-  statusIndicator: {
-    fontSize: "9px",
-    letterSpacing: '1px',
-    background: "rgba(0,0,0,0.3)",
-    padding: "6px 12px",
-    borderRadius: "2px",
-    border: "1px solid rgba(255,255,255,0.1)"
-  },
-  grid3: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-    gap: "16px",
-    marginBottom: "20px",
-  },
-  grid2: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-    gap: "16px",
-    marginBottom: "20px",
-  },
-  card: {
-    background: "rgba(255,255,255,0.03)",
-    padding: "20px",
-    borderRadius: "4px",
-    border: "1px solid rgba(255,255,255,0.05)",
-  },
-  chartCard: {
-    background: "rgba(255,255,255,0.02)",
-    padding: "24px",
-    borderRadius: "4px",
-    border: "1px solid rgba(255,255,255,0.05)",
-    marginBottom: "20px"
-  },
-  cardLabel: { fontSize: "10px", color: "#64748b", fontWeight: "bold", textTransform: "uppercase", letterSpacing: '1px' },
+  wrapper: { padding: "24px", background: "#05080f", color: "#fff", minHeight: "100vh", fontFamily: "monospace" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", borderBottom: "1px solid #ffffff08", paddingBottom: "15px" },
+  title: { fontSize: "14px", fontWeight: "900", letterSpacing: "2px", margin: 0 },
+  subtitle: { fontSize: "9px", color: "#475569", marginTop: "4px" },
+  statusIndicator: { fontSize: "9px", background: "rgba(0,0,0,0.3)", padding: "6px 12px", border: "1px solid #ffffff08" },
+  grid3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "20px" },
+  grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px", marginBottom: "20px" },
+  card: { background: "#0b101a", padding: "20px", border: "1px solid #ffffff08" },
+  chartCard: { background: "#0b101a", padding: "24px", border: "1px solid #ffffff08", marginBottom: "20px" },
+  cardLabel: { fontSize: "10px", color: "#64748b", fontWeight: "bold", letterSpacing: '1px' },
   cardValue: { fontSize: "1.5rem", fontWeight: "900", marginTop: "6px" },
-  cardTitle: { margin: "0 0 16px 0", fontSize: "11px", color: "#94a3b8", fontWeight: "bold", letterSpacing: '1.5px', textTransform: 'uppercase' },
+  cardTitle: { margin: "0 0 16px 0", fontSize: "10px", color: "#64748b", fontWeight: "bold", letterSpacing: '1.5px' },
   logList: { display: "flex", flexDirection: "column", gap: "10px" },
-  logItem: { display: "flex", justifyContent: "space-between", fontSize: "11px", borderBottom: "1px solid rgba(255,255,255,0.03)", paddingBottom: "6px" },
-  loader: { height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b101a", color: "var(--p-accent, #5ec6ff)", fontWeight: "bold", letterSpacing: '4px' }
+  logItem: { display: "flex", justifyContent: "space-between", fontSize: "11px", borderBottom: "1px solid #ffffff03", paddingBottom: "6px" },
+  loader: { height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#05080f", color: "#00ff88", fontFamily: 'monospace' },
+  loaderBox: { border: '1px solid #00ff88', padding: '20px', letterSpacing: '4px' }
 };
