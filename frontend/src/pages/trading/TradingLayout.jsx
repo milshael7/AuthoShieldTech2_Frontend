@@ -1,5 +1,5 @@
 // ==========================================================
-// 🔒 PROTECTED CORE FILE — v4.0 (UNISON SHELL)
+// 🛡️ PROTECTED CORE FILE — v4.1 (MAPPING SYNCED)
 // MODULE: Trading Terminal Layout (UI SHELL)
 // FILE: src/pages/TradingLayout.jsx
 // ==========================================================
@@ -19,18 +19,24 @@ export default function TradingLayout() {
 
   /* ================= 📡 TELEMETRY ENGINE ================= */
   const telemetry = useMemo(() => {
-    // Syncing with v6.1 engineCore keys
-    const intel = snapshot?.intelligence || {};
+    /** 🛰️ PUSH 3 FIX: ARRAY MAPPING
+     * Backend sends intelligence as a list. We need the latest entry
+     * to populate the header metrics.
+     */
+    const intelList = Array.isArray(snapshot?.intelligence) ? snapshot.intelligence : [];
+    const latestIntel = intelList.length > 0 ? intelList[intelList.length - 1] : {};
     
     return {
       engineStatus: (paperStatus || "OFFLINE").toUpperCase(),
       running: paperStatus === "connected",
+      // 🛰️ PUSH 3 FIX: Mode Definition
+      mode: snapshot?.mode || "PAPER_TRADING",
       trades: trades.length || 0,
       decisions: decisions.length || 0,
-      // Map 'velocity' from engine to 'aiRate' for the UI
-      aiRate: Number(intel.velocity || 0),
-      memoryMb: Number(intel.memoryUsage || intel.memory || 0),
-      confidence: Number(intel.confidence || 0),
+      // Map correctly from the latest intelligence log entry
+      aiRate: Number(latestIntel.velocity || 0),
+      memoryMb: Number(latestIntel.memoryUsage || latestIntel.memory || 0),
+      confidence: Number(latestIntel.confidence || 0),
       volatility: Number(snapshot?.volatility || 0),
     };
   }, [snapshot, paperStatus, trades, decisions]);
@@ -44,8 +50,9 @@ export default function TradingLayout() {
       <div style={styles.header}>
         <div style={styles.headerTop}>
           <div>
-            <div style={styles.title}>AUTOSHIELD_TERMINAL <span style={styles.version}>v4.0</span></div>
-            <div style={styles.subtitle}>SECURE_TRADING_NODE // {telemetry.mode || "PAPER_TRADING"}</div>
+            <div style={styles.title}>AUTOSHIELD_TERMINAL <span style={styles.version}>v4.1</span></div>
+            {/* 🛰️ PUSH 3 FIX: Telemetry Mode now correctly resolves */}
+            <div style={styles.subtitle}>SECURE_TRADING_NODE // {telemetry.mode}</div>
           </div>
 
           <div style={styles.pillContainer}>
@@ -70,17 +77,14 @@ export default function TradingLayout() {
 
       {/* 🖥️ VIEWPORT */}
       <main style={styles.viewport}>
-        {/* We use Outlet if your routes are nested in App.jsx, 
-            otherwise the page-switching logic below is the fallback */}
         <Outlet context={{ isAdmin: true }} />
-        
         {location.pathname.endsWith("trading") && <Navigate to="live" replace />}
       </main>
     </div>
   );
 }
 
-/* ================= UI HELPERS ================= */
+/* ================= UI HELPERS (PRESERVED) ================= */
 
 function TabLink({ to, label }) {
   return (
@@ -88,8 +92,8 @@ function TabLink({ to, label }) {
       to={to} 
       style={({isActive}) => ({
         ...styles.tab,
-        color: isActive ? "var(--p-ok, #2bd576)" : "#64748b",
-        borderBottom: isActive ? "2px solid var(--p-ok, #2bd576)" : "2px solid transparent",
+        color: isActive ? "#2bd576" : "#64748b",
+        borderBottom: isActive ? "2px solid #2bd576" : "2px solid transparent",
         background: isActive ? "rgba(43, 213, 118, 0.05)" : "transparent"
       })}
     >
@@ -100,63 +104,27 @@ function TabLink({ to, label }) {
 
 function HeaderPill({ label, value, tone = "info" }) {
   let color = "#94a3b8";
-  let border = "rgba(255,255,255,0.05)";
-  
-  if (tone === "good") color = "var(--p-ok, #2bd576)";
-  if (tone === "bad") color = "var(--p-bad, #ff5a5f)";
+  if (tone === "good") color = "#2bd576";
+  if (tone === "bad") color = "#ff5a5f";
 
   return (
-    <div style={{ ...styles.pill, borderColor: border }}>
+    <div style={styles.pill}>
       <span style={{ color: "#475569", marginRight: 6 }}>{label}</span>
       <b style={{ color }}>{value}</b>
     </div>
   );
 }
 
-/* ================= STYLES ================= */
 const styles = {
-  shell: {
-    display: "flex",
-    flexDirection: "column",
-    height: "100vh",
-    background: "#05080f",
-    color: "#fff",
-    fontFamily: "'JetBrains Mono', monospace",
-  },
-  header: {
-    padding: "15px 20px",
-    background: "#0b101a",
-    borderBottom: "1px solid rgba(255,255,255,0.05)"
-  },
-  headerTop: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center"
-  },
+  shell: { display: "flex", flexDirection: "column", height: "100vh", background: "#05080f", color: "#fff", fontFamily: "monospace" },
+  header: { padding: "15px 20px", background: "#0b101a", borderBottom: "1px solid rgba(255,255,255,0.05)" },
+  headerTop: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   title: { fontSize: "14px", fontWeight: "900", letterSpacing: "1px" },
   version: { fontSize: "9px", opacity: 0.3, marginLeft: "5px" },
   subtitle: { fontSize: "9px", color: "#475569", letterSpacing: "1px", marginTop: "2px" },
   pillContainer: { display: "flex", gap: "8px" },
-  pill: { 
-    padding: "4px 10px", 
-    borderRadius: "2px", 
-    background: "rgba(0,0,0,0.2)", 
-    fontSize: "10px", 
-    border: "1px solid" 
-  },
-  nav: {
-    display: "flex",
-    background: "#0b101a",
-    padding: "0 20px",
-    borderBottom: "1px solid rgba(255,255,255,0.05)"
-  },
-  tab: {
-    padding: "12px 20px",
-    fontSize: "11px",
-    fontWeight: "900",
-    textDecoration: "none",
-    transition: "0.2s",
-    letterSpacing: "1px"
-  },
+  pill: { padding: "4px 10px", borderRadius: "2px", background: "rgba(0,0,0,0.2)", fontSize: "10px", border: "1px solid rgba(255,255,255,0.05)" },
+  nav: { display: "flex", background: "#0b101a", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.05)" },
+  tab: { padding: "12px 20px", fontSize: "11px", fontWeight: "900", textDecoration: "none", transition: "0.2s", letterSpacing: "1px" },
   viewport: { flex: 1, overflow: "hidden", position: "relative" }
 };
