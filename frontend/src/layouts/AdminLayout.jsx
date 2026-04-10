@@ -1,5 +1,5 @@
 // ==========================================================
-// 🏛️ COMMAND CENTER — v38.0 (ADVISOR STABILITY MASTER)
+// 🏛️ COMMAND CENTER — v38.1 (FULL LAYOUT REPLACEMENT)
 // FILE: src/layouts/AdminLayout.jsx
 // ==========================================================
 
@@ -14,9 +14,9 @@ export default function AdminLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   
-  // 🟢 RULE 1 & 2: Controlled from one place, starts CLOSED
+  // 🟢 STATE: Sidebar defaults open, Advisor defaults closed for clean entry
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [advisorOpen, setAdvisorOpen] = useState(false); // Default closed
+  const [advisorOpen, setAdvisorOpen] = useState(false);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'root';
   const navClass = ({ isActive }) => isActive ? "nav-link active" : "nav-link";
@@ -41,7 +41,7 @@ export default function AdminLayout() {
                 {user?.role?.toUpperCase()} // {user?.email?.split('@')[0]}
               </div>
             </div>
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="menu-trigger-btn">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="menu-trigger-btn" style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span style={styles.menuText}>MENU</span>
               <div style={styles.menuIconStrip}>
                 <div style={{ width: "2px", height: "20px", background: "#00ff88" }}></div>
@@ -63,29 +63,27 @@ export default function AdminLayout() {
           zIndex: 50
         }}>
           <div style={{ width: 300, padding: "25px" }}>
-            <p className="nav-header">[ SECTOR_01: OVERSIGHT ]</p>
+            <p className="nav-header" style={{ color: "#555", fontSize: "10px", marginBottom: "15px" }}>[ SECTOR_01: OVERSIGHT ]</p>
             <NavLink to="/admin" end className={navClass}>🌐 DASHBOARD</NavLink>
             <NavLink to="/admin/global" className={navClass}>📡 GLOBAL_CONTROL</NavLink>
             
             <div style={styles.divider} />
-            <p className="nav-header">[ SECTOR_02: ENGINES ]</p>
+            <p className="nav-header" style={{ color: "#555", fontSize: "10px", marginBottom: "15px" }}>[ SECTOR_02: ENGINES ]</p>
             <NavLink to="/admin/trading/live" className={navClass}>📈 TRADING_ROOM {isAdmin ? "🔓" : "👁️"}</NavLink>
             <NavLink to="/admin/security" className={navClass}>🛡️ SECURITY_CORE</NavLink>
             
             <div style={styles.divider} />
-            <button onClick={logout} className="exit-btn">SHUTDOWN_SESSION</button>
+            <button onClick={logout} className="exit-btn" style={{ width: '100%', padding: '10px', background: 'transparent', border: '1px solid #ff4444', color: '#ff4444', cursor: 'pointer', fontSize: '11px' }}>SHUTDOWN_SESSION</button>
           </div>
         </nav>
 
-        {/* ⚪ MAIN STAGE (THE CENTER) 
-            Rule 2: Wrapper that stays balanced.
-        */}
+        {/* ⚪ MAIN STAGE (THE CENTER) - BALANCED WRAPPER */}
         <main style={{ 
           flex: 1, 
           position: "relative",
           display: "flex", 
           flexDirection: "column",
-          overflow: "hidden", // Prevents stage from expanding weirdly
+          overflow: "hidden", 
           background: "#050505"
         }}>
           <div style={styles.stageInner}>
@@ -93,9 +91,7 @@ export default function AdminLayout() {
           </div>
         </main>
 
-        {/* 🔴 THE ADVISOR SYSTEM (RIGHT SIDE) 
-            Rule 4: Handle attached to the panel edge.
-        */}
+        {/* 🔴 THE ADVISOR SYSTEM (RIGHT SIDE) */}
         <div style={{ 
           display: "flex", 
           height: "100%", 
@@ -104,13 +100,13 @@ export default function AdminLayout() {
           position: "relative"
         }}>
           
-          {/* 🏹 TACTICAL HANDLE (Always Visible) */}
+          {/* 🏹 TACTICAL HANDLE (DIRECTIONAL ARROWS) */}
           <div 
             onClick={() => setAdvisorOpen(!advisorOpen)} 
             style={{ 
                 position: "absolute",
                 top: "50%",
-                left: `-${HANDLE_WIDTH}px`, // Sits perfectly on the edge
+                left: `-${HANDLE_WIDTH}px`,
                 transform: "translateY(-50%)",
                 width: `${HANDLE_WIDTH}px`,
                 height: "220px", 
@@ -125,14 +121,12 @@ export default function AdminLayout() {
                 cursor: "pointer",
                 zIndex: 100,
                 borderRadius: "8px 0 0 8px",
-                boxShadow: "-5px 0 15px rgba(0,0,0,0.5)"
+                boxShadow: "-5px 0 15px rgba(0,0,0,0.5)",
+                userSelect: "none"
             }}
           >
-            {/* Arrow logic: closed = inward (left), open = outward (right) */}
             <span style={styles.handleArrow}>{advisorOpen ? "»" : "«"}</span>
-
             <div style={styles.handleVerticalText}>ADVISOR</div>
-
             <span style={styles.handleArrow}>{advisorOpen ? "»" : "«"}</span>
           </div>
 
@@ -165,16 +159,19 @@ const styles = {
   menuIconStrip: { display: "flex", gap: "4px" },
   divider: { height: '1px', background: '#00ff8811', margin: '15px 0' },
   
-  // Rule 2: Inner centered stage
+  // 🛰️ STAGE INNER: Center Stage logic
   stageInner: {
     flex: 1,
     padding: "24px",
     width: "100%",
-    maxWidth: "1600px", // Keeps it from stretching too far on ultrawide
+    maxWidth: "1600px", 
     margin: "0 auto",
     display: "flex",
     flexDirection: "column",
-    overflowY: "auto"
+    overflowY: "auto",
+    minWidth: 0, 
+    boxSizing: "border-box",
+    transition: "all 0.4s cubic-bezier(0.19, 1, 0.22, 1)"
   },
 
   handleArrow: { fontSize: "14px", fontWeight: "900", color: "#00ff88" },
@@ -185,6 +182,7 @@ const styles = {
     letterSpacing: "5px", 
     fontWeight: "900",
     color: "#00ff88",
-    opacity: 0.7
+    opacity: 0.7,
+    userSelect: "none"
   }
 };
