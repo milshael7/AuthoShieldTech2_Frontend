@@ -1,3 +1,8 @@
+// ==========================================================
+// 💳 AUTOSHIELD TECH — v41.0 (TIER-AWARE PRICING)
+// FILE: frontend/src/pages/public/Pricing.jsx
+// ==========================================================
+
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PRICING } from "../../config/pricing.config";
@@ -7,18 +12,26 @@ export default function Pricing() {
   const navigate = useNavigate();
   const [billing, setBilling] = useState("monthly");
 
-  const yearlyNote =
-    billing === "yearly"
-      ? "Yearly contract includes a 5% contract fee."
-      : "Month-to-month. Cancel anytime.";
+  /**
+   * 🛰️ PUSH 4.2 FIX: HAND-OFF LOGIC
+   * We pass the selected tier into the location state so the 
+   * Signup page can auto-configure the role and company fields.
+   */
+  const handleSelectTier = (tierKey) => {
+    navigate("/signup", { state: { selectedTier: tierKey, billingCycle: billing } });
+  };
+
+  const yearlyNote = billing === "yearly"
+      ? "Yearly contracts include a 5% security maintenance fee."
+      : "Standard monthly billing. Cancel anytime.";
 
   return (
     <div className="pricing-page">
-      {/* ================= HEADER ================= */}
+      {/* --- HEADER --- */}
       <section className="pricing-header">
-        <h1>Plans & Pricing</h1>
+        <h1 className="glitch-text" data-text="OPERATIONAL_TIERS">Plans & Pricing</h1>
         <p className="muted center">
-          Choose the plan that fits your role. Upgrade only when you’re ready.
+          Select your operational level. Tier transitions require admin verification.
         </p>
 
         <div className="billing-toggle">
@@ -26,111 +39,109 @@ export default function Pricing() {
             className={billing === "monthly" ? "active" : ""}
             onClick={() => setBilling("monthly")}
           >
-            Monthly
+            MONTHLY
           </button>
           <button
             className={billing === "yearly" ? "active" : ""}
             onClick={() => setBilling("yearly")}
           >
-            Yearly Contract
+            YEARLY_CONTRACT
           </button>
         </div>
-
-        <small className="muted center">{yearlyNote}</small>
+        <small className="status-label">{yearlyNote}</small>
       </section>
 
-      {/* ================= PLANS ================= */}
+      {/* --- PLANS --- */}
       <section className="pricing-grid">
+        
         {/* ===== INDIVIDUAL ===== */}
         <div className="price-card">
+          <div className="tier-label">OPERATOR</div>
           <h2>Individual</h2>
-          <p className="price">
+          <div className="price-display">
             {billing === "monthly"
-              ? `$${PRICING.individual.monthly} / month`
-              : `$${PRICING.individual.monthly} × ${PRICING.individual.yearlyMultiplier} + ${PRICING.individual.yearlyFeePercent}%`}
-          </p>
+              ? <span className="amt">${PRICING.individual.monthly}<b>/mo</b></span>
+              : <span className="amt">${(PRICING.individual.monthly * 0.95).toFixed(0)}<b>/mo*</b></span>
+            }
+          </div>
 
-          <ul>
-            <li>Single professional account</li>
-            <li>One role per client company</li>
-            <li>Core SOC visibility</li>
-            <li>Manual cybersecurity work</li>
-            <li>AutoDev 6.5 available as upgrade</li>
+          <ul className="feature-list">
+            <li>Single professional node</li>
+            <li>One role per client cluster</li>
+            <li>Core SOC Visibility</li>
+            <li>Manual Security Operations</li>
+            <li className="highlight-li">AutoDev 6.5 Ready</li>
           </ul>
 
-          <button onClick={() => navigate("/signup")}>
-            Get Started
+          <button className="pricing-btn" onClick={() => handleSelectTier("individual")}>
+            Initialize Operator
           </button>
         </div>
 
         {/* ===== SMALL COMPANY ===== */}
         <div className="price-card">
+          <div className="tier-label">TEAM</div>
           <h2>Small Company</h2>
-          <p className="price">
+          <div className="price-display">
             {billing === "monthly"
-              ? `$${PRICING.smallCompany.start} → $${PRICING.smallCompany.max}`
-              : `Contract-based + ${PRICING.smallCompany.yearlyFeePercent}%`}
-          </p>
+              ? <span className="amt">${PRICING.smallCompany.start}+<b>/mo</b></span>
+              : <span className="amt">Contract<b>Based</b></span>
+            }
+          </div>
 
-          <ul>
-            <li>Up to {PRICING.smallCompany.userLimit} users</li>
-            <li>Limited SOC visibility</li>
-            <li>No AutoDev 6.5 access</li>
-            <li>Upgrade notifications only</li>
+          <ul className="feature-list">
+            <li>Up to {PRICING.smallCompany.userLimit} user nodes</li>
+            <li>Regional SOC visibility</li>
+            <li>Incident Tracking</li>
+            <li>Manager-level Dashboards</li>
+            <li className="muted-li">No AutoDev 6.5 Access</li>
           </ul>
 
-          <button onClick={() => navigate("/signup")}>
-            Start as Small Company
+          <button className="pricing-btn" onClick={() => handleSelectTier("smallCompany")}>
+            Deploy Team Node
           </button>
         </div>
 
         {/* ===== COMPANY ===== */}
         <div className="price-card highlight">
+          <div className="tier-label top">ENTERPRISE</div>
           <h2>Company</h2>
-          <p className="price">
-            {billing === "monthly"
-              ? `$${PRICING.company.start} → $${PRICING.company.afterSixMonths}`
-              : `Contract-based + ${PRICING.company.yearlyFeePercent}%`}
-          </p>
+          <div className="price-display">
+            <span className="amt">Custom<b>Quote</b></span>
+          </div>
 
-          <ul>
-            <li>Unlimited users</li>
-            <li>Full SOC visibility</li>
-            <li>Manager & admin roles</li>
-            <li>Incident, threat, asset governance</li>
+          <ul className="feature-list">
+            <li>Unlimited user nodes</li>
+            <li>Full Global SOC Access</li>
+            <li>Root & Admin hierarchy</li>
+            <li>Immutable Asset Governance</li>
+            <li>Priority Incident Response</li>
           </ul>
 
-          <button onClick={() => navigate("/signup")}>
-            Contact & Start
+          <button className="pricing-btn primary" onClick={() => handleSelectTier("company")}>
+            Provision Enterprise
           </button>
         </div>
       </section>
 
-      {/* ================= AUTODEV ================= */}
+      {/* --- AUTODEV ADD-ON --- */}
       <section className="pricing-autodev">
-        <h2>AutoDev 6.5</h2>
-
-        <div className="price-card wide">
-          <p className="price">
-            First Month: ${PRICING.individual.autodev.firstMonth}
-            <br />
-            Ongoing: ${PRICING.individual.autodev.ongoing} / month
-          </p>
-
-          <ul>
-            <li>Autonomous cybersecurity execution</li>
-            <li>Human intervention alerts</li>
-            <li>Immutable reporting & audit trail</li>
-            <li>Owner-branded reports</li>
-          </ul>
+        <div className="autodev-banner">
+          <div className="banner-left">
+            <h3>AUTODEV 6.5 <span className="status-tag">ACTIVE_EXECUTION</span></h3>
+            <p>Upgrade any Individual tier to Autonomous Operational Status.</p>
+          </div>
+          <div className="banner-right">
+            <div className="price-tag">
+              <span className="label">SETUP:</span> <b>${PRICING.individual.autodev.firstMonth}</b>
+              <span className="label">ONGOING:</span> <b>${PRICING.individual.autodev.ongoing}/mo</b>
+            </div>
+          </div>
         </div>
       </section>
 
       <footer className="public-footer">
-        <p>
-          Pricing is controlled by administrators.
-          No automatic upgrades. Notifications only.
-        </p>
+        <p>All tiers are subject to KYC verification. No automatic upgrades. All billing is notification-driven.</p>
       </footer>
     </div>
   );
