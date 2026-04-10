@@ -1,12 +1,11 @@
 // ==========================================================
-// 🔒 PROTECTED STEALTH UI — v6.1 (RELOCATED & SYNCED)
+// 🛡️ PROTECTED STEALTH UI — v6.2 (NESTED-SAFE & SYNCED)
+// MODULE: Live Trading Terminal
 // FILE: src/pages/trading/TradingRoom.jsx
 // ==========================================================
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom"; 
-
-/* 🛰️ PATH CORRECTION: Moving deeper requires ../../ to reach root src */
 import { useTrading } from "../../context/TradingContext.jsx";
 import { api } from "../../lib/api.js";
 
@@ -19,7 +18,8 @@ import AIPerformanceHistoryPanel from "../../components/AIPerformanceHistoryPane
 const SYMBOL = "BTCUSDT";
 
 export default function TradingRoom() {
-  const { isAdmin } = useOutletContext(); 
+  // 🛰️ PUSH 7.4: Receive telemetry from TradingLayout outlet
+  const { isAdmin, telemetry } = useOutletContext(); 
   const {
     price: livePrice,
     snapshot,
@@ -31,22 +31,27 @@ export default function TradingRoom() {
   const [loading, setLoading] = useState(false);
   const lastCandleRef = useRef(null);
 
-  // Normalize history for the UI components
+  // 📊 PUSH 7.4: Normalize history for UI components
   const tradeHistory = useMemo(() => {
-    return snapshot?.trades || snapshot?.history || [];
+    const history = snapshot?.trades || snapshot?.history || [];
+    // Return latest trades first for the display panels
+    return [...history].reverse();
   }, [snapshot]);
 
+  // 🧠 PUSH 7.4: Unified Brain Metrics logic
   const brainMetrics = useMemo(() => {
-    const latest = decisions?.[0] || {};
+    const intelList = Array.isArray(snapshot?.intelligence) ? snapshot.intelligence : [];
+    const latest = intelList.length > 0 ? intelList[intelList.length - 1] : (decisions?.[0] || {});
+    
     return {
-      confidence: Number(latest.confidence || latest.score || 0.85),
+      confidence: Number(latest.confidence || 0),
       velocity: Number(latest.velocity || 0),
-      memory: Number(latest.memory || 0),
+      memory: Number(latest.memoryUsage || latest.memory || 0),
       decisions: decisions || []
     };
-  }, [decisions]);
+  }, [snapshot, decisions]);
 
-  /* ================= 📊 LIVE CHART ENGINE ================= */
+  /* ================= 📊 LIVE CANDLE ENGINE ================= */
   useEffect(() => {
     if (!livePrice || livePrice <= 0) return;
     const now = Math.floor(Date.now() / 60000) * 60000;
@@ -103,6 +108,7 @@ export default function TradingRoom() {
 
   return (
     <div className="terminalRoot" style={styles.container}>
+      {/* 🚀 LEFT SECTION: VISUALS */}
       <div style={styles.leftCol}>
         <div style={styles.chartContainer}>
           <TerminalChart 
@@ -118,6 +124,7 @@ export default function TradingRoom() {
         </div>
       </div>
 
+      {/* 🛰️ RIGHT SECTION: COMMAND PANEL */}
       <div className="terminalPanel" style={styles.rightCol}>
         <div className="terminalPanelHeader" style={styles.sideHeader}>
           {isAdmin ? "COMMAND_OVERRIDE_ACTIVE" : "SECURE_MONITOR_SESSION"}
@@ -160,14 +167,23 @@ function StatRow({ label, value, color = "#fff" }) {
 }
 
 const styles = {
-  container: { display: "grid", gridTemplateColumns: "1fr 340px", gap: "20px", padding: '20px', height: '100%', minHeight: 0, background: '#020617' },
+  // 🛰️ PUSH 7.4: Grid adjustment for responsive centering
+  container: { 
+    display: "grid", 
+    gridTemplateColumns: "1fr 340px", 
+    gap: "20px", 
+    height: '100%', 
+    minHeight: 0, 
+    background: 'transparent', // Let AdminLayout control BG
+    padding: '10px 0' 
+  },
   leftCol: { display: 'flex', flexDirection: 'column', gap: "20px", overflow: 'hidden', height: '100%' },
-  chartContainer: { flex: 1, minHeight: 0, background: '#000', borderRadius: '8px', border: '1px solid #1e293b' },
-  bottomGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', height: '280px', minHeight: '280px' },
-  rightCol: { position: 'relative', width: '100%', height: '100%', borderRadius: '8px', background: '#0f172a', border: '1px solid #1e293b', display: 'flex', flexDirection: 'column' },
-  sideHeader: { padding: '12px', background: '#1e293b', fontSize: '10px', fontWeight: 'bold', letterSpacing: '1px', borderBottom: '1px solid #334155' },
+  chartContainer: { flex: 1, minHeight: 0, background: '#000', borderRadius: '4px', border: '1px solid #1e293b' },
+  bottomGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', height: '300px', minHeight: '300px' },
+  rightCol: { position: 'relative', width: '100%', height: '100%', borderRadius: '4px', background: '#0b101a', border: '1px solid #1e293b', display: 'flex', flexDirection: 'column' },
+  sideHeader: { padding: '12px', background: '#1e293b', fontSize: '10px', fontWeight: 'bold', letterSpacing: '1px', borderBottom: '1px solid #334155', color: '#00ff88' },
   sidebarBody: { flex: 1, display: 'flex', flexDirection: 'column', padding: '20px', overflowY: 'auto' },
-  priceBig: { fontSize: '32px', fontWeight: '800', textAlign: 'center', margin: '10px 0', fontFamily: 'monospace' },
-  emergencyBtn: { width: '100%', padding: '16px', marginTop: '10px', background: '#ea3943', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' },
+  priceBig: { fontSize: '32px', fontWeight: '800', textAlign: 'center', margin: '10px 0', fontFamily: 'monospace', color: '#fff' },
+  emergencyBtn: { width: '100%', padding: '16px', marginTop: '10px', background: '#ea3943', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', transition: 'opacity 0.2s' },
   footerStats: { marginTop: "auto", borderTop: "1px solid #1e293b", paddingTop: "20px" }
 };
