@@ -1,5 +1,6 @@
 // ==========================================================
-// 🛡️ AUTOSHIELD CORE — v36.0 (NESTED-ROUTE ENABLED)
+// 🛡️ AUTOSHIELD CORE — v37.0 (INDUSTRIAL_MESH_ENABLED)
+// MODULE: System Router & Route mesh
 // FILE: frontend/src/App.jsx
 // ==========================================================
 
@@ -30,8 +31,12 @@ import Signup from "./pages/public/Signup.jsx";
 import Login from "./pages/Login.jsx";
 import AdminOverview from "./pages/admin/AdminOverview.jsx";
 import GlobalControl from "./pages/admin/GlobalControl.jsx";
+
+/* 🚀 TRADING HUB PAGES */
 import TradingLayout from "./pages/trading/TradingLayout.jsx";
-import TradingRoom from "./pages/trading/TradingRoom.jsx"; // Ensure this is imported
+import TradingRoom from "./pages/trading/TradingRoom.jsx";
+import MarketRoom from "./pages/MarketRoom.jsx"; 
+import AnalyticsRoom from "./pages/AnalyticsRoom.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
 /**
@@ -59,22 +64,20 @@ function AppRoutes() {
         <Route index element={<AdminOverview />} />
         <Route path="global" element={<GlobalControl />} />
         
-        {/* 🛰️ PUSH 2 FIX: NESTED TRADING ROUTES 
-            This ensures TradingLayout's <Outlet /> has content to show.
-        */}
+        {/* 🛰️ PUSH 8.5: INTEGRATED TRADING SUITE */}
         <Route path="trading/*" element={<TradingLayout />}>
-          <Route index element={<TradingRoom />} /> {/* Default to live room */}
+          <Route index element={<TradingRoom />} /> 
           <Route path="live" element={<TradingRoom />} />
-          <Route path="market" element={<div className="p-10">Market Data (Placeholder)</div>} />
-          <Route path="control" element={<div className="p-10">AI Control (Placeholder)</div>} />
-          <Route path="analytics" element={<div className="p-10">Analytics (Placeholder)</div>} />
+          <Route path="market" element={<MarketRoom />} />
+          <Route path="analytics" element={<AnalyticsRoom />} />
+          <Route path="control" element={<div className="p-10" style={{color: '#64748b'}}>// AI_PROTOCOL_V4_PENDING</div>} />
         </Route>
 
-        {/* 🛡️ ADMIN SIDEBAR SYNC: Placeholders for missing Admin pages */}
-        <Route path="users" element={<div className="p-10">User Management (Coming Soon)</div>} />
-        <Route path="security" element={<div className="p-10">Security Operations (Coming Soon)</div>} />
-        <Route path="assets" element={<div className="p-10">Asset Discovery (Coming Soon)</div>} />
-        <Route path="settings" element={<div className="p-10">System Settings (Coming Soon)</div>} />
+        {/* 🛡️ ADMIN SIDEBAR SYNC */}
+        <Route path="users" element={<div className="p-10" style={{color: '#64748b'}}>// ACCESS_DENIED: USER_OPS_LOCKED</div>} />
+        <Route path="security" element={<div className="p-10" style={{color: '#64748b'}}>// SECURITY_OPS_OFFLINE</div>} />
+        <Route path="assets" element={<div className="p-10" style={{color: '#64748b'}}>// ASSET_DISCOVERY_v0.9</div>} />
+        <Route path="settings" element={<div className="p-10" style={{color: '#64748b'}}>// SYSTEM_CORE_SETTINGS</div>} />
       </Route>
 
       {/* ================= MANAGER SECTOR ================= */}
