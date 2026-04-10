@@ -1,10 +1,10 @@
-// ============================================================
-// 🔒 AUTOSHIELD COMMAND — v5.2 (VERCEL-OPTIMIZED)
-// FILE: AIControl.jsx - FULL REPLACEMENT
-// ============================================================
+// ==========================================================
+// 🛡️ AUTOSHIELD COMMAND — v6.0 (INDUSTRIAL_CORE)
+// MODULE: AI Engine Intelligence & Risk Overrides
+// FILE: src/pages/trading/AIControl.jsx
+// ==========================================================
 
 import React, { useEffect, useState, useCallback } from "react";
-// ✅ MATCHED: Importing directly from the fixed lib source
 import { getToken, API_BASE } from "../../lib/api.js";
 
 export default function AIControl() {
@@ -14,7 +14,8 @@ export default function AIControl() {
     maxTrades: 5,
     riskPercent: 1.5,
     positionMultiplier: 1,
-    strategyMode: "Balanced"
+    strategyMode: "Balanced",
+    slippage: 0.5 // 🛰️ PUSH 8.9: New Kraken-ready parameter
   });
 
   const [engineHealth, setEngineHealth] = useState("SYNCING");
@@ -22,28 +23,27 @@ export default function AIControl() {
   const [statusMsg, setStatusMsg] = useState("");
 
   /* ================= 📡 DATA SYNC ================= */
-  // Use useCallback to prevent unnecessary re-renders
   const loadAll = useCallback(async (signal) => {
     const token = getToken();
     if (!token) return;
 
-    const headers = {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json"
-    };
-
     try {
       const [resConfig, resStatus] = await Promise.all([
-        fetch(`${API_BASE}/api/ai/config`, { headers, signal }),
-        fetch(`${API_BASE}/api/paper/status`, { headers, signal })
+        fetch(`${API_BASE}/api/ai/config`, { 
+          headers: { "Authorization": `Bearer ${token}` }, 
+          signal 
+        }),
+        fetch(`${API_BASE}/api/paper/status`, { 
+          headers: { "Authorization": `Bearer ${token}` }, 
+          signal 
+        })
       ]);
 
       const cfgData = await resConfig.json();
       const statusData = await resStatus.json();
 
-      if (cfgData.ok) setConfig(cfgData.config);
+      if (cfgData.ok) setConfig(prev => ({ ...prev, ...cfgData.config }));
       
-      // Safety navigation for engine status
       const health = statusData?.engine || statusData?.status || "OFFLINE";
       setEngineHealth(health.toUpperCase());
     } catch (err) {
@@ -53,12 +53,10 @@ export default function AIControl() {
 
   useEffect(() => {
     const controller = new AbortController();
-    
     loadAll(controller.signal);
     const timer = setInterval(() => loadAll(controller.signal), 10000);
-    
     return () => {
-      controller.abort(); // ✅ STALL PREVENTION: Cancels requests on unmount
+      controller.abort();
       clearInterval(timer);
     };
   }, [loadAll]);
@@ -79,91 +77,89 @@ export default function AIControl() {
         body: JSON.stringify(config)
       });
       const data = await res.json();
-      setStatusMsg(data.ok ? "✅ CONFIG SYNCED" : "❌ SYNC ERROR");
+      setStatusMsg(data.ok ? "✅ CORE_UPDATED" : "❌ SYNC_ERROR");
       setTimeout(() => setStatusMsg(""), 3000);
     } catch (err) {
-      setStatusMsg("📡 CONNECTION FAILED");
+      setStatusMsg("📡 LINK_FAILED");
     }
     setSaving(false);
   };
 
-  /* ================= UI RENDER ================= */
   return (
     <div style={styles.wrapper}>
       <header style={styles.header}>
-        <h1 style={{ fontSize: "1.1rem", margin: 0, fontWeight: "900", letterSpacing: '1px' }}>🧠 AI COMMAND</h1>
+        <div>
+          <div style={styles.title}>AI_COMMAND_CORE_v6.0</div>
+          <div style={styles.subtitle}>PROTOCOL: {config.strategyMode.toUpperCase()}</div>
+        </div>
         <div style={{ 
           ...styles.badge, 
-          borderColor: (engineHealth === "RUNNING" || engineHealth === "CONNECTED") ? "#22c55e" : "#ef4444",
-          color: (engineHealth === "RUNNING" || engineHealth === "CONNECTED") ? "#4ade80" : "#f87171" 
+          borderColor: (engineHealth === "RUNNING" || engineHealth === "CONNECTED") ? "#00ff88" : "#ff4444",
+          color: (engineHealth === "RUNNING" || engineHealth === "CONNECTED") ? "#00ff88" : "#ff4444" 
         }}>
           {engineHealth}
         </div>
       </header>
 
       <div style={styles.mainCard}>
-        <div style={styles.toggleRow}>
-          <div style={{ flex: 2 }}>
-            <label style={styles.label}>AI ENGINE POWER</label>
+        {/* ENGINE POWER TOGGLE */}
+        <div style={{ marginBottom: "20px" }}>
+          <label style={styles.label}>AI_ENGINE_POWER_GRID</label>
+          <button 
+            onClick={() => updateField("enabled", !config.enabled)}
+            style={{
+              ...styles.powerBtn,
+              borderColor: config.enabled ? "#00ff88" : "#334155",
+              color: config.enabled ? "#00ff88" : "#64748b",
+              background: config.enabled ? "rgba(0, 255, 136, 0.05)" : "rgba(0,0,0,0.2)"
+            }}
+          >
+            {config.enabled ? ">> SYSTEM_ACTIVE_AND_MONITORING" : ">> ENGINE_PAUSED"}
+          </button>
+        </div>
+
+        {/* DOMAIN SWITCH */}
+        <div style={{ marginBottom: "20px" }}>
+          <label style={styles.label}>EXECUTION_DOMAIN</label>
+          <div style={styles.modeSwitch}>
             <button 
-              onClick={() => updateField("enabled", !config.enabled)}
-              style={btnStyle(config.enabled, config.enabled ? "#22c55e" : "#ef4444")}
-            >
-              {config.enabled ? "ACTIVE & MONITORING" : "ENGINE PAUSED"}
-            </button>
-          </div>
-          
-          <div style={{ flex: 1.5 }}>
-            <label style={styles.label}>DOMAIN</label>
-            <div style={styles.modeSwitch}>
-              <button 
-                onClick={() => updateField("tradingMode", "paper")}
-                style={modeBtn(config.tradingMode === "paper", "#3b82f6")}
-              >PAPER</button>
-              <button 
-                onClick={() => {
-                  if (window.confirm("⚠️ WARNING: Activate LIVE trading?")) {
-                    updateField("tradingMode", "live");
-                  }
-                }}
-                style={modeBtn(config.tradingMode === "live", "#ef4444")}
-              >LIVE</button>
-            </div>
+              onClick={() => updateField("tradingMode", "paper")}
+              style={modeBtn(config.tradingMode === "paper", "#5ec6ff")}
+            >PAPER_SIMULATION</button>
+            <button 
+              onClick={() => { if (window.confirm("⚠️ ACTIVATE LIVE TRADING?")) updateField("tradingMode", "live"); }}
+              style={modeBtn(config.tradingMode === "live", "#ff4444")}
+            >LIVE_KRAKEN_MAINNET</button>
           </div>
         </div>
 
+        {/* PARAMETERS GRID */}
         <div style={styles.inputGrid}>
-          <InputBox label="MAX TRADES" value={config.maxTrades} 
-            onChange={(v) => updateField("maxTrades", parseInt(v) || 0)} />
-          <InputBox label="RISK %" value={config.riskPercent} step="0.1"
-            onChange={(v) => updateField("riskPercent", parseFloat(v) || 0)} />
-          <InputBox label="LEVERAGE" value={config.positionMultiplier} step="0.1"
-            onChange={(v) => updateField("positionMultiplier", parseFloat(v) || 0)} />
-          
-          <div style={styles.inputWrap}>
-            <label style={styles.label}>STRATEGY</label>
-            <select 
-              value={config.strategyMode} 
-              onChange={(e) => updateField("strategyMode", e.target.value)}
-              style={styles.select}
-            >
-              <option>Conservative</option>
-              <option>Balanced</option>
-              <option>Aggressive</option>
-              <option>Stealth Mode</option>
-            </select>
-          </div>
+          <InputBox label="MAX_OPEN_TRADES" value={config.maxTrades} onChange={(v) => updateField("maxTrades", parseInt(v) || 0)} />
+          <InputBox label="RISK_PER_TRADE %" value={config.riskPercent} step="0.1" onChange={(v) => updateField("riskPercent", parseFloat(v) || 0)} />
+          <InputBox label="LEV_MULTIPLIER" value={config.positionMultiplier} step="0.1" onChange={(v) => updateField("positionMultiplier", parseFloat(v) || 0)} />
+          <InputBox label="SLIPPAGE_TOL %" value={config.slippage} step="0.05" onChange={(v) => updateField("slippage", parseFloat(v) || 0)} />
+        </div>
+
+        <div style={styles.inputWrap}>
+          <label style={styles.label}>STRATEGIC_PRESET</label>
+          <select value={config.strategyMode} onChange={(e) => updateField("strategyMode", e.target.value)} style={styles.select}>
+            <option>Conservative</option>
+            <option>Balanced</option>
+            <option>Aggressive</option>
+            <option>Scalp_Mainframe</option>
+          </select>
         </div>
 
         <div style={styles.summaryBox}>
-          <span>MAX CAP EXPOSURE:</span>
-          <b style={{ color: "#ef4444" }}>
+          <span style={{color: '#64748b'}}>THEORETICAL_MAX_EXPOSURE:</span>
+          <b style={{ color: "#ff4444" }}>
             {((config.riskPercent * config.positionMultiplier) * config.maxTrades).toFixed(2)}%
           </b>
         </div>
 
         <button onClick={handleSave} disabled={saving} style={styles.saveBtn}>
-          {saving ? "COMMITTING..." : "SAVE TO CORE"}
+          {saving ? "UPLOADING_TO_CORE..." : "COMMIT_CONFIG_CHANGES"}
         </button>
 
         {statusMsg && <div style={styles.status}>{statusMsg}</div>}
@@ -172,36 +168,30 @@ export default function AIControl() {
   );
 }
 
-/* ================= STYLES ================= */
+/* ================= UI HELPERS ================= */
 const styles = {
-  wrapper: { padding: "20px", color: "#f8fafc", fontFamily: "monospace", maxWidth: "500px", margin: "0 auto" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" },
-  badge: { fontSize: "0.65rem", background: "#0f172a", padding: "4px 12px", borderRadius: "20px", border: "1px solid", fontWeight: "bold" },
-  mainCard: { background: "#0f172a", padding: "24px", borderRadius: "16px", border: "1px solid #1e293b", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.4)" },
-  toggleRow: { display: "flex", gap: "12px", marginBottom: "24px" },
-  label: { display: "block", fontSize: "0.6rem", color: "#64748b", marginBottom: "8px", letterSpacing: "1px" },
-  modeSwitch: { display: "flex", background: "#1e293b", padding: "4px", borderRadius: "8px" },
-  inputGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "24px" },
-  inputWrap: { display: "flex", flexDirection: "column" },
-  select: { background: "#1e293b", color: "#fff", border: "1px solid #334155", padding: "10px", borderRadius: "8px", outline: "none", fontSize: "0.85rem" },
-  summaryBox: { padding: "14px", background: "rgba(0,0,0,0.2)", borderRadius: "8px", border: "1px dashed #334155", display: "flex", justifyContent: "space-between", fontSize: "0.8rem", marginBottom: "20px" },
-  saveBtn: { width: "100%", padding: "16px", borderRadius: "10px", border: "none", background: "#3b82f6", color: "#fff", fontWeight: "900", cursor: "pointer", fontSize: "0.9rem" },
-  status: { textAlign: "center", marginTop: "12px", fontSize: "0.75rem", color: "#3b82f6", fontWeight: "bold" }
+  wrapper: { padding: "20px", color: "#f8fafc", fontFamily: "monospace", height: "100%", overflowY: "auto" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px", borderBottom: "1px solid #ffffff08", paddingBottom: "15px" },
+  title: { fontSize: "14px", fontWeight: "900", letterSpacing: "2px", color: "#fff" },
+  subtitle: { fontSize: "9px", color: "#64748b", marginTop: "4px" },
+  badge: { fontSize: "9px", background: "rgba(0,0,0,0.3)", padding: "4px 10px", borderRadius: "2px", border: "1px solid", fontWeight: "bold" },
+  mainCard: { background: "#0b101a", padding: "24px", borderRadius: "4px", border: "1px solid #ffffff08" },
+  label: { display: "block", fontSize: "10px", color: "#64748b", marginBottom: "10px", fontWeight: "bold", letterSpacing: "1px" },
+  powerBtn: { width: "100%", padding: "15px", border: "1px solid", cursor: "pointer", fontWeight: "900", fontSize: "11px", transition: "all 0.2s", textAlign: "left", letterSpacing: "1px" },
+  modeSwitch: { display: "grid", gridTemplateColumns: "1fr 1fr", background: "rgba(0,0,0,0.3)", padding: "4px", border: "1px solid #ffffff05" },
+  inputGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" },
+  inputWrap: { display: "flex", flexDirection: "column", marginBottom: "20px" },
+  select: { background: "#05080f", color: "#fff", border: "1px solid #ffffff10", padding: "12px", outline: "none", fontSize: "12px" },
+  summaryBox: { padding: "14px", background: "rgba(0,0,0,0.2)", border: "1px dashed #334155", display: "flex", justifyContent: "space-between", fontSize: "10px", marginBottom: "20px" },
+  saveBtn: { width: "100%", padding: "16px", border: "none", background: "#00ff88", color: "#000", fontWeight: "900", cursor: "pointer", fontSize: "12px", letterSpacing: "1px" },
+  status: { textAlign: "center", marginTop: "12px", fontSize: "10px", color: "#00ff88", fontWeight: "bold" }
 };
 
-const btnStyle = (active, color) => ({
-  width: "100%", padding: "12px", borderRadius: "8px", cursor: "pointer",
-  background: active ? `${color}15` : "#1e293b",
-  color: active ? color : "#475569",
-  border: `1px solid ${active ? color : "#334155"}`,
-  fontWeight: "900", fontSize: "0.7rem", transition: "all 0.2s"
-});
-
 const modeBtn = (active, color) => ({
-  flex: 1, padding: "8px", border: "none", borderRadius: "6px", cursor: "pointer",
+  padding: "10px", border: "none", cursor: "pointer",
   background: active ? color : "transparent",
-  color: active ? "#fff" : "#475569",
-  fontWeight: "bold", fontSize: "0.7rem"
+  color: active ? "#000" : "#475569",
+  fontWeight: "900", fontSize: "10px"
 });
 
 function InputBox({ label, value, onChange, step = "1" }) {
