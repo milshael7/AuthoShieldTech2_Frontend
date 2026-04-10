@@ -1,17 +1,17 @@
 // ==========================================================
-// 🔒 PROTECTED STEALTH UI — v5.9 (ENGINE IGNITION)
+// 🔒 PROTECTED STEALTH UI — v6.0 (NORMALIZED & SCALED)
 // FILE: src/pages/TradingRoom.jsx
 // ==========================================================
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom"; 
-import { useTrading } from "../context/TradingContext.jsx";
-import { api } from "../lib/api.js";
+import { useTrading } from "../../context/TradingContext.jsx";
+import { api } from "../../lib/api.js";
 
-import TerminalChart from "../components/TerminalChart";
-import OrderPanel from "../components/OrderPanel";
-import AIBehaviorPanel from "../components/AIBehaviorPanel";
-import AIPerformanceHistoryPanel from "../components/AIPerformanceHistoryPanel";
+import TerminalChart from "../../components/TerminalChart";
+import OrderPanel from "../../components/OrderPanel";
+import AIBehaviorPanel from "../../components/AIBehaviorPanel";
+import AIPerformanceHistoryPanel from "../../components/AIPerformanceHistoryPanel";
 
 const SYMBOL = "BTCUSDT";
 
@@ -28,7 +28,13 @@ export default function TradingRoom() {
   const [loading, setLoading] = useState(false);
   const lastCandleRef = useRef(null);
 
-  // 🧠 LIVE BRAIN SYNC: Now pulls from the real-time 'decisions' stream
+  /** 🛰️ PUSH 3 FIX: DUAL-SCHEMA NORMALIZATION
+   * Ensures history panels work regardless of backend dialect.
+   */
+  const tradeHistory = useMemo(() => {
+    return snapshot?.trades || snapshot?.history || [];
+  }, [snapshot]);
+
   const brainMetrics = useMemo(() => {
     const latest = decisions?.[0] || {};
     return {
@@ -39,17 +45,14 @@ export default function TradingRoom() {
     };
   }, [decisions]);
 
-  /* ================= 📊 JUMPSTART CHART LOGIC ================= */
+  /* ================= 📊 CHART LOGIC ================= */
   useEffect(() => {
     if (!livePrice || livePrice <= 0) return;
-    
     const now = Math.floor(Date.now() / 60000) * 60000;
     const timeInSecs = now / 1000;
     
     setCandles(prev => {
       const last = lastCandleRef.current;
-      
-      // If new minute or first-ever price, create new candle
       if (!last || last.time !== timeInSecs) {
         const newCandle = { 
           time: timeInSecs, 
@@ -61,8 +64,6 @@ export default function TradingRoom() {
         lastCandleRef.current = newCandle;
         return [...prev.slice(-199), newCandle];
       }
-      
-      // Update current candle
       const updated = { 
         ...last, 
         high: Math.max(last.high, livePrice), 
@@ -81,7 +82,8 @@ export default function TradingRoom() {
     if (!isAdmin || loading) return; 
     setLoading(true);
     try {
-      await api.emergencyExit();
+      // Points to synchronized backend route
+      await api.post("/paper/emergency-stop");
     } catch (err) {
       console.error("[SYS_ERR]:", err.message);
     } finally {
@@ -89,10 +91,15 @@ export default function TradingRoom() {
     }
   };
 
+  /** 🛰️ PUSH 3 FIX: PNL DIRECTION LOGIC
+   * Matches backend LONG/SHORT strings to ensure math is correct.
+   */
   const pnl = useMemo(() => {
     const pos = snapshot?.position;
-    if (!pos || !livePrice) return 0;
-    const direction = pos.side === "buy" ? 1 : -1;
+    if (!pos || !livePrice || !pos.qty) return 0;
+    
+    const side = String(pos.side).toUpperCase();
+    const direction = (side === "BUY" || side === "LONG") ? 1 : -1;
     return (livePrice - pos.entry) * pos.qty * direction;
   }, [snapshot?.position, livePrice]);
 
@@ -100,24 +107,23 @@ export default function TradingRoom() {
 
   return (
     <div className="terminalRoot" style={styles.container}>
-      
       <div style={styles.leftCol}>
         <div style={styles.chartContainer}>
           <TerminalChart 
             candles={candles} 
-            trades={snapshot?.trades || []} 
+            trades={tradeHistory} 
             position={snapshot?.position} 
           />
         </div>
         
         <div style={styles.bottomGrid}>
           <AIBehaviorPanel metrics={brainMetrics} position={snapshot?.position} />
-          <AIPerformanceHistoryPanel trades={snapshot?.trades || []} />
+          <AIPerformanceHistoryPanel trades={tradeHistory} />
         </div>
       </div>
 
       <div className="terminalPanel" style={styles.rightCol}>
-        <div className="terminalPanelHeader">
+        <div className="terminalPanelHeader" style={styles.sideHeader}>
           {isAdmin ? "COMMAND_OVERRIDE_ACTIVE" : "SECURE_MONITOR_SESSION"}
         </div>
 
@@ -157,14 +163,19 @@ function StatRow({ label, value, color = "#fff" }) {
   );
 }
 
+/* 🛰️ PUSH 3 FIX: SIZING & LAYOUT
+ * Changed height: '100vh' to '100%' and added minHeight: 0 
+ * to prevent the terminal from pushing out of the AdminLayout.
+ */
 const styles = {
-  container: { display: "grid", gridTemplateColumns: "1fr 340px", gap: "20px", padding: '20px', height: '100vh', background: '#020617' },
-  leftCol: { display: 'flex', flexDirection: 'column', gap: "20px", overflow: 'hidden' },
-  chartContainer: { flex: 1, minHeight: '400px', background: '#000', borderRadius: '8px', border: '1px solid #1e293b' },
-  bottomGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', height: '300px' },
-  rightCol: { position: 'relative', width: '100%', height: '100%', borderRadius: '8px', background: '#0f172a' },
-  sidebarBody: { display: 'flex', flexDirection: 'column', height: '100%', padding: '20px' },
-  priceBig: { fontSize: '32px', fontWeight: '800', textAlign: 'center', margin: '20px 0', fontFamily: 'monospace' },
+  container: { display: "grid", gridTemplateColumns: "1fr 340px", gap: "20px", padding: '20px', height: '100%', minHeight: 0, background: '#020617' },
+  leftCol: { display: 'flex', flexDirection: 'column', gap: "20px", overflow: 'hidden', height: '100%' },
+  chartContainer: { flex: 1, minHeight: 0, background: '#000', borderRadius: '8px', border: '1px solid #1e293b' },
+  bottomGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', height: '280px', minHeight: '280px' },
+  rightCol: { position: 'relative', width: '100%', height: '100%', borderRadius: '8px', background: '#0f172a', border: '1px solid #1e293b', display: 'flex', flexDirection: 'column' },
+  sideHeader: { padding: '12px', background: '#1e293b', fontSize: '10px', fontWeight: 'bold', letterSpacing: '1px', borderBottom: '1px solid #334155' },
+  sidebarBody: { flex: 1, display: 'flex', flexDirection: 'column', padding: '20px', overflowY: 'auto' },
+  priceBig: { fontSize: '32px', fontWeight: '800', textAlign: 'center', margin: '10px 0', fontFamily: 'monospace' },
   emergencyBtn: { width: '100%', padding: '16px', marginTop: '10px', background: '#ea3943', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' },
   footerStats: { marginTop: "auto", borderTop: "1px solid #1e293b", paddingTop: "20px" }
 };
