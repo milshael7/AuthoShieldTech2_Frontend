@@ -1,11 +1,14 @@
 // ==========================================================
 // 🔒 PROTECTED CORE FILE — MAINTENANCE SAFE
 // FILE: frontend/src/pages/Dashboard.jsx
-// VERSION: v4.4 (ROOM-SWITCHER ENABLED + API ALIGNED)
+// VERSION: v4.5 (INFRASTRUCTURE INTEGRATED + ROOM SYNC)
 // ==========================================================
 
 import React, { useEffect, useState } from "react";
 import { useUser } from "../context/UserContext";
+
+/* ================= NEW: INFRASTRUCTURE COMPONENT ================= */
+import SystemHealth from "../components/dashboard/SystemHealth"; // Maintenance Proof v1.0
 
 /* ================= SECURITY ROOM COMPONENTS ================= */
 import SecurityOverview from "../components/security/SecurityOverview";
@@ -38,7 +41,7 @@ export default function Dashboard() {
   const role = user?.role;
 
   /* ================= STATE ================= */
-  const [activeRoom, setActiveRoom] = useState("TRADING"); // Default Room
+  const [activeRoom, setActiveRoom] = useState("TRADING");
   const [ai, setAi] = useState({});
   const [brain, setBrain] = useState({});
   const [execution, setExecution] = useState({});
@@ -57,7 +60,6 @@ export default function Dashboard() {
         api.getBrain()
       ]);
 
-      // Guarded data extraction
       const aiData = aiRes?.data || aiRes || {};
       const statusData = statusRes?.data || statusRes || {};
       const perfData = analyticsRes?.data || analyticsRes || {};
@@ -80,9 +82,6 @@ export default function Dashboard() {
     }
   }
 
-  /* =========================================================
-     AUTO REFRESH (SAFE CYCLE)
-     ========================================================= */
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 2000);
@@ -96,8 +95,6 @@ export default function Dashboard() {
   const winRate = safeNum(performance?.winRate) * 100;
   const pnl = safeNum(performance?.netPnL);
 
-  const aiRate = safeNum(status?.ai?.rate);
-  const aiConfidence = safeNum(status?.ai?.confidence) * 100;
   const engineStatus = status?.engine || "OFFLINE";
 
   /* =========================================================
@@ -107,7 +104,10 @@ export default function Dashboard() {
     return (
       <div style={styles.wrapper}>
         <div style={styles.headerRow}>
-          <h2 style={styles.title}>🧠 Command Center</h2>
+          <div>
+            <h2 style={styles.title}>🧠 AuthoShield Command</h2>
+            <span style={styles.subTitle}>Authorized Access: {role}</span>
+          </div>
           
           {/* ROOM NAVIGATION SWITCHER */}
           <div style={styles.switcherContainer}>
@@ -130,23 +130,41 @@ export default function Dashboard() {
         {activeRoom === "TRADING" && (
           <DashboardGrid>
             <div style={styles.column}>
+              {/* INFRASTRUCTURE HEALTH AT TOP */}
+              <SystemHealth /> 
+              
               <AiPanel data={ai} />
+              
               <div style={styles.card}>
-                <h3>📈 Performance</h3>
-                <p>Trades: {trades}</p>
-                <p>Win Rate: {winRate.toFixed(2)}%</p>
-                <p>Net PnL: ${pnl.toFixed(2)}</p>
-              </div>
-              <div style={styles.card}>
-                <h3>⚙️ Engine</h3>
-                <p>Status: <span style={{color: engineStatus === "ACTIVE" ? "#00ff88" : "#ff4444"}}>{engineStatus}</span></p>
-                <p>AI Rate: {aiRate}/min</p>
-                <p>Confidence: {aiConfidence.toFixed(1)}%</p>
+                <h3 style={styles.cardHeader}>📈 Performance Analytics</h3>
+                <div style={styles.statRow}>
+                  <span>Total Trades:</span> <strong>{trades}</strong>
+                </div>
+                <div style={styles.statRow}>
+                  <span>Win Rate:</span> <strong style={{color: "#00ff88"}}>{winRate.toFixed(2)}%</strong>
+                </div>
+                <div style={styles.statRow}>
+                  <span>Net PnL:</span> <strong style={{color: pnl >= 0 ? "#00ff88" : "#ff4d4f"}}>${pnl.toLocaleString()}</strong>
+                </div>
               </div>
             </div>
+
             <div style={styles.column}>
               <BrainPanel data={brain} />
               <ExecutionPanel data={execution} />
+              
+              <div style={styles.card}>
+                <h3 style={styles.cardHeader}>⚙️ Core Engine</h3>
+                <div style={styles.statRow}>
+                  <span>Status:</span> 
+                  <span style={{fontWeight: "bold", color: engineStatus === "ACTIVE" ? "#00ff88" : "#ff4d4f"}}>
+                    {engineStatus}
+                  </span>
+                </div>
+                <div style={styles.statRow}>
+                  <span>Kraken Link:</span> <span style={{color: "#3b82f6"}}>ESTABLISHED</span>
+                </div>
+              </div>
             </div>
           </DashboardGrid>
         )}
@@ -166,74 +184,80 @@ export default function Dashboard() {
   }
 
   /* =========================================================
-     RENDER: FALLBACK (COMPANY/GUEST)
+     RENDER: FALLBACK
      ========================================================= */
   return (
     <div style={styles.wrapper}>
       <h2 style={styles.title}>Platform Dashboard</h2>
       <div style={styles.fallbackCard}>
         <p>Access Level: {role || "Guest"}</p>
-        <p>Dashboard is operational. Systems Stable.</p>
+        <p>Dashboard is operational. Please contact Admin for elevated privileges.</p>
       </div>
     </div>
   );
 }
 
-/* ================= STYLES (CLEAN & SCALEABLE) ================= */
+/* ================= STYLES ================= */
 const styles = {
   wrapper: {
-    padding: 28,
+    padding: "24px 32px",
     background: "#0f172a",
     minHeight: "100vh",
     color: "#f1f5f9",
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "'Inter', sans-serif"
   },
   headerRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 24,
-    borderBottom: "1px solid rgba(255,255,255,0.05)",
-    paddingBottom: 16
+    marginBottom: 32,
+    borderBottom: "1px solid rgba(255,255,255,0.08)",
+    paddingBottom: 20
   },
+  title: { margin: 0, fontSize: "24px", letterSpacing: "-0.5px" },
+  subTitle: { fontSize: "12px", color: "#64748b", fontWeight: "600" },
   switcherContainer: {
     display: "flex",
-    gap: 8,
+    gap: 6,
     background: "#1e293b",
     padding: 4,
     borderRadius: 10,
   },
   activeBtn: {
-    padding: "8px 16px",
+    padding: "10px 20px",
     background: "#00ff88",
     color: "#0f172a",
     border: "none",
     borderRadius: 8,
     cursor: "pointer",
-    fontWeight: "600",
-    transition: "all 0.2s ease"
+    fontWeight: "700",
+    fontSize: "13px"
   },
   inactiveBtn: {
-    padding: "8px 16px",
+    padding: "10px 20px",
     background: "transparent",
     color: "#94a3b8",
     border: "none",
     borderRadius: 8,
     cursor: "pointer",
-    fontWeight: "500"
+    fontWeight: "600",
+    fontSize: "13px"
   },
-  title: { margin: 0 },
   column: { display: "flex", flexDirection: "column", gap: 20 },
   card: {
     background: "#111",
-    padding: 16,
-    borderRadius: 10,
-    border: "1px solid rgba(255,255,255,0.05)",
-  },
-  fallbackCard: {
     padding: 20,
     borderRadius: 12,
-    background: "rgba(255,255,255,.04)",
-    border: "1px solid rgba(255,255,255,.08)",
+    border: "1px solid rgba(255,255,255,0.05)",
+  },
+  cardHeader: { fontSize: "14px", color: "#94a3b8", marginBottom: 16, textTransform: "uppercase", letterSpacing: "1px" },
+  statRow: { display: "flex", justifyContent: "space-between", marginBottom: 10, fontSize: "14px" },
+  fallbackCard: {
+    padding: 40,
+    textAlign: "center",
+    borderRadius: 12,
+    background: "#111",
+    border: "1px solid rgba(255,255,255,.05)",
+    marginTop: 40
   },
 };
