@@ -1,7 +1,7 @@
 // ==========================================================
-// 🛡️ PROTECTED CORE FILE — v4.1 (MAPPING SYNCED)
+// 🛡️ PROTECTED CORE FILE — v4.2 (INTELLIGENCE ARRAY SYNC)
 // MODULE: Trading Terminal Layout (UI SHELL)
-// FILE: src/pages/TradingLayout.jsx
+// FILE: src/pages/trading/TradingLayout.jsx
 // ==========================================================
 
 import React, { useMemo } from "react";
@@ -19,24 +19,28 @@ export default function TradingLayout() {
 
   /* ================= 📡 TELEMETRY ENGINE ================= */
   const telemetry = useMemo(() => {
-    /** 🛰️ PUSH 3 FIX: ARRAY MAPPING
-     * Backend sends intelligence as a list. We need the latest entry
-     * to populate the header metrics.
+    /** 🛰️ PUSH 7.3 FIX: ARRAY NORMALIZATION
+     * Backend sends intelligence as a list. To show real-time metrics,
+     * we must grab the final object in that list.
      */
     const intelList = Array.isArray(snapshot?.intelligence) ? snapshot.intelligence : [];
     const latestIntel = intelList.length > 0 ? intelList[intelList.length - 1] : {};
     
+    // Safety check: confidence might be 0.0-1.0 or 0-100 depending on brain version
+    const rawConf = Number(latestIntel.confidence || 0);
+    const normalizedConf = rawConf > 1 ? rawConf / 100 : rawConf;
+
     return {
       engineStatus: (paperStatus || "OFFLINE").toUpperCase(),
       running: paperStatus === "connected",
-      // 🛰️ PUSH 3 FIX: Mode Definition
       mode: snapshot?.mode || "PAPER_TRADING",
       trades: trades.length || 0,
       decisions: decisions.length || 0,
-      // Map correctly from the latest intelligence log entry
+      
+      // 🛰️ PUSH 7.3 FIX: Direct mapping from latest intelligence entry
       aiRate: Number(latestIntel.velocity || 0),
       memoryMb: Number(latestIntel.memoryUsage || latestIntel.memory || 0),
-      confidence: Number(latestIntel.confidence || 0),
+      confidence: normalizedConf,
       volatility: Number(snapshot?.volatility || 0),
     };
   }, [snapshot, paperStatus, trades, decisions]);
@@ -50,8 +54,7 @@ export default function TradingLayout() {
       <div style={styles.header}>
         <div style={styles.headerTop}>
           <div>
-            <div style={styles.title}>AUTOSHIELD_TERMINAL <span style={styles.version}>v4.1</span></div>
-            {/* 🛰️ PUSH 3 FIX: Telemetry Mode now correctly resolves */}
+            <div style={styles.title}>AUTOSHIELD_TERMINAL <span style={styles.version}>v4.2</span></div>
             <div style={styles.subtitle}>SECURE_TRADING_NODE // {telemetry.mode}</div>
           </div>
 
@@ -77,7 +80,8 @@ export default function TradingLayout() {
 
       {/* 🖥️ VIEWPORT */}
       <main style={styles.viewport}>
-        <Outlet context={{ isAdmin: true }} />
+        {/* PUSH 7.3: Outlet receives data context for child pages */}
+        <Outlet context={{ isAdmin: true, telemetry }} />
         {location.pathname.endsWith("trading") && <Navigate to="live" replace />}
       </main>
     </div>
@@ -116,15 +120,15 @@ function HeaderPill({ label, value, tone = "info" }) {
 }
 
 const styles = {
-  shell: { display: "flex", flexDirection: "column", height: "100vh", background: "#05080f", color: "#fff", fontFamily: "monospace" },
+  shell: { display: "flex", flexDirection: "column", height: "100%", width: "100%", background: "#05080f", color: "#fff", fontFamily: "monospace" },
   header: { padding: "15px 20px", background: "#0b101a", borderBottom: "1px solid rgba(255,255,255,0.05)" },
-  headerTop: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  headerTop: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" },
   title: { fontSize: "14px", fontWeight: "900", letterSpacing: "1px" },
   version: { fontSize: "9px", opacity: 0.3, marginLeft: "5px" },
   subtitle: { fontSize: "9px", color: "#475569", letterSpacing: "1px", marginTop: "2px" },
-  pillContainer: { display: "flex", gap: "8px" },
-  pill: { padding: "4px 10px", borderRadius: "2px", background: "rgba(0,0,0,0.2)", fontSize: "10px", border: "1px solid rgba(255,255,255,0.05)" },
-  nav: { display: "flex", background: "#0b101a", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.05)" },
-  tab: { padding: "12px 20px", fontSize: "11px", fontWeight: "900", textDecoration: "none", transition: "0.2s", letterSpacing: "1px" },
-  viewport: { flex: 1, overflow: "hidden", position: "relative" }
+  pillContainer: { display: "flex", gap: "8px", flexWrap: "wrap" },
+  pill: { padding: "4px 10px", borderRadius: "2px", background: "rgba(0,0,0,0.2)", fontSize: "10px", border: "1px solid rgba(255,255,255,0.05)", whiteSpace: "nowrap" },
+  nav: { display: "flex", background: "#0b101a", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.05)", overflowX: "auto" },
+  tab: { padding: "12px 20px", fontSize: "11px", fontWeight: "900", textDecoration: "none", transition: "0.2s", letterSpacing: "1px", whiteSpace: "nowrap" },
+  viewport: { flex: 1, overflow: "hidden", position: "relative", display: "flex", flexDirection: "column" }
 };
