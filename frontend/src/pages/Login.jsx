@@ -1,34 +1,48 @@
-// ============================================================
-// 🔒 AUTOSHIELD LOGIN — v35.1 (STABLE & VERCEL-READY)
+// ==========================================================
+// 🔒 AUTOSHIELD LOGIN — v41.0 (SECURE GATEWAY)
 // FILE: src/pages/Login.jsx
-// ============================================================
+// ==========================================================
 
-import React, { useState, useCallback } from "react";
-// ✅ MATCHED: Default import from our fixed api.js
-import api from "../lib/api.js"; 
+import React, { useState, useCallback, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+// 🛰️ PUSH 4.4 FIX: Named import to match our unified api.js
+import { api } from "../lib/api.js"; 
 
 export default function Login() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  // 🛡️ ROLE-BASED ROUTING ENGINE (Optimized)
+  // 🛰️ PUSH 4.4: Catch registration status from Signup.jsx
+  useEffect(() => {
+    if (location.state?.registered) {
+      setSuccess("NODE_INITIALIZED: PENDING KYC VERIFICATION");
+    }
+  }, [location.state]);
+
+  // 🛡️ ROLE-BASED ROUTING ENGINE
   const getDashboardPath = useCallback((user) => {
     if (!user) return "/";
     const role = String(user.role || "").toLowerCase();
     
+    // Unified Routing Logic
     const routes = {
       admin: "/admin",
-      manager: "/manager",
+      root: "/admin",
+      manager: "/admin", // Simplified to unified admin layout
       company: "/admin", 
-      small_company: "/manager",
-      individual: "/user",
-      user: "/user",
-      trader: "/admin/trading" 
+      smallcompany: "/admin",
+      individual: "/admin",
+      operator: "/admin",
+      trader: "/admin/trading/live" 
     };
     
-    return user.dashboardPath || routes[role] || "/admin"; // Defaulting to /admin for security
+    return routes[role] || "/admin";
   }, []);
 
   async function handleSubmit(e) {
@@ -37,6 +51,7 @@ export default function Login() {
     
     setLoading(true);
     setError("");
+    setSuccess("");
 
     try {
       const result = await api.login(email, password);
@@ -44,16 +59,16 @@ export default function Login() {
       if (result.ok && result.user) {
         const targetPath = getDashboardPath(result.user);
         
-        // Use timeout to ensure state settles before the hard redirect
+        // Syncing state before redirect
         setTimeout(() => {
             window.location.replace(targetPath);
-        }, 100);
+        }, 150;
       } else {
-        setError(result.error || "ACCESS DENIED: INVALID CREDENTIALS");
+        setError(result.error || "ACCESS_DENIED: INVALID_CREDENTIALS");
       }
     } catch (err) {
-      console.error("Login Uplink Error:", err);
-      setError("UPLINK TIMEOUT: ENGINE UNREACHABLE");
+      console.error("[GATE_ERR]:", err);
+      setError("UPLINK_FAILURE: SECURITY_CORE_OFFLINE");
     } finally {
       setLoading(false);
     }
@@ -63,26 +78,22 @@ export default function Login() {
     <div style={styles.wrapper}>
       <div style={styles.card}>
         <div style={styles.header}>
-          <h2 style={{ margin: 0, color: "#00ff88", letterSpacing: "5px", fontWeight: "900" }}>
-            AUTOSHIELD
-          </h2>
-          <p style={styles.versionLabel}>
-            TERMINAL ENCRYPTED • v35.1
-          </p>
+          <h2 style={styles.brandTitle}>AUTOSHIELD</h2>
+          <div style={styles.statusLine}>
+            <span style={styles.pulseDot}></span>
+            <span style={styles.versionLabel}>SECURE_GATEWAY_v41.0</span>
+          </div>
         </div>
 
-        {error && (
-            <div style={styles.errorBox}>
-                <span style={{ marginRight: 8 }}>⚠️</span> {error}
-            </div>
-        )}
+        {success && <div style={styles.successBox}>{success}</div>}
+        {error && <div style={styles.errorBox}>⚠️ {error}</div>}
 
         <form onSubmit={handleSubmit} style={styles.form}>
           <div style={styles.inputGroup}>
-            <label style={styles.inputLabel}>IDENTITY</label>
+            <label style={styles.inputLabel}>OPERATOR_IDENTITY</label>
             <input
               type="email"
-              placeholder="name@autoshield.tech"
+              placeholder="id_alpha@autoshield.tech"
               value={email}
               autoComplete="email"
               required
@@ -92,7 +103,7 @@ export default function Login() {
           </div>
 
           <div style={styles.inputGroup}>
-            <label style={styles.inputLabel}>ACCESS KEY</label>
+            <label style={styles.inputLabel}>ENCRYPTED_ACCESS_KEY</label>
             <input
               type="password"
               placeholder="••••••••"
@@ -109,17 +120,23 @@ export default function Login() {
             disabled={loading} 
             style={{ 
                 ...styles.button, 
-                opacity: loading ? 0.6 : 1,
-                cursor: loading ? "not-allowed" : "pointer" 
+                background: loading ? "#113322" : "#00ff88",
+                cursor: loading ? "wait" : "pointer" 
             }}
           >
-            {loading ? "AUTHENTICATING..." : "INITIATE UPLINK"}
+            {loading ? "DECRYPTING_UPLINK..." : "INITIATE_HANDSHAKE"}
           </button>
 
           <div style={styles.footer}>
-            <p style={{ color: "#333", fontSize: "0.55rem", letterSpacing: "1.5px", margin: 0 }}>
-                SECURE HANDSHAKE REQUIRED FOR ENTRY
-            </p>
+             <span style={styles.footerText}>FORGOTTEN_KEY? CONTACT_ADMIN</span>
+             <div style={{ marginTop: '15px' }}>
+                <button 
+                  onClick={() => navigate("/signup")} 
+                  style={styles.ghostBtn}
+                >
+                  NEW_NODE_PROVISIONING
+                </button>
+             </div>
           </div>
         </form>
       </div>
@@ -127,64 +144,22 @@ export default function Login() {
   );
 }
 
-/* ================= STYLES ================= */
 const styles = {
-  wrapper: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#050505", // Slightly deeper black
-    padding: "20px",
-    fontFamily: "monospace"
-  },
-  card: {
-    width: "100%",
-    maxWidth: "380px",
-    background: "#0a0a0a",
-    padding: "40px 30px",
-    borderRadius: "4px",
-    border: "1px solid #1a1a1a",
-    boxShadow: "0 30px 60px rgba(0,0,0,0.9)"
-  },
-  header: { textAlign: "center", marginBottom: "35px" },
-  versionLabel: { fontSize: "0.6rem", color: "#444", marginTop: 10, fontWeight: "900", letterSpacing: "1px" },
-  form: { display: "flex", flexDirection: "column", gap: "20px" },
-  inputGroup: { display: "flex", flexDirection: "column", gap: "6px" },
-  inputLabel: { fontSize: "0.6rem", color: "#00ff88", opacity: 0.6, fontWeight: "bold" },
-  input: {
-    background: "#000",
-    border: "1px solid #222",
-    color: "#fff",
-    padding: "14px",
-    borderRadius: "2px",
-    fontSize: "0.85rem",
-    outline: "none",
-    fontFamily: "monospace",
-  },
-  button: {
-    background: "#00ff88",
-    color: "#000",
-    padding: "16px",
-    borderRadius: "2px",
-    border: "none",
-    fontWeight: "900",
-    marginTop: "10px",
-    fontSize: "0.85rem",
-    textTransform: "uppercase",
-    letterSpacing: "2px",
-    transition: "all 0.2s"
-  },
-  errorBox: {
-    background: "rgba(239, 68, 68, 0.05)",
-    color: "#f87171",
-    padding: "12px",
-    borderRadius: "2px",
-    fontSize: "0.7rem",
-    textAlign: "center",
-    marginBottom: "20px",
-    border: "1px solid rgba(239, 68, 68, 0.2)",
-    fontWeight: "bold"
-  },
-  footer: { textAlign: "center", marginTop: "25px" }
+  wrapper: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#020617", padding: "20px", fontFamily: "monospace" },
+  card: { width: "100%", maxWidth: "400px", background: "#0f172a", padding: "40px", borderRadius: "8px", border: "1px solid #1e293b", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)" },
+  header: { textAlign: "center", marginBottom: "40px" },
+  brandTitle: { margin: 0, color: "#00ff88", letterSpacing: "8px", fontWeight: "900", fontSize: "24px" },
+  statusLine: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '10px' },
+  pulseDot: { width: '6px', height: '6px', background: '#00ff88', borderRadius: '50%', boxShadow: '0 0 10px #00ff88' },
+  versionLabel: { fontSize: "10px", color: "#64748b", fontWeight: "bold", letterSpacing: "1px" },
+  form: { display: "flex", flexDirection: "column", gap: "24px" },
+  inputGroup: { display: "flex", flexDirection: "column", gap: "8px" },
+  inputLabel: { fontSize: "10px", color: "#00ff88", fontWeight: "bold", opacity: 0.8 },
+  input: { background: "#020617", border: "1px solid #1e293b", color: "#fff", padding: "14px", borderRadius: "4px", fontSize: "14px", outline: "none", transition: 'border 0.2s' },
+  button: { color: "#000", padding: "16px", borderRadius: "4px", border: "none", fontWeight: "900", fontSize: "12px", textTransform: "uppercase", letterSpacing: "2px" },
+  errorBox: { background: "rgba(239, 68, 68, 0.1)", color: "#f87171", padding: "12px", borderRadius: "4px", fontSize: "11px", textAlign: "center", border: "1px solid #ef4444" },
+  successBox: { background: "rgba(0, 255, 136, 0.1)", color: "#00ff88", padding: "12px", borderRadius: "4px", fontSize: "11px", textAlign: "center", border: "1px solid #00ff88", marginBottom: '20px' },
+  footer: { textAlign: "center", marginTop: "30px" },
+  footerText: { color: "#475569", fontSize: "10px", letterSpacing: "1px" },
+  ghostBtn: { background: 'none', border: 'none', color: '#00ff88', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'underline' }
 };
