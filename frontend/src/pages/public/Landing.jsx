@@ -1,5 +1,5 @@
 // ==========================================================
-// 🔒 AUTOSHIELD TECH — v40.0 (LIVE-FLOW ENABLED)
+// 🔒 AUTOSHIELD TECH — v41.0 (PRODUCTION PULSE)
 // FILE: frontend/src/pages/public/Landing.jsx
 // ==========================================================
 
@@ -11,35 +11,47 @@ import "../../styles/main.css";
 export default function Landing() {
   const navigate = useNavigate();
   
-  // 🛰️ LIVE STATE: Bringing the landing page to life
+  // 🛰️ LIVE STATE
   const [livePrice, setLivePrice] = useState(71720.09);
   const [isLive, setIsLive] = useState(false);
   const wsRef = useRef(null);
 
-  // ---- 🛰️ LIVE DATA BRIDGE: Connects public page to backend market stream
+  /**
+   * 🛰️ PUSH 4.1 FIX: UNIFIED MARKET BRIDGE
+   * Syncs with the backend broadcast logic from Push 1.
+   */
   useEffect(() => {
+    // Vercel/Production safety: Ensure we use wss if on https
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     const cleanHost = (WS_URL || "").replace(/^wss?:\/\//, "").replace(/\/+$/, "");
     
     if (!cleanHost) return;
 
     function connect() {
-      const ws = new WebSocket(`${protocol}://${cleanHost}/ws?channel=market`);
+      // Connecting to the unified broadcast channel
+      const ws = new WebSocket(`${protocol}://${cleanHost}/ws`);
       wsRef.current = ws;
 
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-          // Backend pushes: { type: "market", data: { BTCUSDT: { price: ... } } }
-          const btc = msg?.data?.BTCUSDT?.price || msg?.price;
-          if (btc) {
-            setLivePrice(Number(btc));
+          
+          // 🛰️ PUSH 4.1 FIX: Normalized Payload Check
+          // Matches the backend structure: { type: 'snapshot', data: { price: ... } }
+          const priceData = msg?.data?.price || msg?.price || msg?.lastPrice;
+          
+          if (priceData) {
+            setLivePrice(Number(priceData));
             setIsLive(true);
           }
-        } catch (err) { /* silent pulse */ }
+        } catch (err) { /* silent heartbeat */ }
       };
 
-      ws.onclose = () => setTimeout(connect, 5000); // Auto-reconnect
+      ws.onopen = () => setIsLive(true);
+      ws.onclose = () => {
+        setIsLive(false);
+        setTimeout(connect, 5000); 
+      };
     }
 
     connect();
@@ -47,91 +59,93 @@ export default function Landing() {
   }, []);
 
   const scrollToFreeTools = useCallback(() => {
-    try {
-      const el = document.getElementById("free-tools");
-      if (el) el.scrollIntoView({ behavior: "smooth" });
-    } catch { /* fail silently */ }
+    const el = document.getElementById("free-tools");
+    if (el) el.scrollIntoView({ behavior: "smooth" });
   }, []);
 
   return (
     <div className="landing-page">
-      {/* ================= HEADER ================= */}
+      {/* --- HEADER --- */}
       <header className="public-header">
-        <div className="brand">
-          <div style={{ fontWeight: 900, letterSpacing: "0.12em", color: "#7AA7FF" }}>
+        <div className="brand" onClick={() => navigate("/")} style={{ cursor: 'pointer' }}>
+          <div style={{ fontWeight: 900, letterSpacing: "0.2em", color: "#00ff88" }}>
             AUTOSHIELD
           </div>
         </div>
         <nav className="public-nav">
-          <button onClick={() => navigate("/login")}>Sign In</button>
-          <button className="primary" onClick={() => navigate("/pricing")}>Get Started</button>
+          <button className="text-btn" onClick={() => navigate("/login")}>Sign In</button>
+          <button className="primary-btn" onClick={() => navigate("/pricing")}>Get Started</button>
         </nav>
       </header>
 
-      {/* ================= HERO ================= */}
+      {/* --- HERO --- */}
       <section className="hero">
-        <h1>
-          Professional Cybersecurity Operations
-          <br />
-          Built for Real Companies
-        </h1>
+        <div className="hero-content">
+          <div className={`live-ticker ${isLive ? 'pulse' : ''}`}>
+             <span className="status-dot"></span>
+             <span className="ticker-label">ENGINE_FEED_LIVE: </span>
+             <span className="ticker-value">BTC/USD ${livePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          </div>
 
-        {/* ⚡ LIVE FEED: Shows real movement on the front page */}
-        <div className="live-ticker">
-           <span className={`status-dot ${isLive ? 'active' : ''}`}></span>
-           <span className="ticker-label">LIVE ENGINE FEED: </span>
-           <span className="ticker-value">BTC/USDT ${livePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-        </div>
+          <h1>
+            Professional Cybersecurity Operations
+            <span className="accent-text"> Built for Real Scale.</span>
+          </h1>
 
-        <p className="muted">
-          Visibility, control, and accountability — without shortcuts,
-          gimmicks, or uncontrolled automation.
-        </p>
+          <p className="hero-sub">
+            Unified visibility and AI-driven market intelligence — 
+            without the noise of traditional trading gimmicks.
+          </p>
 
-        <div className="hero-actions">
-          <button className="primary" onClick={() => navigate("/pricing")}>Explore Plans</button>
-          <button onClick={scrollToFreeTools}>Try Free Tools</button>
+          <div className="hero-actions">
+            <button className="primary-btn lg" onClick={() => navigate("/pricing")}>Explore Plans</button>
+            <button className="outline-btn lg" onClick={scrollToFreeTools}>Free Analysis</button>
+          </div>
         </div>
       </section>
 
-      {/* ================= FREE TOOLS ================= */}
+      {/* --- FREE TOOLS --- */}
       <section id="free-tools" className="free-tools">
-        <h2>Free Cybersecurity Tools</h2>
-        <p className="muted center">Limited access. No signup required. Upgrade anytime.</p>
+        <div className="section-header">
+          <h2>Free Operational Tools</h2>
+          <p className="muted">Immediate insights. No credential entry required.</p>
+        </div>
+        
         <div className="tool-grid">
           {[
-            { title: "External Exposure Scan", desc: "Identify publicly visible risks.", items: ["1 asset scan", "Read-only", "No history"] },
-            { title: "Security Posture Snapshot", desc: "High-level view of security gaps.", items: ["Basic scoring", "No remediation", "No automation"] },
-            { title: "Phishing Risk Check", desc: "Evaluate exposure to phishing.", items: ["Manual assessment", "No monitoring", "No alerting"] },
-            { title: "Asset Risk Preview", desc: "See how attackers prioritize assets.", items: ["Limited assets", "No correlations", "No incident linking"] },
+            { title: "Exposure Scan", desc: "Identify publicly visible asset risks.", limit: "Read-Only" },
+            { title: "Posture Snapshot", desc: "High-level gap analysis & scoring.", limit: "Manual" },
+            { title: "Risk Preview", desc: "AI-driven prioritization of attack vectors.", limit: "Limited" },
+            { title: "Pulse Check", desc: "Real-time market connectivity audit.", limit: "Standard" },
           ].map((tool) => (
             <div key={tool.title} className="tool-card">
+              <div className="tool-tag">{tool.limit}</div>
               <h3>{tool.title}</h3>
               <p className="muted">{tool.desc}</p>
-              <ul>{tool.items.map((i) => <li key={i}>{i}</li>)}</ul>
-              <button onClick={() => navigate("/pricing")}>Upgrade for Full Access</button>
+              <button onClick={() => navigate("/pricing")} className="tool-btn">Access Tool</button>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ================= PLATFORM PREVIEW ================= */}
+      {/* --- PLATFORM PREVIEW --- */}
       <section className="platform-preview">
-        <h2>Inside the Platform</h2>
-        <div className="preview-grid">
-          <Preview title="Security Posture" text="Continuous visibility into risk and control health." />
-          <Preview title="Threats & Incidents" text="Priority-driven detection and response workflows." />
-          <Preview title="Reports & Audits" text="Executive-ready reporting with immutable records." />
-          <Preview title="AutoDev 6.5" text="Advanced cybersecurity execution — individual only." />
-        </div>
-        <div className="center">
-          <button className="primary" onClick={() => navigate("/pricing")}>View Plans</button>
+        <div className="preview-container">
+          <h2>Platform Capability Matrix</h2>
+          <div className="preview-grid">
+            <Preview title="Core Intelligence" text="Autonomous market logic handling multi-asset synchronization." />
+            <Preview title="Threat Perimeter" text="Real-time guarding against slippage and volatility spikes." />
+            <Preview title="Audit Pipeline" text="Every decision logged to an immutable, executive-ready record." />
+            <Preview title="AutoDev 6.5" text="The execution engine behind the shield. Secure. Fast. Stable." />
+          </div>
         </div>
       </section>
 
       <footer className="public-footer">
-        <p>AutoShield Tech is a professional cybersecurity platform.</p>
-        <p>© 2026 Stealth Operations</p>
+        <div className="footer-content">
+          <p>AutoShield Tech // Secure Trading Operations</p>
+          <p className="copyright">© 2026 STEALTH OPS // ALL RIGHTS RESERVED</p>
+        </div>
       </footer>
     </div>
   );
@@ -139,7 +153,7 @@ export default function Landing() {
 
 function Preview({ title, text }) {
   return (
-    <div>
+    <div className="preview-item">
       <h4>{title}</h4>
       <p className="muted">{text}</p>
     </div>
