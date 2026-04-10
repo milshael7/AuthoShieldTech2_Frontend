@@ -1,6 +1,5 @@
 // ==========================================================
-// 🛡️ SECURITY CONTEXT — v40.1 (UNISON HARDENED)
-// ENTERPRISE OVERSIGHT • REAL-TIME THREAT SYNC
+// 🛡️ SECURITY CONTEXT — v41.0 (UNISON HARDENED)
 // FILE: src/context/SecurityContext.jsx
 // ==========================================================
 
@@ -14,14 +13,15 @@ import React, {
   useCallback,
 } from "react";
 
-import api, { getToken, getSavedUser, WS_URL } from "../lib/api.js";
+// 🛰️ PUSH 4.5 FIX: Named imports to prevent "undefined" crashes
+import { api, getToken, getSavedUser, WS_URL } from "../lib/api.js";
 import { useEventBus } from "../core/EventBus.jsx";
 
 const SecurityContext = createContext(null);
 
 const RISK_THRESHOLD = 75;
-const ALERT_COOLDOWN = 15000; // Faster response for trading
-const WS_MAX_RETRY = 3; 
+const ALERT_COOLDOWN = 15000; 
+const WS_MAX_RETRY = 5; 
 
 export function SecurityProvider({ children }) {
   const bus = useEventBus();
@@ -35,36 +35,32 @@ export function SecurityProvider({ children }) {
   const [wsStatus, setWsStatus] = useState("idle");
 
   const mountedRef = useRef(true);
-  const quietRef = useRef(true); 
-  const lastAlertRef = useRef(0);
   const socketRef = useRef(null);
   const wsRetryRef = useRef(0);
+  const lastAlertRef = useRef(0);
 
-  /* ================= WS LOGIC (UNISON SYNCED) ================= */
+  /* ================= WS LOGIC (HARDENED) ================= */
   const connectWS = useCallback(() => {
-    // If no token or already connected/max retries hit, abort
     if (!mountedRef.current || socketRef.current || wsRetryRef.current >= WS_MAX_RETRY) return;
 
     const token = getToken();
     if (!token || !WS_URL) return;
 
     try {
-      const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
-      const host = WS_URL.replace(/^wss?:\/\//, "");
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      const host = WS_URL.replace(/^wss?:\/\//, "").replace(/\/+$/, "");
       
-      // 🔑 THE UNISON KEY: Inject Company ID into the Security Socket
-      const url = new URL(`${protocol}${host}/ws/security`);
-      url.searchParams.set("token", token);
-      if (currentCompanyId) url.searchParams.set("companyId", String(currentCompanyId));
-
-      const ws = new WebSocket(url.toString());
+      // 🛰️ PUSH 4.5: Secure URL construction for Vercel compatibility
+      const wsPath = `${protocol}://${host}/ws/security?token=${token}${currentCompanyId ? `&companyId=${currentCompanyId}` : ''}`;
+      
+      const ws = new WebSocket(wsPath);
       socketRef.current = ws;
 
       ws.onopen = () => {
         if (mountedRef.current) {
           wsRetryRef.current = 0;
           setWsStatus("connected");
-          console.log("[SECURITY]: Link Established");
+          console.log("[SEC_CORE]: Handshake Verified");
         }
       };
 
@@ -73,16 +69,16 @@ export function SecurityProvider({ children }) {
         try {
           const data = JSON.parse(e.data);
           
-          // 🚨 THREAT DETECTED
+          // 🚨 CRITICAL THREAT RESPONSE
           if (data?.type === "integrity_alert" || data?.severity === "CRITICAL") {
             setIntegrityAlert(data);
             setSystemStatus("compromised");
             bus.emit("security_threat_detected", data);
             
-            // 🔥 EMERGENCY AUTO-STOP: Protect the capital!
+            // 🔥 EMERGENCY SHUTDOWN: Hits the verified trading endpoint
             if (data.autoStopTrade) {
-              console.warn("[SECURITY]: Critical Breach. Triggering Emergency Exit.");
-              api.emergencyExit();
+              console.error("[SEC_CORE]: CRITICAL_BREACH. EXECUTING_EMERGENCY_EXIT.");
+              api.post("/paper/emergency-stop").catch(err => console.error("AutoStop Failed:", err));
             }
           }
 
@@ -91,36 +87,35 @@ export function SecurityProvider({ children }) {
             setSystemStatus("secure");
             setWsStatus("quiet");
           }
-        } catch (err) {}
+        } catch (err) { /* silent heartbeat */ }
       };
 
       ws.onclose = () => {
         if (mountedRef.current) {
           socketRef.current = null;
           setWsStatus("disconnected");
-          // Retry logic
           wsRetryRef.current += 1;
           setTimeout(connectWS, 5000);
         }
       };
     } catch (err) {
-      console.warn("Security Handshake Failed");
+      console.warn("[SEC_CORE]: Handshake_Failure");
     }
   }, [bus, currentCompanyId]);
 
-  /* ================= TELEMETRY & MONITORING ================= */
+  /* ================= POSTURE MONITORING ================= */
   useEffect(() => {
+    mountedRef.current = true;
     let active = true;
 
     async function checkPosture() {
       if (!active || !mountedRef.current || !getToken()) return;
 
       try {
-        // Use the status endpoint to check overall health
-        const summary = await api.getStatus();
-        if (!active || !summary?.ok) return;
+        const summary = await api.get("/status"); // Generic health check
+        if (!active || !summary) return;
 
-        const score = Number(summary.score || 0);
+        const score = Number(summary.riskScore || summary.score || 0);
         setRiskScore(score);
         setDomains(Array.isArray(summary.domains) ? summary.domains : []);
 
@@ -128,24 +123,24 @@ export function SecurityProvider({ children }) {
           setSystemStatus("compromised");
           if (Date.now() - lastAlertRef.current > ALERT_COOLDOWN) {
              lastAlertRef.current = Date.now();
-             connectWS(); // Spin up the live socket if risk is high
+             connectWS(); 
           }
         } else {
           setSystemStatus("secure");
         }
-      } catch (err) {}
+      } catch (err) { /* fail silent to prevent UI noise */ }
     }
 
-    // Connect immediately on load or room switch
     connectWS();
-    
-    const poller = setInterval(checkPosture, 30000); // 30s checks for trade safety
+    const poller = setInterval(checkPosture, 30000); 
 
     return () => {
       active = false;
+      mountedRef.current = false;
       clearInterval(poller);
+      if (socketRef.current) socketRef.current.close();
     };
-  }, [connectWS, currentCompanyId]);
+  }, [connectWS]);
 
   const value = useMemo(() => ({
     systemStatus,
