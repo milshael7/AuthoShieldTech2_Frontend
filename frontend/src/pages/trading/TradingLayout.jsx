@@ -1,5 +1,5 @@
 // ==========================================================
-// 🛡️ PROTECTED CORE FILE — v4.2 (INTELLIGENCE ARRAY SYNC)
+// 🛡️ PROTECTED CORE FILE — v4.3 (INDUSTRIAL_SHELL_SYNC)
 // MODULE: Trading Terminal Layout (UI SHELL)
 // FILE: src/pages/trading/TradingLayout.jsx
 // ==========================================================
@@ -19,14 +19,10 @@ export default function TradingLayout() {
 
   /* ================= 📡 TELEMETRY ENGINE ================= */
   const telemetry = useMemo(() => {
-    /** 🛰️ PUSH 7.3 FIX: ARRAY NORMALIZATION
-     * Backend sends intelligence as a list. To show real-time metrics,
-     * we must grab the final object in that list.
-     */
+    // 🛰️ PUSH 8.6: Array Normalization for Intelligence Stream
     const intelList = Array.isArray(snapshot?.intelligence) ? snapshot.intelligence : [];
     const latestIntel = intelList.length > 0 ? intelList[intelList.length - 1] : {};
     
-    // Safety check: confidence might be 0.0-1.0 or 0-100 depending on brain version
     const rawConf = Number(latestIntel.confidence || 0);
     const normalizedConf = rawConf > 1 ? rawConf / 100 : rawConf;
 
@@ -36,8 +32,6 @@ export default function TradingLayout() {
       mode: snapshot?.mode || "PAPER_TRADING",
       trades: trades.length || 0,
       decisions: decisions.length || 0,
-      
-      // 🛰️ PUSH 7.3 FIX: Direct mapping from latest intelligence entry
       aiRate: Number(latestIntel.velocity || 0),
       memoryMb: Number(latestIntel.memoryUsage || latestIntel.memory || 0),
       confidence: normalizedConf,
@@ -54,7 +48,7 @@ export default function TradingLayout() {
       <div style={styles.header}>
         <div style={styles.headerTop}>
           <div>
-            <div style={styles.title}>AUTOSHIELD_TERMINAL <span style={styles.version}>v4.2</span></div>
+            <div style={styles.title}>AUTOSHIELD_TERMINAL <span style={styles.version}>v4.3</span></div>
             <div style={styles.subtitle}>SECURE_TRADING_NODE // {telemetry.mode}</div>
           </div>
 
@@ -73,22 +67,26 @@ export default function TradingLayout() {
       {/* 🧭 NAVIGATION RAIL */}
       <nav style={styles.nav}>
         <TabLink to="live" label="TERMINAL" />
-        <TabLink to="market" label="MARKET_DATA" />
+        <TabLink to="market" label="MARKET_RADAR" />
         <TabLink to="control" label="AI_BRAIN" />
         <TabLink to="analytics" label="ANALYTICS" />
       </nav>
 
       {/* 🖥️ VIEWPORT */}
       <main style={styles.viewport}>
-        {/* PUSH 7.3: Outlet receives telemetry context for child pages */}
+        {/* Pass telemetry down via context for child rooms to consume */}
         <Outlet context={{ isAdmin: true, telemetry }} />
-        {location.pathname.endsWith("trading") && <Navigate to="live" replace />}
+        
+        {/* Redirect base /trading to /trading/live */}
+        {(location.pathname === "/admin/trading" || location.pathname === "/admin/trading/") && (
+          <Navigate to="live" replace />
+        )}
       </main>
     </div>
   );
 }
 
-/* ================= UI HELPERS (PRESERVED) ================= */
+/* ================= UI HELPERS ================= */
 
 function TabLink({ to, label }) {
   return (
@@ -96,9 +94,9 @@ function TabLink({ to, label }) {
       to={to} 
       style={({isActive}) => ({
         ...styles.tab,
-        color: isActive ? "#2bd576" : "#64748b",
-        borderBottom: isActive ? "2px solid #2bd576" : "2px solid transparent",
-        background: isActive ? "rgba(43, 213, 118, 0.05)" : "transparent"
+        color: isActive ? "#00ff88" : "#64748b",
+        borderBottom: isActive ? "2px solid #00ff88" : "2px solid transparent",
+        background: isActive ? "rgba(0, 255, 136, 0.03)" : "transparent"
       })}
     >
       {label}
@@ -108,8 +106,8 @@ function TabLink({ to, label }) {
 
 function HeaderPill({ label, value, tone = "info" }) {
   let color = "#94a3b8";
-  if (tone === "good") color = "#2bd576";
-  if (tone === "bad") color = "#ff5a5f";
+  if (tone === "good") color = "#00ff88";
+  if (tone === "bad") color = "#ff4444";
 
   return (
     <div style={styles.pill}>
@@ -120,16 +118,15 @@ function HeaderPill({ label, value, tone = "info" }) {
 }
 
 const styles = {
-  // 🛰️ FIX: Changed height to 100% to live inside the Admin Stage correctly
   shell: { display: "flex", flexDirection: "column", height: "100%", width: "100%", background: "#05080f", color: "#fff", fontFamily: "monospace" },
-  header: { padding: "15px 20px", background: "#0b101a", borderBottom: "1px solid rgba(255,255,255,0.05)" },
+  header: { padding: "15px 20px", background: "#0b101a", borderBottom: "1px solid #ffffff05" },
   headerTop: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" },
-  title: { fontSize: "14px", fontWeight: "900", letterSpacing: "1px" },
-  version: { fontSize: "9px", opacity: 0.3, marginLeft: "5px" },
+  title: { fontSize: "12px", fontWeight: "900", letterSpacing: "2px", color: "#fff" },
+  version: { fontSize: "8px", color: "#475569", marginLeft: "5px" },
   subtitle: { fontSize: "9px", color: "#475569", letterSpacing: "1px", marginTop: "2px" },
-  pillContainer: { display: "flex", gap: "8px", flexWrap: "wrap" },
-  pill: { padding: "4px 10px", borderRadius: "2px", background: "rgba(0,0,0,0.2)", fontSize: "10px", border: "1px solid rgba(255,255,255,0.05)", whiteSpace: "nowrap" },
-  nav: { display: "flex", background: "#0b101a", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.05)", overflowX: "auto" },
-  tab: { padding: "12px 20px", fontSize: "11px", fontWeight: "900", textDecoration: "none", transition: "0.2s", letterSpacing: "1px", whiteSpace: "nowrap" },
-  viewport: { flex: 1, overflow: "hidden", position: "relative", display: "flex", flexDirection: "column" }
+  pillContainer: { display: "flex", gap: "6px", flexWrap: "wrap" },
+  pill: { padding: "4px 10px", borderRadius: "2px", background: "rgba(0,0,0,0.3)", fontSize: "9px", border: "1px solid #ffffff05", whiteSpace: "nowrap" },
+  nav: { display: "flex", background: "#0b101a", padding: "0 20px", borderBottom: "1px solid #ffffff05", overflowX: "auto" },
+  tab: { padding: "14px 20px", fontSize: "10px", fontWeight: "900", textDecoration: "none", transition: "0.2s", letterSpacing: "1.5px", whiteSpace: "nowrap" },
+  viewport: { flex: 1, overflow: "hidden", position: "relative", display: "flex", flexDirection: "column", background: "#05080f" }
 };
