@@ -1,5 +1,5 @@
 // ==========================================================
-// 🔒 AUTOSHIELD CONTEXT — v38.1 (FINAL ENGINE SYNC)
+// 🔒 AUTOSHIELD CONTEXT — v39.0 (ZERO-SAFE & DUAL-SYNC)
 // FILE: frontend/src/context/TradingContext.jsx
 // ==========================================================
 
@@ -14,10 +14,6 @@ const safeNum = (v, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-/**
- * 🛠️ ROBUST WS BUILDER (v38.1)
- * Eliminates protocol duplication for Render WSS connections
- */
 function buildWsUrl(channel) {
   const token = getToken();
   if (!token || !WS_URL) return null;
@@ -41,7 +37,6 @@ function buildWsUrl(channel) {
 }
 
 export function TradingProvider({ children }) {
-  // Set to real-world April 2026 price to ensure immediate visual feedback
   const [price, setPrice] = useState(71720.09); 
   const [snapshot, setSnapshot] = useState({ balance: 0, equity: 0 });
   const [trades, setTrades] = useState([]);
@@ -83,15 +78,11 @@ export function TradingProvider({ children }) {
         if (!mountedRef.current) return;
         try {
           const msg = JSON.parse(e.data);
-          
-          // 🎯 EXACT SYNC WITH MARKET ENGINE PAYLOAD
-          // Backend sends: { data: { BTCUSDT: { price: 71720 } } }
           const btcPrice = safeNum(
             msg?.data?.[SYMBOL]?.price || 
             msg?.data?.BTCUSDT?.price || 
             msg?.price
           );
-
           if (btcPrice > 0) setPrice(btcPrice);
         } catch {}
       };
@@ -117,14 +108,26 @@ export function TradingProvider({ children }) {
         try {
           const msg = JSON.parse(e.data);
           const data = msg.snapshot || msg.data || msg; 
+          
           if (data) {
-            if (data.balance || data.equity) setSnapshot(data);
+            /** * 🛰️ STEP 5 FIX: ZERO-SAFE PARSING
+             * Using 'in' operator ensures the UI updates even if balance is 0.
+             */
+            if ("balance" in data || "equity" in data) {
+              setSnapshot(data);
+            }
+
             if (data.intelligence || data.ai) {
               const intel = data.intelligence || data.ai;
-              setDecisions(p => updateList(p, intel, d => d.ts || Date.now()));
+              setDecisions(p => updateList(p, intel, d => d.ts || d.timestamp || Date.now()));
             }
-            if (data.trades) {
-              setTrades(p => updateList(p, data.trades, t => t.ts || t.id));
+
+            /** * 🛰️ STEP 5 FIX: DUAL SCHEMA COMPATIBILITY
+             * Checks both 'trades' and 'history' to prevent blank lists.
+             */
+            const tradeItems = data.trades || data.history;
+            if (tradeItems) {
+              setTrades(p => updateList(p, tradeItems, t => t.ts || t.timestamp || t.id || Math.random()));
             }
           }
         } catch {}
