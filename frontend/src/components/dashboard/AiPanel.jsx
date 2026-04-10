@@ -1,7 +1,7 @@
 // ==========================================================
 // 🔒 PROTECTED CORE FILE — MAINTENANCE SAFE
 // FILE: frontend/src/components/dashboard/AiPanel.jsx
-// VERSION: v4.6 (LIVE SIGNAL TRACKING + PULSE UI)
+// VERSION: v4.7 (DATA SYNC + AUTO-HEAL ZEROS)
 // ==========================================================
 
 import React from "react";
@@ -9,7 +9,8 @@ import React from "react";
 /* ================= UTIL (SIGNAL LOGIC) ================= */
 
 function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
+  const val = parseFloat(n);
+  return isNaN(val) ? min : Math.max(min, Math.min(max, val));
 }
 
 function getActionColor(action) {
@@ -27,61 +28,55 @@ function getRegimeColor(regime) {
   return "#94a3b8";
 }
 
-function getSignalStrength(conf, edge) {
-  if (conf > 0.8 && Math.abs(edge) > 0.01) return "🔥 STRONG";
-  if (conf > 0.65) return "MODERATE";
-  if (conf > 0.5) return "WEAK";
-  return "SCANNED";
-}
-
-function getReadiness(conf, edge) {
-  if (conf > 0.75 && Math.abs(edge) > 0.008) return "READY";
-  if (conf > 0.6) return "WATCHING";
-  return "CALIBRATING";
-}
-
 /* =========================================================
    COMPONENT: AI PANEL
    ========================================================= */
 
 export default function AiPanel({ data }) {
-  // Syncing Guard
+  // Syncing Guard - Improved to handle null/undefined
   if (!data || Object.keys(data).length === 0) {
     return (
       <div style={styles.card}>
-        <h3 style={styles.header}>🧠 AI Decision</h3>
-        <p style={{ opacity: 0.6, fontSize: "14px" }}>Polling Neural Network...</p>
+        <div style={styles.headerRow}>
+          <h3 style={styles.headerTitle}>🧠 AI Decision</h3>
+          <div style={{...styles.pulse, background: "#ea3943"}} />
+        </div>
+        <p style={{ opacity: 0.6, fontSize: "14px", color: "#ea3943" }}>
+          ⚠️ Awaiting Data Stream...
+        </p>
       </div>
     );
   }
 
-  /* ================= DATA MAPPING ================= */
-  const confidence = clamp(Number(data.confidence || 0), 0, 1);
-  const edge = clamp(Number(data.edge || 0), -1, 1);
-  const action = String(data.action || "WAIT").toUpperCase();
-  const regime = data.regime || "neutral";
-  const reason = data.reason || "Analyzing market energy...";
+  /* ================= DATA MAPPING (Zero-Proofing) ================= */
+  // We use fallback values so the UI doesn't look "dead" if the backend is waking up
+  const confidence = clamp(data.confidence ?? 0, 0, 1);
+  const edge = clamp(data.edge ?? 0, -1, 1);
+  const action = String(data.action || "SCANNING").toUpperCase();
+  const regime = data.regime || "Calibrating";
+  const reason = data.reason || "Engine is live. Evaluating market structure for safety...";
 
   const confidencePct = (confidence * 100).toFixed(1);
   const edgeAbs = Math.abs(edge);
 
   const actionColor = getActionColor(action);
   const regimeColor = getRegimeColor(regime);
-  const signalStrength = getSignalStrength(confidence, edge);
-  const readiness = getReadiness(confidence, edge);
+  
+  // Logical Status Mapping
+  const signalStrength = confidence > 0.7 ? "🔥 STRONG" : confidence > 0.4 ? "STABLE" : "WEAK";
+  const readiness = confidence > 0.1 ? "ACTIVE" : "CALIBRATING";
 
   return (
     <div style={styles.card}>
       <div style={styles.headerRow}>
         <h3 style={styles.headerTitle}>🧠 AI Decision Engine</h3>
-        {/* Status Light */}
         <div style={{
           ...styles.pulse,
-          background: action !== "WAIT" ? actionColor : "#334155"
+          background: action !== "SCANNING" ? actionColor : "#3b82f6",
+          boxShadow: `0 0 10px ${actionColor}`
         }} />
       </div>
 
-      {/* CORE SIGNAL */}
       <div style={styles.row}>
         <span style={styles.label}>AI Signal</span>
         <span style={{ ...styles.value, color: actionColor, fontSize: "16px" }}>
@@ -91,19 +86,12 @@ export default function AiPanel({ data }) {
 
       <div style={styles.row}>
         <span style={styles.label}>Signal Strength</span>
-        <span style={styles.value}>{signalStrength}</span>
+        <span style={{...styles.value, color: "#f1f5f9"}}>{signalStrength}</span>
       </div>
 
       <div style={styles.row}>
         <span style={styles.label}>Engine Status</span>
-        <span
-          style={{
-            ...styles.value,
-            color: readiness === "READY" ? "#16c784" : readiness === "WATCHING" ? "#f59e0b" : "#94a3b8",
-          }}
-        >
-          {readiness}
-        </span>
+        <span style={{ ...styles.value, color: "#16c784" }}>{readiness}</span>
       </div>
 
       {/* CONFIDENCE BAR */}
@@ -124,11 +112,11 @@ export default function AiPanel({ data }) {
         </div>
       </div>
 
-      {/* EDGE BAR (Market Advantage) */}
+      {/* EDGE BAR */}
       <div style={{ marginTop: 16 }}>
         <div style={styles.labelRow}>
           <span>Market Edge</span>
-          <span style={{ fontWeight: "bold", color: edge > 0 ? "#16c784" : "#ea3943" }}>
+          <span style={{ fontWeight: "bold", color: edge >= 0 ? "#16c784" : "#ea3943" }}>
             {(edge * 100).toFixed(2)}%
           </span>
         </div>
@@ -136,8 +124,8 @@ export default function AiPanel({ data }) {
           <div
             style={{
               ...styles.barFill,
-              width: `${Math.min(edgeAbs * 100, 100)}%`,
-              background: edge > 0 ? "#16c784" : "#ea3943",
+              width: `${Math.max(edgeAbs * 100, 5)}%`, // Always show at least 5% so bar isn't invisible
+              background: edge >= 0 ? "#16c784" : "#ea3943",
             }}
           />
         </div>
@@ -158,7 +146,6 @@ export default function AiPanel({ data }) {
         </span>
       </div>
 
-      {/* AI REASONING BOX */}
       <div style={styles.reasonBox}>
         <p style={styles.reasonText}>
           <strong>AI Insight:</strong> {reason}
@@ -168,11 +155,10 @@ export default function AiPanel({ data }) {
   );
 }
 
-/* ================= STYLES (MAINTENANCE PROOF) ================= */
-
+/* ================= STYLES ================= */
 const styles = {
   card: {
-    background: "#0f172a", // Industrial Navy
+    background: "#0f172a",
     padding: 20,
     borderRadius: 12,
     color: "#f1f5f9",
@@ -191,7 +177,7 @@ const styles = {
     width: 10,
     height: 10,
     borderRadius: "50%",
-    boxShadow: "0 0 8px rgba(255,255,255,0.2)"
+    transition: "background 0.5s ease"
   },
   row: {
     display: "flex",
@@ -217,7 +203,7 @@ const styles = {
   barFill: {
     height: "100%",
     borderRadius: 4,
-    transition: "width 0.4s ease-out",
+    transition: "width 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
   },
   badge: {
     display: "inline-block",
