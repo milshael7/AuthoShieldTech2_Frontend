@@ -80,7 +80,7 @@ export default function TradingLayout() {
 
       {/* 🖥️ VIEWPORT */}
       <main style={styles.viewport}>
-        {/* PUSH 7.3: Outlet receives data context for child pages */}
+        {/* PUSH 7.3: Outlet receives telemetry context for child pages */}
         <Outlet context={{ isAdmin: true, telemetry }} />
         {location.pathname.endsWith("trading") && <Navigate to="live" replace />}
       </main>
@@ -120,6 +120,7 @@ function HeaderPill({ label, value, tone = "info" }) {
 }
 
 const styles = {
+  // 🛰️ FIX: Changed height to 100% to live inside the Admin Stage correctly
   shell: { display: "flex", flexDirection: "column", height: "100%", width: "100%", background: "#05080f", color: "#fff", fontFamily: "monospace" },
   header: { padding: "15px 20px", background: "#0b101a", borderBottom: "1px solid rgba(255,255,255,0.05)" },
   headerTop: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" },
