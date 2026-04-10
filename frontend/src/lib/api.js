@@ -1,5 +1,5 @@
 // ============================================================
-// 🔒 AUTOSHIELD API CORE — v38.1 (UNISON COMMAND ENGINE)
+// 🔒 AUTOSHIELD API CORE — v39.0 (FULL COMMAND INTEGRATION)
 // FILE: src/lib/api.js
 // ============================================================
 
@@ -57,7 +57,6 @@ async function request(path, options = {}) {
   const headers = {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    // 🔑 IMPORTANT: Injects the current company ID into every command
     ...(user?.companyId ? { "x-company-id": String(user.companyId) } : {}),
     ...(options.headers || {}),
   };
@@ -80,7 +79,7 @@ async function request(path, options = {}) {
 
 /* ================= UPGRADED API SURFACE ================= */
 export const api = {
-  // --- AUTH ---
+  // --- AUTH & USER ---
   login: async (email, password) => {
     const res = await request("/auth/login", {
       method: "POST",
@@ -90,31 +89,34 @@ export const api = {
     return res;
   },
 
-  // --- TRADING COMMANDS (The "Working" Buttons) ---
-  // This makes the "Enter Room" and "Trade" buttons work
+  // --- TRADING ROOM ---
   getSnapshot: () => request("/paper/snapshot"),
   getBrain: () => request("/ai/brain"),
+  getStatus: () => request("/paper/status"),
+  getAnalytics: () => request("/analytics/trading"),
   
-  // 🚨 ACTION: Execute a manual trade
   executeTrade: (side, symbol = "BTCUSDT", amount = 1) => 
     request("/paper/trade", {
       method: "POST",
       body: JSON.stringify({ side, symbol, amount })
     }),
 
-  // 🚨 ACTION: Emergency Exit (Close everything)
   emergencyExit: () => request("/paper/emergency-stop", { method: "POST" }),
 
-  // 🚨 ACTION: Toggle the AI Brain on/off
   toggleAI: (active) => request("/ai/toggle", {
     method: "POST",
     body: JSON.stringify({ active })
   }),
 
-  // --- ANALYTICS & MONITORING ---
-  getStatus: () => request("/paper/status"),
-  getAnalytics: () => request("/analytics/trading"),
+  // --- SECURITY ROOM (FIXED: Added missing hooks) ---
+  getSessions: () => request("/admin/sessions"),
+  forceLogout: (userId) => request(`/auth/admin/force-logout/${userId}`, { method: "POST" }),
+  getSecurityEvents: (type) => request(`/security/events?type=${type}`),
   getSecurityPosture: () => request("/security/posture"),
+  getAuditStream: () => request("/security/audit"),
+
+  // --- INFRASTRUCTURE (FIXED: Added for SystemHealth.jsx) ---
+  getSystemStats: () => request("/system/stats"),
 
   clearToken, 
   clearUser
