@@ -1,6 +1,7 @@
 // ==========================================================
-// 🔒 PROTECTED CORE FILE — v12.2 (UNISON HARDENED)
-// FILE: TerminalChart.jsx — INDUSTRIAL TRADING SURFACE
+// 🔒 PROTECTED CORE FILE — v12.3 (ADAPTIVE STAGE SYNC)
+// MODULE: Terminal Charting Engine
+// FILE: src/components/TerminalChart.jsx
 // ==========================================================
 
 import React, { useEffect, useMemo, useRef } from "react";
@@ -18,7 +19,7 @@ export default function TerminalChart({
   candles = [],
   trades = [],
   position = null,
-  height = 520,
+  height = "100%", // Default to container height
 }) {
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
@@ -56,9 +57,10 @@ export default function TerminalChart({
     if (!wrapRef.current) return;
 
     const chart = createChart(wrapRef.current, {
-      height,
+      width: wrapRef.current.clientWidth,
+      height: wrapRef.current.clientHeight || 520,
       layout: {
-        background: { color: "#0b101a" }, // Matched to Industrial Navy
+        background: { color: "#0b101a" }, 
         textColor: "#64748b",
         fontFamily: "'Inter', sans-serif",
       },
@@ -82,26 +84,31 @@ export default function TerminalChart({
     });
 
     const series = chart.addCandlestickSeries({
-      upColor: "#2bd576",   // --p-ok
-      downColor: "#ff5a5f", // --p-bad
+      upColor: "#00ff88",   // Adjusted to match AuthoShield Green
+      downColor: "#ff4444", // Adjusted to match AuthoShield Red
       borderVisible: false,
-      wickUpColor: "#2bd576",
-      wickDownColor: "#ff5a5f",
+      wickUpColor: "#00ff88",
+      wickDownColor: "#ff4444",
     });
 
     candleSeriesRef.current = series;
     chartRef.current = chart;
 
-    const handleResize = () => {
-      chart.applyOptions({ width: wrapRef.current.clientWidth });
-    };
-    window.addEventListener("resize", handleResize);
+    // 🛰️ PUSH 7.5 FIX: ResizeObserver for Panel Toggles
+    // This detects when the Sidebar or Advisor panel pushes the chart container
+    const resizeObserver = new ResizeObserver(entries => {
+      if (entries.length === 0 || !chartRef.current) return;
+      const { width, height } = entries[0].contentRect;
+      chartRef.current.applyOptions({ width, height });
+    });
+
+    resizeObserver.observe(wrapRef.current);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
       chart.remove();
     };
-  }, [height]);
+  }, []); // Only init once
 
   /* ================= 📈 UPDATES ================= */
   useEffect(() => {
@@ -124,9 +131,9 @@ export default function TerminalChart({
       return {
         time: normalizeTime(t.time || t.timestamp),
         position: isBuy ? "belowBar" : "aboveBar",
-        color: isBuy ? "#2bd576" : "#ff5a5f",
+        color: isBuy ? "#00ff88" : "#ff4444",
         shape: isBuy ? "arrowUp" : "arrowDown",
-        text: isBuy ? "B" : "S", // Minimalist text for institutional look
+        text: isBuy ? "B" : "S",
       };
     }).filter(m => m.time !== null);
     
@@ -142,11 +149,11 @@ export default function TerminalChart({
       if (ref.current) { series.removePriceLine(ref.current); ref.current = null; }
     });
 
-    if (!position) return;
+    if (!position || !position.entry) return;
 
     entryLineRef.current = series.createPriceLine({
       price: Number(position.entry),
-      color: "#5ec6ff", // --p-accent
+      color: "#3498db", 
       lineWidth: 2,
       lineStyle: 0,
       axisLabelVisible: true,
@@ -156,7 +163,7 @@ export default function TerminalChart({
     if (position.takeProfit) {
       tpLineRef.current = series.createPriceLine({
         price: Number(position.takeProfit),
-        color: "#2bd576",
+        color: "#00ff88",
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
@@ -167,7 +174,7 @@ export default function TerminalChart({
     if (position.stopLoss) {
       slLineRef.current = series.createPriceLine({
         price: Number(position.stopLoss),
-        color: "#ff5a5f",
+        color: "#ff4444",
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
@@ -184,6 +191,8 @@ export default function TerminalChart({
         height: "100%",
         position: "relative",
         background: "#0b101a",
+        borderRadius: "4px",
+        overflow: "hidden"
       }}
     />
   );
