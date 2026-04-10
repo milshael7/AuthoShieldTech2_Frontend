@@ -1,5 +1,5 @@
 // ==========================================================
-// 🛡️ AUTOSHIELD CORE — v35.2 (UNIFIED & STALL-PROOF)
+// 🛡️ AUTOSHIELD CORE — v36.0 (NESTED-ROUTE ENABLED)
 // FILE: frontend/src/App.jsx
 // ==========================================================
 
@@ -31,13 +31,14 @@ import Login from "./pages/Login.jsx";
 import AdminOverview from "./pages/admin/AdminOverview.jsx";
 import GlobalControl from "./pages/admin/GlobalControl.jsx";
 import TradingLayout from "./pages/trading/TradingLayout.jsx";
+import TradingRoom from "./pages/trading/TradingRoom.jsx"; // Ensure this is imported
 import NotFound from "./pages/NotFound.jsx";
 
 /**
  * 🛰️ ROUTE ARCHITECTURE
  */
 function AppRoutes() {
-  const { user, loading } = useAuth(); // Now pulling from the unified context
+  const { user, loading } = useAuth();
 
   return (
     <Routes>
@@ -46,6 +47,7 @@ function AppRoutes() {
       <Route path="/signup" element={<Signup />} />
       <Route path="/login" element={<Login />} />
 
+      {/* ================= ADMIN SECTOR ================= */}
       <Route
         path="/admin/*"
         element={
@@ -56,9 +58,26 @@ function AppRoutes() {
       >
         <Route index element={<AdminOverview />} />
         <Route path="global" element={<GlobalControl />} />
-        <Route path="trading/*" element={<TradingLayout />} />
+        
+        {/* 🛰️ PUSH 2 FIX: NESTED TRADING ROUTES 
+            This ensures TradingLayout's <Outlet /> has content to show.
+        */}
+        <Route path="trading/*" element={<TradingLayout />}>
+          <Route index element={<TradingRoom />} /> {/* Default to live room */}
+          <Route path="live" element={<TradingRoom />} />
+          <Route path="market" element={<div className="p-10">Market Data (Placeholder)</div>} />
+          <Route path="control" element={<div className="p-10">AI Control (Placeholder)</div>} />
+          <Route path="analytics" element={<div className="p-10">Analytics (Placeholder)</div>} />
+        </Route>
+
+        {/* 🛡️ ADMIN SIDEBAR SYNC: Placeholders for missing Admin pages */}
+        <Route path="users" element={<div className="p-10">User Management (Coming Soon)</div>} />
+        <Route path="security" element={<div className="p-10">Security Operations (Coming Soon)</div>} />
+        <Route path="assets" element={<div className="p-10">Asset Discovery (Coming Soon)</div>} />
+        <Route path="settings" element={<div className="p-10">System Settings (Coming Soon)</div>} />
       </Route>
 
+      {/* ================= MANAGER SECTOR ================= */}
       <Route
         path="/manager/*"
         element={
@@ -75,12 +94,9 @@ function AppRoutes() {
   );
 }
 
-/**
- * 🏗️ MASTER PROVIDER WRAPPER
- */
 export default function App() {
   return (
-    <BrowserRouter> {/* Ensures Routing is handled at the root */}
+    <BrowserRouter>
       <AuthProvider>
         <EventBusProvider>
           <SecurityProvider>
@@ -96,13 +112,9 @@ export default function App() {
   );
 }
 
-/**
- * 🔒 AUTH WRAPPER: Handles the Boot UI and ToolProvider Sync
- */
 function AuthWrapper() {
   const { user, loading } = useAuth();
 
-  // Show branding while AuthContext verifies the token
   if (loading) {
     return (
       <div style={{ 
@@ -112,7 +124,6 @@ function AuthWrapper() {
       }}>
         <div style={{ border: "1px solid #00ff88", padding: "40px", borderRadius: "4px" }}>
             <h1 style={{ fontSize: "1.5rem", margin: 0, letterSpacing: "8px" }}>AUTOSHIELD</h1>
-            <div style={{ height: "2px", background: "#00ff88", width: "100%", marginTop: "10px", opacity: 0.3 }}></div>
             <p style={{ color: "rgba(0,255,136,0.4)", fontSize: "0.6rem", marginTop: "15px" }}>INITIALIZING_SECURE_PROTOCOLS...</p>
         </div>
       </div>
