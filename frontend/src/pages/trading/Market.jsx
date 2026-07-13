@@ -4,7 +4,7 @@
 // FILE: src/pages/trading/Market.jsx
 // ==========================================================
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useTrading } from "../../context/TradingContext.jsx";
 
 /* 🏗️ INDUSTRIAL SUB-COMPONENTS */
@@ -18,14 +18,17 @@ const RADAR_ASSETS = [
 ];
 
 export default function Market() {
-  const { price: btcPrice, snapshot } = useTrading();
+  const { price: btcPrice, snapshot, error, loading } = useTrading();
+
+  if (loading) return <div>Loading market data...</div>;
+  if (error) return <div>Error loading market data. Please try again later.</div>;
 
   // Map live prices from context
-  const prices = {
+  const prices = useMemo(() => ({
     "BTCUSDT": btcPrice,
     "ETHUSDT": snapshot?.ethPrice || 0,
     "SOLUSDT": snapshot?.solPrice || 0
-  };
+  }), [btcPrice, snapshot]);
 
   return (
     <div style={styles.container}>
